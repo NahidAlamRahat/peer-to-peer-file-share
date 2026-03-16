@@ -1,0 +1,6 @@
+services:
+  - type: web
+    name: p2p-file-share-web
+    env: static
+    buildCommand: bash ./render-build.sh
+    staticPublishPath: ./build/web
