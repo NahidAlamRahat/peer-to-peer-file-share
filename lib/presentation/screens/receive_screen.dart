@@ -79,6 +79,18 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
                 _fileMetadata = state.payload;
               });
             }
+          } else if (state is ConnectionConnected) {
+            // WebRTC is ready — navigate immediately to TransferScreen
+            // The TransferBloc subscriptions will pick up incoming data
+            Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(
+                builder: (_) => TransferScreen(
+                  role: SessionRole.receiver,
+                  preflightMetadata: _fileMetadata,
+                ),
+              ),
+            );
           } else if (state is ConnectionOffline) {
              setState(() {
                 _isSenderOffline = true;

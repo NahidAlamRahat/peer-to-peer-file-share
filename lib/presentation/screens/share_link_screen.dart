@@ -67,19 +67,24 @@ class _ShareLinkScreenState extends State<ShareLinkScreen> {
       body: BlocConsumer<ConnectionBloc, ConnectionStateBloc>(
         listener: (context, state) async {
           if (state is ConnectionCreated && _selectedFile != null) {
+            debugPrint('✅ [UI] Link generated! Session ID: ${state.sessionId}');
+          } else if (state is ConnectionConnected && _selectedFile != null) {
+            // Send metadata NOW (receiver is connected), then wait briefly before streaming file
             connectionBloc.add(SendMessageEvent({
                    'action': 'file_metadata',
                    'fileName': _selectedFile!.name,
                    'fileSize': _selectedFile!.size,
             }));
-            debugPrint('✅ [UI] Link generated! Session ID: ${state.sessionId}');
             debugPrint('📤 [UI] Sent file metadata: ${_selectedFile!.name} (${_selectedFile!.size} bytes)');
-          } else if (state is ConnectionConnected && _selectedFile != null) {
-            context.read<TransferBloc>().add(SendFileEvent(_selectedFile!));
-            Navigator.pushReplacement(
-              context,
-              MaterialPageRoute(builder: (_) => TransferScreen(role: state.role, preflightMetadata: null)),
-            );
+            // Short delay so metadata arrives before WebRTC data chunks
+            await Future.delayed(const Duration(milliseconds: 150));
+            if (mounted) {
+              context.read<TransferBloc>().add(SendFileEvent(_selectedFile!));
+              Navigator.pushReplacement(
+                context,
+                MaterialPageRoute(builder: (_) => TransferScreen(role: state.role, preflightMetadata: null)),
+              );
+            }
           } else if (state is ConnectionFailed) {
             messenger.showSnackBar(
               SnackBar(content: Text('Connection failed: ${state.message}')),
