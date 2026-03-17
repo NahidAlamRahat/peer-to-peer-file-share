@@ -22,6 +22,12 @@ class WebRTCClient {
   Function(int amount)? onBufferedAmountLow;
 
   Future<void> initialize() async {
+    // Close previous connection if it exists (safe re-initialization)
+    _dataChannel?.close();
+    await _peerConnection?.close();
+    _dataChannel = null;
+    _peerConnection = null;
+
     _peerConnection = await createPeerConnection(_configuration, {});
 
     _peerConnection!.onIceCandidate = (RTCIceCandidate candidate) {

@@ -36,6 +36,16 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
     };
   }
 
+  /// Reset receiving state between transfers
+  void resetReceiveState() {
+    _receivingFileId = null;
+    _receivingFileName = null;
+    _receivingTotalSize = 0;
+    _receivedBytes = 0;
+    _receivedChunks.clear();
+    _bufferCompleter = null;
+  }
+
   Completer<void>? _bufferCompleter;
   static const int _maxBufferSize = 1048576; // 1 MB
   static const int _chunkSize = 65536; // 64 KB
