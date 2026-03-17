@@ -1,5 +1,5 @@
-import 'dart:io';
 import 'package:equatable/equatable.dart';
+import '../../../domain/entities/share_file.dart';
 
 abstract class TransferEvent extends Equatable {
   const TransferEvent();
@@ -9,7 +9,7 @@ abstract class TransferEvent extends Equatable {
 }
 
 class SendFileEvent extends TransferEvent {
-  final File file;
+  final ShareFile file;
   const SendFileEvent(this.file);
 
   @override

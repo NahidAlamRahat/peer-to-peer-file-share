@@ -1,4 +1,3 @@
-import 'dart:io';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -6,6 +5,7 @@ import 'package:flutter_screenutil/flutter_screenutil.dart';
 import '../../core/theme/app_sizes.dart';
 import '../../core/theme/spacing.dart';
 import '../../domain/entities/peer_session.dart';
+import '../../domain/entities/share_file.dart';
 import '../blocs/connection/connection_bloc.dart';
 import '../blocs/connection/connection_event.dart';
 import '../blocs/transfer/transfer_bloc.dart';
@@ -80,11 +80,18 @@ class _TransferScreenState extends State<TransferScreen> {
               text: 'Select File to Send',
               icon: Icons.upload_file,
               onPressed: () async {
-                FilePickerResult? result = await FilePicker.platform.pickFiles();
-                if (result != null && result.files.single.path != null) {
-                  File file = File(result.files.single.path!);
+                FilePickerResult? result = await FilePicker.platform.pickFiles(
+                  withData: true,
+                );
+                if (result != null && result.files.single.bytes != null) {
+                  final pf = result.files.single;
+                  final shareFile = ShareFile(
+                    name: pf.name,
+                    size: pf.bytes!.length,
+                    bytes: pf.bytes!,
+                  );
                   // ignore: use_build_context_synchronously
-                  context.read<TransferBloc>().add(SendFileEvent(file));
+                  context.read<TransferBloc>().add(SendFileEvent(shareFile));
                 }
               },
             ),

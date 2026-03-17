@@ -1,4 +1,3 @@
-import 'dart:io';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -6,6 +5,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import '../../core/theme/app_sizes.dart';
 import '../../core/theme/spacing.dart';
+import '../../domain/entities/share_file.dart';
 import '../blocs/connection/connection_bloc.dart';
 import '../blocs/connection/connection_event.dart';
 import '../blocs/connection/connection_state.dart';
@@ -22,7 +22,7 @@ class ShareLinkScreen extends StatefulWidget {
 }
 
 class _ShareLinkScreenState extends State<ShareLinkScreen> {
-  File? _selectedFile;
+  ShareFile? _selectedFile;
   bool _isPicking = false;
 
   void _pickFile() async {
@@ -30,15 +30,19 @@ class _ShareLinkScreenState extends State<ShareLinkScreen> {
     setState(() => _isPicking = true);
 
     try {
-      FilePickerResult? result = await FilePicker.platform.pickFiles();
-      if (result != null && result.files.single.path != null) {
-        final path = result.files.single.path!;
-        final file = File(path);
-        final sizeMB = (await file.length() / (1024 * 1024)).toStringAsFixed(2);
-        debugPrint('📂 [UI] Selected File: ${file.uri.pathSegments.last} ($sizeMB MB)');
-        
+      FilePickerResult? result = await FilePicker.platform.pickFiles(
+        withData: true, // Required for web — loads bytes into memory
+      );
+      if (result != null && result.files.single.bytes != null) {
+        final pf = result.files.single;
+        final bytes = pf.bytes!;
+        final name = pf.name;
+        final size = bytes.length;
+        final sizeMB = (size / (1024 * 1024)).toStringAsFixed(2);
+        debugPrint('📂 [UI] Selected File: $name ($sizeMB MB)');
+
         setState(() {
-          _selectedFile = file;
+          _selectedFile = ShareFile(name: name, size: size, bytes: bytes);
         });
         if (mounted) {
           context.read<ConnectionBloc>().add(CreateSessionEvent());
@@ -55,7 +59,6 @@ class _ShareLinkScreenState extends State<ShareLinkScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // Capture the ConnectionBloc instance and the messenger to avoid async gap usage.
     final connectionBloc = context.read<ConnectionBloc>();
     final messenger = ScaffoldMessenger.of(context);
 
@@ -64,20 +67,14 @@ class _ShareLinkScreenState extends State<ShareLinkScreen> {
       body: BlocConsumer<ConnectionBloc, ConnectionStateBloc>(
         listener: (context, state) async {
           if (state is ConnectionCreated && _selectedFile != null) {
-            // Send metadata so receiver knows what to download.
-            final size = await _selectedFile!.length();
-            final name = _selectedFile!.uri.pathSegments.last;
-            
-            // Safe to use connectionBloc as it was captured synchronously before
             connectionBloc.add(SendMessageEvent({
                    'action': 'file_metadata',
-                   'fileName': name,
-                   'fileSize': size,
+                   'fileName': _selectedFile!.name,
+                   'fileSize': _selectedFile!.size,
             }));
             debugPrint('✅ [UI] Link generated! Session ID: ${state.sessionId}');
-            debugPrint('📤 [UI] Sent file metadata: $name ($size bytes)');
+            debugPrint('📤 [UI] Sent file metadata: ${_selectedFile!.name} (${_selectedFile!.size} bytes)');
           } else if (state is ConnectionConnected && _selectedFile != null) {
-            // Once connected, dispatch the actual file to TransferBloc
             context.read<TransferBloc>().add(SendFileEvent(_selectedFile!));
             Navigator.pushReplacement(
               context,
@@ -87,8 +84,7 @@ class _ShareLinkScreenState extends State<ShareLinkScreen> {
             messenger.showSnackBar(
               SnackBar(content: Text('Connection failed: ${state.message}')),
             );
-            // Don't pop immediately if it was a background connection issue
-            if (_selectedFile == null) Navigator.pop(context); 
+            if (_selectedFile == null) Navigator.pop(context);
           } else if (state is ConnectionServerError) {
             messenger.showSnackBar(
               SnackBar(
@@ -200,7 +196,7 @@ class _ShareLinkScreenState extends State<ShareLinkScreen> {
                       textAlign: TextAlign.center,
                     ),
                     AppSpacing.gapH8,
-                    Text(_selectedFile!.uri.pathSegments.last, style: TextStyle(fontWeight: FontWeight.bold, fontSize: AppSizes.textBody)),
+                    Text(_selectedFile!.name, style: TextStyle(fontWeight: FontWeight.bold, fontSize: AppSizes.textBody)),
                     AppSpacing.gapH32,
                     GestureDetector(
                       onTap: () {

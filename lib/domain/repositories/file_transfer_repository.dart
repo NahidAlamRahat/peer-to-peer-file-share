@@ -1,9 +1,9 @@
-import 'dart:io';
+import '../entities/share_file.dart';
 import '../entities/file_chunk_info.dart';
 
 abstract class FileTransferRepository {
   /// Send a file
-  Future<void> sendFile(File file);
+  Future<void> sendFile(ShareFile file);
 
   /// Stream of transfer progress (both sending and receiving)
   Stream<FileChunkInfo> get transferProgressStream;
