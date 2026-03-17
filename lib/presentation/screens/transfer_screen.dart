@@ -1,7 +1,6 @@
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:flutter_screenutil/flutter_screenutil.dart';
 import '../../core/theme/app_sizes.dart';
 import '../../core/theme/spacing.dart';
 import '../../domain/entities/peer_session.dart';
@@ -158,8 +157,8 @@ class _TransferScreenState extends State<TransferScreen> {
             alignment: Alignment.center,
             children: [
               SizedBox(
-                width: 180.w,
-                height: 180.w,
+                width: 180,
+                height: 180,
                 child: CircularProgressIndicator(
                   value: state.progress,
                   strokeWidth: 10,

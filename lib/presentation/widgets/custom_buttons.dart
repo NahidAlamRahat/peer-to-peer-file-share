@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_screenutil/flutter_screenutil.dart';
 import '../../core/theme/app_sizes.dart';
 import '../../core/theme/spacing.dart';
 
@@ -25,7 +24,7 @@ class CustomButton extends StatelessWidget {
         style: ElevatedButton.styleFrom(
           backgroundColor: Theme.of(context).colorScheme.primary,
           foregroundColor: Theme.of(context).colorScheme.onPrimary,
-          minimumSize: Size(double.infinity, 56.h),
+          minimumSize: const Size(double.infinity, 56),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(AppSizes.radiusLarge),
           ),
@@ -38,7 +37,7 @@ class CustomButton extends StatelessWidget {
         onPressed: onPressed,
         style: OutlinedButton.styleFrom(
           foregroundColor: Theme.of(context).colorScheme.primary,
-          minimumSize: Size(double.infinity, 56.h),
+          minimumSize: const Size(double.infinity, 56),
           side: BorderSide(color: Theme.of(context).colorScheme.primary),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(AppSizes.radiusLarge),
