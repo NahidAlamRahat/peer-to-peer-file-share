@@ -1,34 +1,34 @@
-import 'package:flutter_screenutil/flutter_screenutil.dart';
-
 class AppSizes {
+  // Constants that work everywhere (web + mobile + desktop)
+  
   // Padding & Margins
-  static double get p4 => 4.w;
-  static double get p8 => 8.w;
-  static double get p12 => 12.w;
-  static double get p16 => 16.w;
-  static double get p20 => 20.w;
-  static double get p24 => 24.w;
-  static double get p32 => 32.w;
-  static double get p48 => 48.w;
+  static double get p4 => 4.0;
+  static double get p8 => 8.0;
+  static double get p12 => 12.0;
+  static double get p16 => 16.0;
+  static double get p20 => 20.0;
+  static double get p24 => 24.0;
+  static double get p32 => 32.0;
+  static double get p48 => 48.0;
 
   // Border Radius
-  static double get radiusSmall => 8.r;
-  static double get radiusMedium => 12.r;
-  static double get radiusLarge => 16.r;
-  static double get radiusCircular => 500.r;
+  static double get radiusSmall => 8.0;
+  static double get radiusMedium => 12.0;
+  static double get radiusLarge => 16.0;
+  static double get radiusCircular => 500.0;
 
   // Font Sizes
-  static double get textSmall => 12.sp;
-  static double get textBody => 16.sp;
-  static double get textSubtitle => 18.sp;
-  static double get textTitle => 20.sp;
-  static double get textHeadline => 24.sp;
-  static double get textDisplay => 32.sp;
+  static double get textSmall => 13.0;
+  static double get textBody => 16.0;
+  static double get textSubtitle => 18.0;
+  static double get textTitle => 20.0;
+  static double get textHeadline => 24.0;
+  static double get textDisplay => 32.0;
 
   // Icon Sizes
-  static double get iconSmall => 16.sp;
-  static double get iconMedium => 24.sp;
-  static double get iconLarge => 32.sp;
-  static double get iconHuge => 80.sp;
-  static double get iconQr => 200.w;
+  static double get iconSmall => 16.0;
+  static double get iconMedium => 24.0;
+  static double get iconLarge => 32.0;
+  static double get iconHuge => 80.0;
+  static double get iconQr => 200.0;
 }

@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:flutter_screenutil/flutter_screenutil.dart';
 import '../../core/theme/app_sizes.dart';
 import '../../core/theme/spacing.dart';
 import '../blocs/connection/connection_bloc.dart';
@@ -47,7 +46,7 @@ class HomeScreen extends StatelessWidget {
                 builder: (context, state) {
                   if (state is ConnectionServerError) {
                     return Container(
-                      padding: EdgeInsets.symmetric(vertical: 8.h),
+                      padding: const EdgeInsets.symmetric(vertical: 8),
                       width: double.infinity,
                       decoration: BoxDecoration(
                         color: Colors.red.withValues(alpha: 0.1),
@@ -56,7 +55,7 @@ class HomeScreen extends StatelessWidget {
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          Icon(Icons.error_outline, size: 16.sp, color: Colors.red),
+                          const Icon(Icons.error_outline, size: 16, color: Colors.red),
                           AppSpacing.gapW8,
                           Text(
                             'Signaling Server Offline',
@@ -72,13 +71,13 @@ class HomeScreen extends StatelessWidget {
               const Spacer(),
             Icon(
               Icons.cloud_upload_outlined,
-              size: 100.sp,
+              size: 100,
               color: Theme.of(context).colorScheme.primary,
             ),
             AppSpacing.gapH32,
-            Text(
+            const Text(
               'Share files seamlessly',
-              style: TextStyle(fontSize: 28.sp, fontWeight: FontWeight.bold),
+              style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
               textAlign: TextAlign.center,
             ),
             AppSpacing.gapH16,
