@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import '../../core/di/injection_container.dart';
+import '../../core/services/settings_service.dart';
 import '../../core/theme/app_sizes.dart';
 import '../../core/theme/spacing.dart';
 import '../blocs/connection/connection_bloc.dart';
@@ -7,6 +9,7 @@ import '../blocs/connection/connection_event.dart';
 import '../blocs/connection/connection_state.dart';
 import '../widgets/custom_buttons.dart';
 import '../widgets/responsive_layout.dart';
+import 'settings_screen.dart';
 import 'share_link_screen.dart';
 import 'receive_screen.dart';
 
@@ -19,6 +22,18 @@ class HomeScreen extends StatelessWidget {
       appBar: AppBar(
         title: const Text('P2P File Share'),
         elevation: 0,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.settings_outlined),
+            tooltip: 'Settings',
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => SettingsScreen(settingsService: sl<SettingsService>()),
+              ),
+            ),
+          ),
+        ],
       ),
       body: BlocListener<ConnectionBloc, ConnectionStateBloc>(
         listener: (context, state) {

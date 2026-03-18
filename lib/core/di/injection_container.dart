@@ -1,5 +1,7 @@
 import 'package:get_it/get_it.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../core/services/settings_service.dart';
 import '../../data/datasources/signaling_service.dart';
 import '../../data/datasources/webrtc_client.dart';
 import '../../data/repositories/file_transfer_repository_impl.dart';
@@ -12,6 +14,10 @@ import '../../presentation/blocs/transfer/transfer_bloc.dart';
 final sl = GetIt.instance; // sl = service locator
 
 Future<void> init() async {
+  // ── 0. External services ────────────────────────────────────────────────────
+  final prefs = await SharedPreferences.getInstance();
+  sl.registerSingleton<SettingsService>(SettingsService(prefs));
+
   // ── 1. Data sources (no dependencies) ──────────────────────────────────────
   sl.registerLazySingleton(() => SignalingService());
   sl.registerLazySingleton(() => WebRTCClient());

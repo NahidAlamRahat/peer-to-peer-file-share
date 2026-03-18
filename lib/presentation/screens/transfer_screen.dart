@@ -1,7 +1,11 @@
 import 'package:file_picker/file_picker.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_background/flutter_background.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
+import '../../core/di/injection_container.dart';
+import '../../core/services/settings_service.dart';
 import '../../core/theme/app_sizes.dart';
 import '../../core/theme/spacing.dart';
 import '../../domain/entities/peer_session.dart';
@@ -25,16 +29,45 @@ class TransferScreen extends StatefulWidget {
 }
 
 class _TransferScreenState extends State<TransferScreen> {
+  final _settings = sl<SettingsService>();
+
   @override
   void initState() {
     super.initState();
-    // Prevent mobile devices from sleeping and breaking the WebRTC DataChannel
-    WakelockPlus.enable();
+    // Conditionally keep screen on based on user preference
+    if (_settings.keepScreenOn) {
+      WakelockPlus.enable();
+    }
+    // Start background execution on Android if user enabled it
+    if (!kIsWeb && _settings.runInBackground) {
+      _startBackgroundExecution();
+    }
+  }
+
+  Future<void> _startBackgroundExecution() async {
+    const androidConfig = FlutterBackgroundAndroidConfig(
+      notificationTitle: 'P2P File Transfer',
+      notificationText: 'Transferring files in the background...',
+      notificationIcon: AndroidResource(name: 'ic_launcher', defType: 'mipmap'),
+      notificationImportance: AndroidNotificationImportance.high,
+      enableWifiLock: true,
+    );
+    final hasPermissions = await FlutterBackground.initialize(androidConfig: androidConfig);
+    if (hasPermissions) {
+      await FlutterBackground.enableBackgroundExecution();
+    }
+  }
+
+  Future<void> _stopBackgroundExecution() async {
+    if (!kIsWeb && FlutterBackground.isBackgroundExecutionEnabled) {
+      await FlutterBackground.disableBackgroundExecution();
+    }
   }
 
   @override
   void dispose() {
     WakelockPlus.disable();
+    _stopBackgroundExecution();
     super.dispose();
   }
 
@@ -62,6 +95,7 @@ class _TransferScreenState extends State<TransferScreen> {
           listener: (context, state) {
             if (state is TransferSuccess || state is TransferFailure) {
               WakelockPlus.disable(); // Release battery lock when transfer ends
+              _stopBackgroundExecution(); // Release foreground service
             }
           },
           builder: (context, state) {
