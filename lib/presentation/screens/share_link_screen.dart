@@ -5,6 +5,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import '../../core/theme/app_sizes.dart';
 import '../../core/theme/spacing.dart';
+import '../../domain/entities/peer_session.dart';
 import '../../domain/entities/share_file.dart';
 import '../blocs/connection/connection_bloc.dart';
 import '../blocs/connection/connection_event.dart';
@@ -80,14 +81,18 @@ class _ShareLinkScreenState extends State<ShareLinkScreen> {
                    'fileSize': _selectedFile!.size,
             }));
             debugPrint('📤 [UI] Sent file metadata: ${_selectedFile!.name} (${_selectedFile!.size} bytes)');
-            await Future.delayed(const Duration(milliseconds: 150));
-            if (mounted) {
-              context.read<TransferBloc>().add(SendFileEvent(_selectedFile!));
-              Navigator.pushReplacement(
-                context,
-                MaterialPageRoute(builder: (_) => TransferScreen(role: state.role, preflightMetadata: null)),
-              );
-            }
+            // DO NOT automatically stream file and navigate to TransferScreen anymore.
+            // We stay on ShareLinkScreen and show a "Receiver connected, waiting for them to accept" UI.
+          } else if (state is ConnectionMessageReceived) {
+             if (state.payload['action'] == 'accept_download' && _selectedFile != null) {
+                if (mounted) {
+                   context.read<TransferBloc>().add(SendFileEvent(_selectedFile!));
+                   Navigator.pushReplacement(
+                     context,
+                     MaterialPageRoute(builder: (_) => TransferScreen(role: SessionRole.sender, preflightMetadata: null)),
+                   );
+                }
+             }
           } else if (state is ConnectionFailed) {
             messenger.showSnackBar(
               SnackBar(content: Text('Connection failed: ${state.message}')),
@@ -112,6 +117,8 @@ class _ShareLinkScreenState extends State<ShareLinkScreen> {
              content = _buildGeneratingSessionState(state);
           } else if (state is ConnectionCreated) {
              content = _buildSessionCreatedState(state, messenger);
+          } else if (state is ConnectionConnected || (state is ConnectionMessageReceived && state.payload['action'] != 'accept_download')) {
+             content = _buildReceiverConnectedState();
           } else if (state is ConnectionServerError) {
              content = _buildErrorState(state);
           } else {
@@ -271,6 +278,26 @@ class _ShareLinkScreenState extends State<ShareLinkScreen> {
           const Text('Waiting for receiver to join...', style: TextStyle(color: Colors.grey)),
         ],
       );
+  }
+
+  Widget _buildReceiverConnectedState() {
+     return Column(
+        mainAxisSize: MainAxisSize.min,
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.check_circle_outline, size: AppSizes.iconHuge, color: Colors.green),
+          AppSpacing.gapH24,
+          Text(
+            'Receiver Connected!',
+            style: TextStyle(fontSize: AppSizes.textHeadline, fontWeight: FontWeight.bold),
+            textAlign: TextAlign.center,
+          ),
+          AppSpacing.gapH16,
+          const Text('Waiting for the receiver to confirm the download...', style: TextStyle(color: Colors.grey), textAlign: TextAlign.center),
+          AppSpacing.gapH48,
+          const CircularProgressIndicator(),
+        ],
+     );
   }
 
   Widget _buildErrorState(ConnectionServerError state) {

@@ -45,6 +45,10 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
 
   void _startDownload() {
     if (_fileMetadata != null) {
+      // 1. Tell sender we accepted the download
+      context.read<ConnectionBloc>().add(SendMessageEvent({'action': 'accept_download'}));
+      
+      // 2. Head to TransferScreen to begin receiving the chunks
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(
@@ -78,15 +82,9 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
               });
             }
           } else if (state is ConnectionConnected) {
-            Navigator.pushReplacement(
-              context,
-              MaterialPageRoute(
-                builder: (_) => TransferScreen(
-                  role: SessionRole.receiver,
-                  preflightMetadata: _fileMetadata,
-                ),
-              ),
-            );
+            // WebRTC connection is ready. We stay on this screen until the user 
+            // explicitly clicks "Download" in the UI.
+            debugPrint('🔗 [UI] WebRTC connected. Waiting for explicit start.');
           } else if (state is ConnectionOffline) {
              setState(() {
                 _isSenderOffline = true;
