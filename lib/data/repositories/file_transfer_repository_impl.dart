@@ -29,6 +29,7 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
   int _receivingFileIndex = 1;
   int _receivingTotalFiles = 1;
   P2PFileSaver? _fileSaver;
+  bool _isCancelled = false;
 
   FileTransferRepositoryImpl(this._webrtcClient) {
     _webrtcClient.onDataMessage = _handleDataMessage;
@@ -62,8 +63,19 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
   Stream<String> get onFileReceivedStream => _fileReceivedController.stream;
 
   @override
+  void cancelTransfer() {
+    _isCancelled = true;
+    _webrtcClient.sendDataMessage(RTCDataChannelMessage(jsonEncode({'type': 'cancel'})));
+    _fileSaver?.discard();
+    _fileSaver = null;
+    _progressController.addError('Transfer cancelled');
+  }
+
+  @override
   Future<void> sendFiles(List<ShareFile> files) async {
+    _isCancelled = false;
     for (int i = 0; i < files.length; i++) {
+      if (_isCancelled) break;
       final file = files[i];
       final String fileId = const Uuid().v4();
       final String fileName = file.name;
@@ -87,6 +99,10 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
       if (file.readStream != null) {
         // Safe Stream iteration using low RAM footprint
         await for (final chunk in file.readStream!) {
+          if (_isCancelled) {
+             debugPrint('🛑 [P2P] Transfer cancelled during streaming chunk.');
+             break;
+          }
           final uint8Chunk = Uint8List.fromList(chunk);
           
           if (_webrtcClient.bufferedAmount > _maxBufferSize) {
@@ -110,6 +126,10 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
         // Fallback for smaller files / platforms lacking chunk streams
         final Uint8List bytes = file.bytes!;
         while (bytesSent < totalSize) {
+          if (_isCancelled) {
+             debugPrint('🛑 [P2P] Transfer cancelled during byte chunks.');
+             break;
+          }
           final int remaining = totalSize - bytesSent;
           final int currentChunkSize = remaining < _chunkSize ? remaining : _chunkSize;
           final chunk = bytes.sublist(bytesSent, bytesSent + currentChunkSize);
@@ -132,6 +152,8 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
           ));
         }
       }
+      
+      if (_isCancelled) break;
 
       // 3. Send End of File
       final Map<String, dynamic> eof = {
@@ -178,6 +200,12 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
             _fileReceivedController.add(savedPath);
             _fileSaver = null;
           }
+        } else if (decoded['type'] == 'cancel') {
+          _isCancelled = true;
+          await _fileSaver?.discard();
+          _fileSaver = null;
+          _progressController.addError('Transfer cancelled by peer');
+          debugPrint('🛑 [P2P] Received cancel signal. Discarding file.');
         }
       } catch (e) {
         debugPrint('Error parsing text message: $e');

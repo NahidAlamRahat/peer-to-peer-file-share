@@ -203,6 +203,15 @@ class _TransferScreenState extends State<TransferScreen> {
               ],
             ),
           ),
+          AppSpacing.gapH32,
+          if (state.progress < 1.0)
+            TextButton.icon(
+              onPressed: () {
+                context.read<TransferBloc>().add(CancelTransferEvent());
+              },
+              icon: const Icon(Icons.cancel, color: Colors.red),
+              label: const Text('Cancel Transfer', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
+            ),
           if (state.progress >= 1.0 && widget.role == SessionRole.sender)
              Padding(
               padding: EdgeInsets.only(top: AppSizes.p32),

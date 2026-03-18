@@ -6,4 +6,5 @@ abstract class P2PFileSaver {
   Future<void> init(String fileName);
   void addChunk(Uint8List chunk);
   Future<String> closeAndSave();
+  Future<void> discard();
 }

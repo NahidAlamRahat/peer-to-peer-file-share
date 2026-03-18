@@ -43,4 +43,13 @@ class MobileFileSaver implements P2PFileSaver {
     _sink = null;
     return _file.path;
   }
+
+  @override
+  Future<void> discard() async {
+    await _sink?.close();
+    _sink = null;
+    if (await _file.exists()) {
+      await _file.delete();
+    }
+  }
 }

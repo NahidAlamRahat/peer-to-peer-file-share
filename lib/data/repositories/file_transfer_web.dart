@@ -53,4 +53,9 @@ class WebFileSaver implements P2PFileSaver {
     
     return _fileName;
   }
+
+  @override
+  Future<void> discard() async {
+    _chunks.clear();
+  }
 }

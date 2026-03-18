@@ -10,4 +10,7 @@ abstract class FileTransferRepository {
 
   /// Stream that emits the fully received file path when a transfer completes
   Stream<String> get onFileReceivedStream;
+
+  /// Interrupts the current transfer queue.
+  void cancelTransfer();
 }

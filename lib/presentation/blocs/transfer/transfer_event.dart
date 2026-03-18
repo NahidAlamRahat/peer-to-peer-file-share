@@ -60,3 +60,5 @@ class TransferErrorEvent extends TransferEvent {
   @override
   List<Object?> get props => [error];
 }
+
+class CancelTransferEvent extends TransferEvent {}
