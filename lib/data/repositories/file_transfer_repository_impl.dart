@@ -26,6 +26,7 @@ void _emitProgress({
     required DateTime lastUpdate,
     required Function(DateTime) setLastUpdate,
   }) {
+    if (controller.isClosed) return;
     final now = DateTime.now();
     // Throttle to 10 UI updates per second (100ms) to prevent Main Thread lock on mobile Wait, 100ms is 0.1s
     if (now.difference(lastUpdate).inMilliseconds >= 100 || bytesTransferred == totalSize) {
@@ -235,6 +236,7 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
   DateTime _lastReceiveUpdate = DateTime.now();
 
   Future<void> _handleDataMessage(RTCDataChannelMessage message) async {
+    if (_isCancelled) return;
     if (message.isBinary) {
       _fileSaver?.addChunk(message.binary);
       _receivedBytes += message.binary.length;
