@@ -235,10 +235,24 @@ class SignalingService {
   }
 
   void dispose() {
-    _disposed = true;
+    _disposed = false; // Never permanently dispose the singleton
     _isConnected = false;
     _reconnectTimer?.cancel();
     _heartbeatTimer?.cancel();
+    _reconnectAttempts = 0;
+    
+    // Clear session-specific callbacks so they don't fire inappropriately on the next session
+    onSessionCreated = null;
+    onSessionJoined = null;
+    onSessionError = null;
+    onOfferReceived = null;
+    onAnswerReceived = null;
+    onIceCandidateReceived = null;
+    onPeerDisconnected = null;
+    onMessageReceived = null;
+    onRegistered = null;
+    onConnectionError = null;
+
     try {
       _channel?.sink.close();
     } catch (_) {}

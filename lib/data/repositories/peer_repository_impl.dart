@@ -32,7 +32,10 @@ class PeerRepositoryImpl implements PeerRepository {
 
   @override
   Future<void> initialize() async {
-    _signalingService.connect();
+    // Only connect if we aren't already. Otherwise we just ensure listeners are attached.
+    if (!_signalingService.isConnected) {
+       _signalingService.connect();
+    }
     await _webrtcClient.initialize();
     _setupListeners();
   }
@@ -184,9 +187,8 @@ class PeerRepositoryImpl implements PeerRepository {
     _currentRole = null;
     _createSessionCompleter = null;
 
-    // Dispose WebRTC and signaling (they will be re-initialized)
+    // Dispose WebRTC Client
     _webrtcClient.dispose();
-    _signalingService.dispose();
 
     // DO NOT close stream controllers — they are broadcast and re-used.
     // Closing them permanently breaks subscriptions in ConnectionBloc.
