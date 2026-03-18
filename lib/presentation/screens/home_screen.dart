@@ -196,9 +196,14 @@ class HomeScreen extends StatelessWidget {
       fileName = state.fileName;
       progress = state.progress;
     } else if (state is TransferSuccess) {
-      title = 'Transfer complete!';
-      fileName = 'Finished';
       progress = 1.0;
+      if (state.filePath == '__SENT__') {
+        title = 'Files sent successfully!';
+        fileName = 'Sharing complete';
+      } else {
+        title = 'Transfer complete!';
+        fileName = 'File received';
+      }
     }
 
     return Container(

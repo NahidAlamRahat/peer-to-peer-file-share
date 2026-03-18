@@ -50,9 +50,8 @@ class TransferBloc extends Bloc<TransferEvent, TransferState> {
   ) async {
     try {
       await fileTransferRepository.sendFiles(event.files);
-      // For sender, successful finish might not trigger onFileReceivedStream 
-      // Instead, we can emit success immediately or rely on progress reaching 100%.
-      // We'll emit success when progress == 100 on sender side from progress stream.
+      // For sender, successful finish now emits a success state with a special marker.
+      emit(const TransferSuccess('__SENT__'));
     } catch (e) {
       emit(TransferFailure(e.toString()));
     }
