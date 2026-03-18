@@ -14,7 +14,7 @@ class TransferBloc extends Bloc<TransferEvent, TransferState> {
   double _currentSpeed = 0;
 
   TransferBloc({required this.fileTransferRepository}) : super(TransferInitial()) {
-    on<SendFileEvent>(_onSendFile);
+    on<SendFilesEvent>(_onSendFiles);
     on<TransferProgressEvent>(_onTransferProgress);
     on<TransferCompletedEvent>(_onTransferCompleted);
     on<TransferErrorEvent>(_onTransferError);
@@ -26,6 +26,8 @@ class TransferBloc extends Bloc<TransferEvent, TransferState> {
           fileName: info.fileName,
           totalSize: info.totalSize,
           bytesTransferred: info.bytesTransferred,
+          fileIndex: info.fileIndex,
+          totalFiles: info.totalFiles,
         ));
       },
       onError: (e) => add(TransferErrorEvent(e.toString())),
@@ -39,12 +41,12 @@ class TransferBloc extends Bloc<TransferEvent, TransferState> {
     );
   }
 
-  Future<void> _onSendFile(
-    SendFileEvent event,
+  Future<void> _onSendFiles(
+    SendFilesEvent event,
     Emitter<TransferState> emit,
   ) async {
     try {
-      await fileTransferRepository.sendFile(event.file);
+      await fileTransferRepository.sendFiles(event.files);
       // For sender, successful finish might not trigger onFileReceivedStream 
       // Instead, we can emit success immediately or rely on progress reaching 100%.
       // We'll emit success when progress == 100 on sender side from progress stream.
@@ -77,6 +79,8 @@ class TransferBloc extends Bloc<TransferEvent, TransferState> {
       totalSize: event.totalSize,
       bytesTransferred: event.bytesTransferred,
       transferSpeed: _currentSpeed,
+      fileIndex: event.fileIndex,
+      totalFiles: event.totalFiles,
     ));
 
     // Optional: if sender reached 100% just emit success for sender screen

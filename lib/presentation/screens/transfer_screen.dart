@@ -72,17 +72,20 @@ class _TransferScreenState extends State<TransferScreen> {
               icon: Icons.upload_file,
               onPressed: () async {
                 FilePickerResult? result = await FilePicker.platform.pickFiles(
+                  allowMultiple: true,
                   withData: true,
                 );
-                if (result != null && result.files.single.bytes != null) {
-                  final pf = result.files.single;
-                  final shareFile = ShareFile(
-                    name: pf.name,
-                    size: pf.bytes!.length,
-                    bytes: pf.bytes!,
-                  );
-                  // ignore: use_build_context_synchronously
-                  context.read<TransferBloc>().add(SendFileEvent(shareFile));
+                if (result != null && result.files.isNotEmpty) {
+                  final validFiles = result.files.where((f) => f.bytes != null).toList();
+                  if (validFiles.isNotEmpty) {
+                    final shareFiles = validFiles.map((pf) => ShareFile(
+                      name: pf.name,
+                      size: pf.bytes!.length,
+                      bytes: pf.bytes!,
+                    )).toList();
+                    // ignore: use_build_context_synchronously
+                    context.read<TransferBloc>().add(SendFilesEvent(shareFiles));
+                  }
                 }
               },
             ),
@@ -137,6 +140,9 @@ class _TransferScreenState extends State<TransferScreen> {
                   overflow: TextOverflow.ellipsis,
                 ),
                 AppSpacing.gapH8,
+                if (state.totalFiles > 1) 
+                  Text('File ${state.fileIndex} of ${state.totalFiles}', style: TextStyle(color: Theme.of(context).colorScheme.primary, fontWeight: FontWeight.bold)),
+                if (state.totalFiles > 1) AppSpacing.gapH4,
                 Text(
                   '${(state.bytesTransferred / (1024 * 1024)).toStringAsFixed(2)} MB / ${(state.totalSize / (1024 * 1024)).toStringAsFixed(2)} MB',
                   style: TextStyle(fontSize: AppSizes.textSmall, color: Colors.grey),

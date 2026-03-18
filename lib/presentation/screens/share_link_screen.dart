@@ -24,7 +24,7 @@ class ShareLinkScreen extends StatefulWidget {
 }
 
 class _ShareLinkScreenState extends State<ShareLinkScreen> {
-  ShareFile? _selectedFile;
+  List<ShareFile> _selectedFiles = [];
   bool _isPicking = false;
 
   void _pickFile() async {
@@ -33,21 +33,28 @@ class _ShareLinkScreenState extends State<ShareLinkScreen> {
 
     try {
       FilePickerResult? result = await FilePicker.platform.pickFiles(
+        allowMultiple: true,
         withData: true, // Required for web — loads bytes into memory
       );
-      if (result != null && result.files.single.bytes != null) {
-        final pf = result.files.single;
-        final bytes = pf.bytes!;
-        final name = pf.name;
-        final size = bytes.length;
-        final sizeMB = (size / (1024 * 1024)).toStringAsFixed(2);
-        debugPrint('📂 [UI] Selected File: $name ($sizeMB MB)');
+      if (result != null && result.files.isNotEmpty) {
+        final validFiles = result.files.where((f) => f.bytes != null).toList();
+        if (validFiles.isNotEmpty) {
+          final shareFiles = validFiles.map((pf) => ShareFile(
+            name: pf.name,
+            size: pf.bytes!.length,
+            bytes: pf.bytes!,
+          )).toList();
 
-        setState(() {
-          _selectedFile = ShareFile(name: name, size: size, bytes: bytes);
-        });
-        if (mounted) {
-          context.read<ConnectionBloc>().add(CreateSessionEvent());
+          final totalSize = shareFiles.fold<int>(0, (sum, f) => sum + f.size);
+          final sizeMB = (totalSize / (1024 * 1024)).toStringAsFixed(2);
+          debugPrint('📂 [UI] Selected ${shareFiles.length} files ($sizeMB MB total)');
+
+          setState(() {
+            _selectedFiles = shareFiles;
+          });
+          if (mounted) {
+            context.read<ConnectionBloc>().add(CreateSessionEvent());
+          }
         }
       }
     } catch (e) {
@@ -71,22 +78,24 @@ class _ShareLinkScreenState extends State<ShareLinkScreen> {
       ),
       body: BlocConsumer<ConnectionBloc, ConnectionStateBloc>(
         listener: (context, state) async {
-          if (state is ConnectionCreated && _selectedFile != null) {
+          if (state is ConnectionCreated && _selectedFiles.isNotEmpty) {
             debugPrint('✅ [UI] Link generated! Session ID: ${state.sessionId}');
-          } else if (state is ConnectionConnected && _selectedFile != null) {
+          } else if (state is ConnectionConnected && _selectedFiles.isNotEmpty) {
             // Send metadata NOW (receiver is connected)
+            final totalSize = _selectedFiles.fold<int>(0, (sum, f) => sum + f.size);
             connectionBloc.add(SendMessageEvent({
-                   'action': 'file_metadata',
-                   'fileName': _selectedFile!.name,
-                   'fileSize': _selectedFile!.size,
+                   'action': 'files_metadata',
+                   'filesCount': _selectedFiles.length,
+                   'totalSize': totalSize,
+                   'firstFileName': _selectedFiles.first.name,
             }));
-            debugPrint('📤 [UI] Sent file metadata: ${_selectedFile!.name} (${_selectedFile!.size} bytes)');
+            debugPrint('📤 [UI] Sent file metadata: ${_selectedFiles.length} files ($totalSize bytes)');
             // DO NOT automatically stream file and navigate to TransferScreen anymore.
             // We stay on ShareLinkScreen and show a "Receiver connected, waiting for them to accept" UI.
           } else if (state is ConnectionMessageReceived) {
-             if (state.payload['action'] == 'accept_download' && _selectedFile != null) {
+             if (state.payload['action'] == 'accept_download' && _selectedFiles.isNotEmpty) {
                 if (mounted) {
-                   context.read<TransferBloc>().add(SendFileEvent(_selectedFile!));
+                   context.read<TransferBloc>().add(SendFilesEvent(_selectedFiles));
                    Navigator.pushReplacement(
                      context,
                      MaterialPageRoute(builder: (_) => TransferScreen(role: SessionRole.sender, preflightMetadata: null)),
@@ -97,7 +106,7 @@ class _ShareLinkScreenState extends State<ShareLinkScreen> {
             messenger.showSnackBar(
               SnackBar(content: Text('Connection failed: ${state.message}')),
             );
-            if (_selectedFile == null) Navigator.pop(context);
+            if (_selectedFiles.isEmpty) Navigator.pop(context);
           } else if (state is ConnectionServerError) {
             messenger.showSnackBar(
               SnackBar(
@@ -111,7 +120,7 @@ class _ShareLinkScreenState extends State<ShareLinkScreen> {
           // Determine the main dynamic content based on state
           Widget content;
 
-          if (_selectedFile == null) {
+          if (_selectedFiles.isEmpty) {
              content = _buildFileSelectionState();
           } else if (state is ConnectionLoading || state is ConnectionInitial || state is ConnectionProgress) {
              content = _buildGeneratingSessionState(state);
@@ -225,7 +234,7 @@ class _ShareLinkScreenState extends State<ShareLinkScreen> {
             textAlign: TextAlign.center,
           ),
           AppSpacing.gapH8,
-          Text(_selectedFile!.name, style: TextStyle(fontWeight: FontWeight.bold, fontSize: AppSizes.textBody)),
+          Text('${_selectedFiles.length} files selected', style: TextStyle(fontWeight: FontWeight.bold, fontSize: AppSizes.textBody)),
           AppSpacing.gapH32,
           GestureDetector(
             onTap: () {

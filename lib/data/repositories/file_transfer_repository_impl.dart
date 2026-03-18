@@ -25,6 +25,8 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
   String? _receivingFileName;
   int _receivingTotalSize = 0;
   int _receivedBytes = 0;
+  int _receivingFileIndex = 1;
+  int _receivingTotalFiles = 1;
   final List<int> _receivedChunks = [];
 
   FileTransferRepositoryImpl(this._webrtcClient) {
@@ -42,6 +44,8 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
     _receivingFileName = null;
     _receivingTotalSize = 0;
     _receivedBytes = 0;
+    _receivingFileIndex = 1;
+    _receivingTotalFiles = 1;
     _receivedChunks.clear();
     _bufferCompleter = null;
   }
@@ -57,59 +61,69 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
   Stream<String> get onFileReceivedStream => _fileReceivedController.stream;
 
   @override
-  Future<void> sendFile(ShareFile file) async {
-    final String fileId = const Uuid().v4();
-    final String fileName = file.name;
-    final int totalSize = file.size;
-    final Uint8List bytes = file.bytes;
+  Future<void> sendFiles(List<ShareFile> files) async {
+    for (int i = 0; i < files.length; i++) {
+      final file = files[i];
+      final String fileId = const Uuid().v4();
+      final String fileName = file.name;
+      final int totalSize = file.size;
+      final Uint8List bytes = file.bytes;
 
-    // 1. Send metadata block first
-    final Map<String, dynamic> metadata = {
-      'type': 'metadata',
-      'fileId': fileId,
-      'fileName': fileName,
-      'totalSize': totalSize,
-    };
-    _webrtcClient.sendDataMessage(RTCDataChannelMessage(jsonEncode(metadata)));
+      // 1. Send metadata block first
+      final Map<String, dynamic> metadata = {
+        'type': 'metadata',
+        'fileId': fileId,
+        'fileName': fileName,
+        'totalSize': totalSize,
+        'fileIndex': i + 1,
+        'totalFiles': files.length,
+      };
+      _webrtcClient.sendDataMessage(RTCDataChannelMessage(jsonEncode(metadata)));
 
-    // 2. Send in chunks
-    int bytesSent = 0;
-    debugPrint('🚀 [P2P] Starting high-speed transfer: $fileName ($totalSize bytes)');
+      // 2. Send in chunks
+      int bytesSent = 0;
+      debugPrint('🚀 [P2P] Starting high-speed transfer: $fileName ($totalSize bytes) [${i+1}/${files.length}]');
 
-    while (bytesSent < totalSize) {
-      final int remaining = totalSize - bytesSent;
-      final int currentChunkSize = remaining < _chunkSize ? remaining : _chunkSize;
-      final chunk = bytes.sublist(bytesSent, bytesSent + currentChunkSize);
+      while (bytesSent < totalSize) {
+        final int remaining = totalSize - bytesSent;
+        final int currentChunkSize = remaining < _chunkSize ? remaining : _chunkSize;
+        final chunk = bytes.sublist(bytesSent, bytesSent + currentChunkSize);
 
-      // Flow control: Wait if buffer is getting full
-      if (_webrtcClient.bufferedAmount > _maxBufferSize) {
-        _bufferCompleter = Completer<void>();
-        debugPrint('⏳ [P2P] Buffer full (${_webrtcClient.bufferedAmount} bytes). Waiting...');
-        await _bufferCompleter!.future;
+        // Flow control: Wait if buffer is getting full
+        if (_webrtcClient.bufferedAmount > _maxBufferSize) {
+          _bufferCompleter = Completer<void>();
+          debugPrint('⏳ [P2P] Buffer full (${_webrtcClient.bufferedAmount} bytes). Waiting...');
+          await _bufferCompleter!.future;
+        }
+
+        _webrtcClient.sendDataMessageBinary(chunk);
+        bytesSent += chunk.length;
+
+        _progressController.add(FileChunkInfo(
+          fileId: fileId,
+          fileName: fileName,
+          totalSize: totalSize,
+          bytesTransferred: bytesSent,
+          fileIndex: i + 1,
+          totalFiles: files.length,
+        ));
+
+        if (bytesSent % (1024 * 1024) == 0 || bytesSent == totalSize) {
+          final percent = (bytesSent / totalSize * 100).toInt();
+          debugPrint('📊 [P2P] Sent: $percent% (${(bytesSent / (1024 * 1024)).toStringAsFixed(2)} MB)');
+        }
       }
 
-      _webrtcClient.sendDataMessageBinary(chunk);
-      bytesSent += chunk.length;
-
-      _progressController.add(FileChunkInfo(
-        fileId: fileId,
-        fileName: fileName,
-        totalSize: totalSize,
-        bytesTransferred: bytesSent,
-      ));
-
-      if (bytesSent % (1024 * 1024) == 0 || bytesSent == totalSize) {
-        final percent = (bytesSent / totalSize * 100).toInt();
-        debugPrint('📊 [P2P] Sent: $percent% (${(bytesSent / (1024 * 1024)).toStringAsFixed(2)} MB)');
-      }
+      // 3. Send End of File
+      final Map<String, dynamic> eof = {
+        'type': 'eof',
+        'fileId': fileId,
+      };
+      _webrtcClient.sendDataMessage(RTCDataChannelMessage(jsonEncode(eof)));
+      
+      // Small delay between files
+      await Future.delayed(const Duration(milliseconds: 50));
     }
-
-    // 3. Send End of File
-    final Map<String, dynamic> eof = {
-      'type': 'eof',
-      'fileId': fileId,
-    };
-    _webrtcClient.sendDataMessage(RTCDataChannelMessage(jsonEncode(eof)));
   }
 
   Future<void> _handleDataMessage(RTCDataChannelMessage message) async {
@@ -122,6 +136,8 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
         fileName: _receivingFileName ?? '',
         totalSize: _receivingTotalSize,
         bytesTransferred: _receivedBytes,
+        fileIndex: _receivingFileIndex,
+        totalFiles: _receivingTotalFiles,
       ));
     } else {
       try {
@@ -130,6 +146,8 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
           _receivingFileId = decoded['fileId'];
           _receivingFileName = decoded['fileName'];
           _receivingTotalSize = decoded['totalSize'];
+          _receivingFileIndex = decoded['fileIndex'] ?? 1;
+          _receivingTotalFiles = decoded['totalFiles'] ?? 1;
           _receivedBytes = 0;
           _receivedChunks.clear();
         } else if (decoded['type'] == 'eof') {

@@ -15,6 +15,8 @@ class TransferInProgress extends TransferState {
   final int totalSize;
   final int bytesTransferred;
   final double transferSpeed; // bytes per second
+  final int fileIndex;
+  final int totalFiles;
 
   const TransferInProgress({
     required this.fileId,
@@ -22,12 +24,14 @@ class TransferInProgress extends TransferState {
     required this.totalSize,
     required this.bytesTransferred,
     required this.transferSpeed,
+    required this.fileIndex,
+    required this.totalFiles,
   });
 
   double get progress => totalSize == 0 ? 0 : bytesTransferred / totalSize;
 
   @override
-  List<Object?> get props => [fileId, fileName, totalSize, bytesTransferred, transferSpeed];
+  List<Object?> get props => [fileId, fileName, totalSize, bytesTransferred, transferSpeed, fileIndex, totalFiles];
 }
 
 class TransferSuccess extends TransferState {

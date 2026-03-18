@@ -71,11 +71,11 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
       body: BlocConsumer<ConnectionBloc, ConnectionStateBloc>(
         listener: (context, state) {
           if (state is ConnectionMessageReceived) {
-            if (state.payload['action'] == 'file_metadata') {
-              final name = state.payload['fileName'];
-              final size = state.payload['fileSize'];
+            if (state.payload['action'] == 'files_metadata') {
+              final count = state.payload['filesCount'];
+              final size = state.payload['totalSize'];
               final sizeMB = (size / (1024 * 1024)).toStringAsFixed(2);
-              debugPrint('📥 [UI] Received file metadata: $name ($sizeMB MB)');
+              debugPrint('📥 [UI] Received file metadata: $count files ($sizeMB MB)');
               
               setState(() {
                 _fileMetadata = state.payload;
@@ -193,15 +193,21 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
   }
 
   Widget _buildFileReadyState() {
-      final sizeMB = (_fileMetadata!['fileSize'] / (1024 * 1024)).toStringAsFixed(2);
+      final sizeMB = (_fileMetadata!['totalSize'] / (1024 * 1024)).toStringAsFixed(2);
+      final count = _fileMetadata!['filesCount'];
+      final firstName = _fileMetadata!['firstFileName'];
+      
+      String titleText = count > 1 ? '$count files' : firstName;
+      String subtitleText = count > 1 ? 'Including: $firstName\nTotal Size: $sizeMB MB' : '$sizeMB MB';
+
       return Column(
          mainAxisAlignment: MainAxisAlignment.center,
          children: [
             Icon(Icons.insert_drive_file, size: AppSizes.iconHuge, color: Colors.blueAccent),
             AppSpacing.gapH24,
-            Text(_fileMetadata!['fileName'], style: TextStyle(fontSize: AppSizes.textTitle, fontWeight: FontWeight.bold), textAlign: TextAlign.center),
+            Text(titleText, style: TextStyle(fontSize: AppSizes.textTitle, fontWeight: FontWeight.bold), textAlign: TextAlign.center),
             AppSpacing.gapH8,
-            Text('$sizeMB MB', style: TextStyle(fontSize: AppSizes.textBody, color: Colors.grey)),
+            Text(subtitleText, style: TextStyle(fontSize: AppSizes.textBody, color: Colors.grey), textAlign: TextAlign.center),
             AppSpacing.gapH48,
             CustomButton(
               text: 'Download',

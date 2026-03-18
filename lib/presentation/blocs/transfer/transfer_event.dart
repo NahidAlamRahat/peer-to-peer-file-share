@@ -8,12 +8,12 @@ abstract class TransferEvent extends Equatable {
   List<Object?> get props => [];
 }
 
-class SendFileEvent extends TransferEvent {
-  final ShareFile file;
-  const SendFileEvent(this.file);
+class SendFilesEvent extends TransferEvent {
+  final List<ShareFile> files;
+  const SendFilesEvent(this.files);
 
   @override
-  List<Object?> get props => [file];
+  List<Object?> get props => [files];
 }
 
 class TransferProgressEvent extends TransferEvent {
@@ -21,16 +21,20 @@ class TransferProgressEvent extends TransferEvent {
   final String fileName;
   final int totalSize;
   final int bytesTransferred;
+  final int fileIndex;
+  final int totalFiles;
 
   const TransferProgressEvent({
     required this.fileId,
     required this.fileName,
     required this.totalSize,
     required this.bytesTransferred,
+    required this.fileIndex,
+    required this.totalFiles,
   });
 
   @override
-  List<Object?> get props => [fileId, fileName, totalSize, bytesTransferred];
+  List<Object?> get props => [fileId, fileName, totalSize, bytesTransferred, fileIndex, totalFiles];
 }
 
 class TransferCompletedEvent extends TransferEvent {
@@ -39,6 +43,14 @@ class TransferCompletedEvent extends TransferEvent {
 
   @override
   List<Object?> get props => [filePath];
+}
+
+class TransferBatchCompletedEvent extends TransferEvent {
+  final List<String> filePaths;
+  const TransferBatchCompletedEvent(this.filePaths);
+
+  @override
+  List<Object?> get props => [filePaths];
 }
 
 class TransferErrorEvent extends TransferEvent {
