@@ -8,24 +8,20 @@ class ResponsiveLayout extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Center(
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(
-          maxWidth: 600, // Look like a mobile/tablet app centered on desktop
-        ),
-        child: Container(
-          decoration: BoxDecoration(
-            color: Theme.of(context).scaffoldBackgroundColor,
-            boxShadow: [
-               if (MediaQuery.of(context).size.width > 600)
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.2),
-                    blurRadius: 30,
-                    spreadRadius: 5,
-                  )
-            ]
+    return Container(
+      color: Theme.of(context).scaffoldBackgroundColor,
+      child: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(
+            maxWidth: 600, // Look like a mobile/tablet app centered on desktop
           ),
-          child: child,
+          child: Container(
+            decoration: BoxDecoration(
+              color: Theme.of(context).scaffoldBackgroundColor,
+              boxShadow: const [],
+            ),
+            child: child,
+          ),
         ),
       ),
     );
