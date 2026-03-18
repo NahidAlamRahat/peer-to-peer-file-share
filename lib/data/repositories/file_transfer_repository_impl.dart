@@ -74,6 +74,23 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
   @override
   Future<void> sendFiles(List<ShareFile> files) async {
     _isCancelled = false;
+    
+    // Safety check: Wait for the data channel to be fully OPEN before streaming
+    int waitCounter = 0;
+    while (_webrtcClient.dataChannelState != RTCDataChannelState.RTCDataChannelOpen) {
+      if (_isCancelled) return;
+      if (waitCounter > 100) { // 10 seconds timeout
+         _progressController.addError('Timeout waiting for peer DataChannel to open');
+         return;
+      }
+      debugPrint('⏳ [P2P] Waiting for data channel to open... (${_webrtcClient.dataChannelState})');
+      await Future.delayed(const Duration(milliseconds: 100));
+      waitCounter++;
+    }
+    
+    // Give the receiver 300ms to attach onMessage listeners after opening
+    await Future.delayed(const Duration(milliseconds: 300));
+
     for (int i = 0; i < files.length; i++) {
       if (_isCancelled) break;
       final file = files[i];
@@ -209,6 +226,7 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
         }
       } catch (e) {
         debugPrint('Error parsing text message: $e');
+        _progressController.addError('System Error: $e');
       }
     }
   }

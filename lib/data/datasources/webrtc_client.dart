@@ -83,6 +83,7 @@ class WebRTCClient {
   }
 
   int get bufferedAmount => _dataChannel?.bufferedAmount ?? 0;
+  RTCDataChannelState? get dataChannelState => _dataChannel?.state;
 
   void setBufferedAmountLowThreshold(int threshold) {
     _dataChannel?.bufferedAmountLowThreshold = threshold;
