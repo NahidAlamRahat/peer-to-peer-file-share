@@ -33,6 +33,8 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
     // Auto-redirect if transfer is already active
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final transferBloc = sl<TransferBloc>();
+      // ONLY redirect if transfer is actively InProgress. 
+      // Do NOT redirect if it's already Success (finished).
       if (transferBloc.state is TransferInProgress) {
         final connectionBloc = context.read<ConnectionBloc>();
         SessionRole role = SessionRole.receiver;

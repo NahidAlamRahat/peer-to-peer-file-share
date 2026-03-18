@@ -63,6 +63,8 @@ class TransferErrorEvent extends TransferEvent {
 
 class CancelTransferEvent extends TransferEvent {}
 
+class ResetTransferEvent extends TransferEvent {}
+
 class SaveFileManuallyEvent extends TransferEvent {
   final String filePath;
   const SaveFileManuallyEvent(this.filePath);

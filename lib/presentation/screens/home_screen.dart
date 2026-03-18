@@ -12,6 +12,7 @@ import '../blocs/connection/connection_bloc.dart';
 import '../blocs/connection/connection_event.dart';
 import '../blocs/connection/connection_state.dart';
 import '../blocs/transfer/transfer_bloc.dart';
+import '../blocs/transfer/transfer_event.dart';
 import '../blocs/transfer/transfer_state.dart';
 import '../widgets/custom_buttons.dart';
 import '../widgets/responsive_layout.dart';
@@ -202,55 +203,81 @@ class HomeScreen extends StatelessWidget {
 
     return Container(
       width: double.infinity,
-      padding: EdgeInsets.all(AppSizes.p16),
       decoration: BoxDecoration(
         color: Theme.of(context).colorScheme.primaryContainer.withValues(alpha: 0.4),
         borderRadius: BorderRadius.circular(AppSizes.radiusMedium),
         border: Border.all(color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.2)),
       ),
-      child: InkWell(
-        onTap: () {
-          // Find the role from current connection state or sl
-          final connectionState = context.read<ConnectionBloc>().state;
-          SessionRole role = SessionRole.sender;
-          if (connectionState is ConnectionConnected) {
-             role = connectionState.role;
-          }
-          
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-               builder: (_) => TransferScreen(role: role),
-            ),
-          );
-        },
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(AppSizes.radiusMedium),
         child: Row(
           children: [
-            Stack(
-              alignment: Alignment.center,
-              children: [
-                SizedBox(
-                  width: 40,
-                  height: 40,
-                  child: CircularProgressIndicator(
-                    value: progress,
-                    strokeWidth: 4,
+            Expanded(
+              child: InkWell(
+                onTap: () {
+                  final connectionState = context.read<ConnectionBloc>().state;
+                  SessionRole role = SessionRole.sender;
+                  if (connectionState is ConnectionConnected) {
+                    role = connectionState.role;
+                  }
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => TransferScreen(role: role),
+                    ),
+                  );
+                },
+                child: Padding(
+                  padding: EdgeInsets.all(AppSizes.p16),
+                  child: Row(
+                    children: [
+                      Stack(
+                        alignment: Alignment.center,
+                        children: [
+                          if (state is TransferInProgress) ...[
+                            SizedBox(
+                              width: 32,
+                              height: 32,
+                              child: CircularProgressIndicator(
+                                value: progress,
+                                strokeWidth: 3,
+                              ),
+                            ),
+                            Icon(Icons.play_arrow_rounded, size: 16, color: Theme.of(context).colorScheme.primary),
+                          ] else ...[
+                            Icon(Icons.check_circle_rounded, size: 32, color: Colors.green.shade600),
+                          ],
+                        ],
+                      ),
+                      AppSpacing.gapW16,
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(title, style: const TextStyle(fontWeight: FontWeight.bold)),
+                            Text(
+                              fileName, 
+                              style: TextStyle(fontSize: AppSizes.textSmall), 
+                              maxLines: 1, 
+                              overflow: TextOverflow.ellipsis
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-                Icon(Icons.play_arrow_rounded, size: 20, color: Theme.of(context).colorScheme.primary),
-              ],
-            ),
-            AppSpacing.gapW16,
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(title, style: const TextStyle(fontWeight: FontWeight.bold)),
-                  Text(fileName, style: TextStyle(fontSize: AppSizes.textSmall), maxLines: 1, overflow: TextOverflow.ellipsis),
-                ],
               ),
             ),
-            Icon(Icons.chevron_right, color: Theme.of(context).colorScheme.primary),
+            VerticalDivider(width: 1, color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.1)),
+            IconButton(
+              onPressed: () {
+                context.read<TransferBloc>().add(ResetTransferEvent());
+              },
+              icon: const Icon(Icons.close_rounded, size: 20),
+              tooltip: 'Dismiss',
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
           ],
         ),
       ),

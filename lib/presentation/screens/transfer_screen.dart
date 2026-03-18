@@ -305,7 +305,18 @@ class _TransferScreenState extends State<TransferScreen> {
                 context.read<TransferBloc>().add(SaveFileManuallyEvent(state.filePath));
               },
             ),
-          ]
+          ],
+          AppSpacing.gapH16,
+          CustomButton(
+            text: 'Finish',
+            icon: Icons.check_circle_outline,
+            isPrimary: false,
+            onPressed: () {
+              context.read<TransferBloc>().add(ResetTransferEvent());
+              context.read<ConnectionBloc>().add(ResetConnectionEvent());
+              Navigator.of(context).popUntil((route) => route.isFirst);
+            },
+          ),
         ],
       );
     } else if (state is TransferFailure) {
