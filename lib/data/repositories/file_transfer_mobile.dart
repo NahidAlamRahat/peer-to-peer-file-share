@@ -52,4 +52,9 @@ class MobileFileSaver implements P2PFileSaver {
       await _file.delete();
     }
   }
+
+  @override
+  void triggerManualDownload(String path) {
+    // No-op for mobile. The file is already safely on disk.
+  }
 }

@@ -44,14 +44,27 @@ class WebFileSaver implements P2PFileSaver {
     final blob = html.Blob(_chunks, mimeType);
     final url = html.Url.createObjectUrlFromBlob(blob);
     
+    // Attempt auto-download (might be blocked on mobile)
     html.AnchorElement(href: url)
       ..setAttribute('download', _fileName)
       ..click();
       
-    html.Url.revokeObjectUrl(url);
-    _chunks.clear();
+    // DO NOT revoke the URL here so the user can manually click a button if blocked
+    // html.Url.revokeObjectUrl(url);
     
-    return _fileName;
+    // DO NOT clear chunks yet in case they need to re-download. 
+    // Wait for discard() or next init().
+    
+    return url; // Returning the Blob URL to the UI so it can be re-triggered manually
+  }
+
+  @override
+  void triggerManualDownload(String path) {
+    if (path.startsWith('blob:')) {
+      html.AnchorElement(href: path)
+        ..setAttribute('download', _fileName)
+        ..click();
+    }
   }
 
   @override

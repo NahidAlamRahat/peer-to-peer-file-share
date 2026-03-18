@@ -15,6 +15,32 @@ import 'file_saver.dart';
 // Web-only download trigger
 import 'file_transfer_web.dart' if (dart.library.io) 'file_transfer_mobile.dart';
 
+void _emitProgress({
+    required StreamController<FileChunkInfo> controller,
+    required String fileId,
+    required String fileName,
+    required int totalSize,
+    required int bytesTransferred,
+    required int fileIndex,
+    required int totalFiles,
+    required DateTime lastUpdate,
+    required Function(DateTime) setLastUpdate,
+  }) {
+    final now = DateTime.now();
+    // Throttle to 10 UI updates per second (100ms) to prevent Main Thread lock on mobile Wait, 100ms is 0.1s
+    if (now.difference(lastUpdate).inMilliseconds >= 100 || bytesTransferred == totalSize) {
+      controller.add(FileChunkInfo(
+        fileId: fileId,
+        fileName: fileName,
+        totalSize: totalSize,
+        bytesTransferred: bytesTransferred,
+        fileIndex: fileIndex,
+        totalFiles: totalFiles,
+      ));
+      setLastUpdate(now);
+    }
+  }
+
 class FileTransferRepositoryImpl implements FileTransferRepository {
   final WebRTCClient _webrtcClient;
 
@@ -63,6 +89,11 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
   Stream<String> get onFileReceivedStream => _fileReceivedController.stream;
 
   @override
+  void saveFileManually(String filePath) {
+    _fileSaver?.triggerManualDownload(filePath);
+  }
+
+  @override
   void cancelTransfer() {
     _isCancelled = true;
     _webrtcClient.sendDataMessage(RTCDataChannelMessage(jsonEncode({'type': 'cancel'})));
@@ -97,6 +128,7 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
       final String fileId = const Uuid().v4();
       final String fileName = file.name;
       final int totalSize = file.size;
+      DateTime lastUpdate = DateTime.now();
 
       // 1. Send metadata block first
       final Map<String, dynamic> metadata = {
@@ -130,14 +162,17 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
           _webrtcClient.sendDataMessageBinary(uint8Chunk);
           bytesSent += uint8Chunk.length;
 
-          _progressController.add(FileChunkInfo(
+          _emitProgress(
+            controller: _progressController,
             fileId: fileId,
             fileName: fileName,
             totalSize: totalSize,
             bytesTransferred: bytesSent,
             fileIndex: i + 1,
             totalFiles: files.length,
-          ));
+            lastUpdate: lastUpdate,
+            setLastUpdate: (time) => lastUpdate = time,
+          );
         }
       } else if (file.bytes != null) {
         // Fallback for smaller files / platforms lacking chunk streams
@@ -159,14 +194,17 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
           _webrtcClient.sendDataMessageBinary(chunk);
           bytesSent += chunk.length;
 
-          _progressController.add(FileChunkInfo(
+          _emitProgress(
+            controller: _progressController,
             fileId: fileId,
             fileName: fileName,
             totalSize: totalSize,
             bytesTransferred: bytesSent,
             fileIndex: i + 1,
             totalFiles: files.length,
-          ));
+            lastUpdate: lastUpdate,
+            setLastUpdate: (time) => lastUpdate = time,
+          );
         }
       }
       
@@ -184,19 +222,24 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
     }
   }
 
+  DateTime _lastReceiveUpdate = DateTime.now();
+
   Future<void> _handleDataMessage(RTCDataChannelMessage message) async {
     if (message.isBinary) {
       _fileSaver?.addChunk(message.binary);
       _receivedBytes += message.binary.length;
 
-      _progressController.add(FileChunkInfo(
+      _emitProgress(
+        controller: _progressController,
         fileId: _receivingFileId ?? '',
         fileName: _receivingFileName ?? '',
         totalSize: _receivingTotalSize,
         bytesTransferred: _receivedBytes,
         fileIndex: _receivingFileIndex,
         totalFiles: _receivingTotalFiles,
-      ));
+        lastUpdate: _lastReceiveUpdate,
+        setLastUpdate: (time) => _lastReceiveUpdate = time,
+      );
     } else {
       try {
         final decoded = jsonDecode(message.text);

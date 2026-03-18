@@ -12,5 +12,9 @@ abstract class FileTransferRepository {
   Stream<String> get onFileReceivedStream;
 
   /// Interrupts the current transfer queue.
+  
+  /// Triggers a native manual file download/save process for platforms that block auto-downloads (Web).
+  void saveFileManually(String filePath);
+  
   void cancelTransfer();
 }

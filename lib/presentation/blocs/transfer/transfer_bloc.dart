@@ -19,6 +19,7 @@ class TransferBloc extends Bloc<TransferEvent, TransferState> {
     on<TransferCompletedEvent>(_onTransferCompleted);
     on<TransferErrorEvent>(_onTransferError);
     on<CancelTransferEvent>(_onCancelTransfer);
+    on<SaveFileManuallyEvent>(_onSaveFileManually);
 
     _progressSubscription = fileTransferRepository.transferProgressStream.listen(
       (info) {
@@ -110,7 +111,14 @@ class TransferBloc extends Bloc<TransferEvent, TransferState> {
     Emitter<TransferState> emit,
   ) {
     fileTransferRepository.cancelTransfer();
-    emit(const TransferFailure('Transfer cancelled.'));
+    emit(const TransferFailure('Transfer was cancelled by user.'));
+  }
+
+  void _onSaveFileManually(
+    SaveFileManuallyEvent event,
+    Emitter<TransferState> emit,
+  ) {
+    fileTransferRepository.saveFileManually(event.filePath);
   }
 
   @override

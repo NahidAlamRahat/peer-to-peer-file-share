@@ -227,7 +227,23 @@ class _TransferScreenState extends State<TransferScreen> {
           AppSpacing.gapH24,
           Text('Transfer Complete!', style: TextStyle(fontSize: AppSizes.textHeadline, fontWeight: FontWeight.bold)),
           AppSpacing.gapH16,
-          Text('Saved at: \n${state.filePath}', textAlign: TextAlign.center, style: const TextStyle(color: Colors.grey)),
+          Text(
+            state.filePath.startsWith('blob:') 
+               ? 'File received successfully.' 
+               : 'Saved at: \n${state.filePath}', 
+            textAlign: TextAlign.center, 
+            style: const TextStyle(color: Colors.grey)
+          ),
+          if (state.filePath.startsWith('blob:') && widget.role == SessionRole.receiver) ...[
+            AppSpacing.gapH32,
+            CustomButton(
+              text: 'Save File to Device',
+              icon: Icons.save_alt,
+              onPressed: () {
+                context.read<TransferBloc>().add(SaveFileManuallyEvent(state.filePath));
+              },
+            ),
+          ]
         ],
       );
     } else if (state is TransferFailure) {
