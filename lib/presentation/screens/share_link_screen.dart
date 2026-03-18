@@ -34,15 +34,16 @@ class _ShareLinkScreenState extends State<ShareLinkScreen> {
     try {
       FilePickerResult? result = await FilePicker.platform.pickFiles(
         allowMultiple: true,
-        withData: true, // Required for web — loads bytes into memory
+        withReadStream: true, // Crucial for 1GB+ files to prevent RAM crashes
       );
       if (result != null && result.files.isNotEmpty) {
-        final validFiles = result.files.where((f) => f.bytes != null).toList();
+        final validFiles = result.files.where((f) => f.readStream != null || f.bytes != null).toList();
         if (validFiles.isNotEmpty) {
           final shareFiles = validFiles.map((pf) => ShareFile(
             name: pf.name,
-            size: pf.bytes!.length,
-            bytes: pf.bytes!,
+            size: pf.size,
+            readStream: pf.readStream,
+            bytes: pf.bytes,
           )).toList();
 
           final totalSize = shareFiles.fold<int>(0, (sum, f) => sum + f.size);

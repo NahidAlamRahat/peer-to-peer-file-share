@@ -6,11 +6,13 @@ import 'dart:typed_data';
 class ShareFile {
   final String name;
   final int size;
-  final Uint8List bytes;
+  final Stream<List<int>>? readStream;
+  final Uint8List? bytes;
 
   const ShareFile({
     required this.name,
     required this.size,
-    required this.bytes,
+    this.readStream,
+    this.bytes,
   });
 }

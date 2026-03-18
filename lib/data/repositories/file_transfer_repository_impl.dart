@@ -10,6 +10,7 @@ import '../../domain/entities/file_chunk_info.dart';
 import '../../domain/entities/share_file.dart';
 import '../../domain/repositories/file_transfer_repository.dart';
 import '../datasources/webrtc_client.dart';
+import 'file_saver.dart';
 
 // Web-only download trigger
 import 'file_transfer_web.dart' if (dart.library.io) 'file_transfer_mobile.dart';
@@ -27,7 +28,7 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
   int _receivedBytes = 0;
   int _receivingFileIndex = 1;
   int _receivingTotalFiles = 1;
-  final List<int> _receivedChunks = [];
+  P2PFileSaver? _fileSaver;
 
   FileTransferRepositoryImpl(this._webrtcClient) {
     _webrtcClient.onDataMessage = _handleDataMessage;
@@ -46,7 +47,7 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
     _receivedBytes = 0;
     _receivingFileIndex = 1;
     _receivingTotalFiles = 1;
-    _receivedChunks.clear();
+    _fileSaver = null;
     _bufferCompleter = null;
   }
 
@@ -67,7 +68,6 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
       final String fileId = const Uuid().v4();
       final String fileName = file.name;
       final int totalSize = file.size;
-      final Uint8List bytes = file.bytes;
 
       // 1. Send metadata block first
       final Map<String, dynamic> metadata = {
@@ -84,33 +84,52 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
       int bytesSent = 0;
       debugPrint('🚀 [P2P] Starting high-speed transfer: $fileName ($totalSize bytes) [${i+1}/${files.length}]');
 
-      while (bytesSent < totalSize) {
-        final int remaining = totalSize - bytesSent;
-        final int currentChunkSize = remaining < _chunkSize ? remaining : _chunkSize;
-        final chunk = bytes.sublist(bytesSent, bytesSent + currentChunkSize);
+      if (file.readStream != null) {
+        // Safe Stream iteration using low RAM footprint
+        await for (final chunk in file.readStream!) {
+          final uint8Chunk = Uint8List.fromList(chunk);
+          
+          if (_webrtcClient.bufferedAmount > _maxBufferSize) {
+            _bufferCompleter = Completer<void>();
+            await _bufferCompleter!.future;
+          }
 
-        // Flow control: Wait if buffer is getting full
-        if (_webrtcClient.bufferedAmount > _maxBufferSize) {
-          _bufferCompleter = Completer<void>();
-          debugPrint('⏳ [P2P] Buffer full (${_webrtcClient.bufferedAmount} bytes). Waiting...');
-          await _bufferCompleter!.future;
+          _webrtcClient.sendDataMessageBinary(uint8Chunk);
+          bytesSent += uint8Chunk.length;
+
+          _progressController.add(FileChunkInfo(
+            fileId: fileId,
+            fileName: fileName,
+            totalSize: totalSize,
+            bytesTransferred: bytesSent,
+            fileIndex: i + 1,
+            totalFiles: files.length,
+          ));
         }
+      } else if (file.bytes != null) {
+        // Fallback for smaller files / platforms lacking chunk streams
+        final Uint8List bytes = file.bytes!;
+        while (bytesSent < totalSize) {
+          final int remaining = totalSize - bytesSent;
+          final int currentChunkSize = remaining < _chunkSize ? remaining : _chunkSize;
+          final chunk = bytes.sublist(bytesSent, bytesSent + currentChunkSize);
 
-        _webrtcClient.sendDataMessageBinary(chunk);
-        bytesSent += chunk.length;
+          if (_webrtcClient.bufferedAmount > _maxBufferSize) {
+            _bufferCompleter = Completer<void>();
+            await _bufferCompleter!.future;
+          }
 
-        _progressController.add(FileChunkInfo(
-          fileId: fileId,
-          fileName: fileName,
-          totalSize: totalSize,
-          bytesTransferred: bytesSent,
-          fileIndex: i + 1,
-          totalFiles: files.length,
-        ));
+          _webrtcClient.sendDataMessageBinary(chunk);
+          bytesSent += chunk.length;
 
-        if (bytesSent % (1024 * 1024) == 0 || bytesSent == totalSize) {
-          final percent = (bytesSent / totalSize * 100).toInt();
-          debugPrint('📊 [P2P] Sent: $percent% (${(bytesSent / (1024 * 1024)).toStringAsFixed(2)} MB)');
+          _progressController.add(FileChunkInfo(
+            fileId: fileId,
+            fileName: fileName,
+            totalSize: totalSize,
+            bytesTransferred: bytesSent,
+            fileIndex: i + 1,
+            totalFiles: files.length,
+          ));
         }
       }
 
@@ -128,7 +147,7 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
 
   Future<void> _handleDataMessage(RTCDataChannelMessage message) async {
     if (message.isBinary) {
-      _receivedChunks.addAll(message.binary);
+      _fileSaver?.addChunk(message.binary);
       _receivedBytes += message.binary.length;
 
       _progressController.add(FileChunkInfo(
@@ -149,13 +168,16 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
           _receivingFileIndex = decoded['fileIndex'] ?? 1;
           _receivingTotalFiles = decoded['totalFiles'] ?? 1;
           _receivedBytes = 0;
-          _receivedChunks.clear();
+          
+          _fileSaver = getFileSaver();
+          await _fileSaver!.init(_receivingFileName ?? 'file');
         } else if (decoded['type'] == 'eof') {
-          // Save the file using platform-specific implementation
-          final bytes = Uint8List.fromList(_receivedChunks);
-          await saveReceivedFile(_receivingFileName ?? 'file', bytes);
-          _fileReceivedController.add(_receivingFileName ?? 'file');
-          _receivedChunks.clear();
+          // Save the file using platform-specific stream saver
+          if (_fileSaver != null) {
+            final savedPath = await _fileSaver!.closeAndSave();
+            _fileReceivedController.add(savedPath);
+            _fileSaver = null;
+          }
         }
       } catch (e) {
         debugPrint('Error parsing text message: $e');
