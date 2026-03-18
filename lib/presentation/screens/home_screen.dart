@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:url_launcher/url_launcher_string.dart';
 import '../../core/di/injection_container.dart';
 import '../../core/services/settings_service.dart';
 import '../../core/theme/app_sizes.dart';
@@ -289,8 +290,11 @@ class HomeScreen extends StatelessWidget {
             width: double.infinity,
             child: FilledButton.icon(
               onPressed: () {
-                // TODO: Update with your Play Store link
-                // launchUrlString('https://play.google.com/store/apps/details?id=...');
+                // Link to the APK hosted on the same server/Vercel
+                launchUrlString(
+                  '/apk/app-release.apk',
+                  mode: LaunchMode.externalApplication,
+                );
               },
               icon: const Icon(Icons.android, size: 20),
               label: const Text('Download for Android'),
