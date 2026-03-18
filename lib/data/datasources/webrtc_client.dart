@@ -6,12 +6,24 @@ class WebRTCClient {
   RTCPeerConnection? _peerConnection;
   RTCDataChannel? _dataChannel;
 
-  // Configuration for WebRTC
+  // Configuration for WebRTC with robust NAT traversal (Global STUN + TURN)
   final Map<String, dynamic> _configuration = {
     'iceServers': [
       {'urls': 'stun:stun.l.google.com:19302'},
       {'urls': 'stun:stun1.l.google.com:19302'},
-    ]
+      {'urls': 'stun:stun2.l.google.com:19302'},
+      {'urls': 'stun:stun3.l.google.com:19302'},
+      {'urls': 'stun:stun4.l.google.com:19302'},
+      {'urls': 'stun:stun.stunprotocol.org:3478'},
+      // --- ADD YOUR TURN SERVERS HERE FOR PRODUCTION ---
+      // {
+      //   'urls': 'turn:YOUR_TURN_SERVER_URL:3478',
+      //   'username': 'YOUR_USERNAME',
+      //   'credential': 'YOUR_PASSWORD'
+      // },
+    ],
+    'sdpSemantics': 'unified-plan',
+    'iceTransportPolicy': 'all',
   };
 
   // Callbacks
