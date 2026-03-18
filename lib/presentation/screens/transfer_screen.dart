@@ -1,6 +1,7 @@
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:wakelock_plus/wakelock_plus.dart';
 import '../../core/theme/app_sizes.dart';
 import '../../core/theme/spacing.dart';
 import '../../domain/entities/peer_session.dart';
@@ -25,6 +26,19 @@ class TransferScreen extends StatefulWidget {
 
 class _TransferScreenState extends State<TransferScreen> {
   @override
+  void initState() {
+    super.initState();
+    // Prevent mobile devices from sleeping and breaking the WebRTC DataChannel
+    WakelockPlus.enable();
+  }
+
+  @override
+  void dispose() {
+    WakelockPlus.disable();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return PopScope(
       canPop: true,
@@ -44,7 +58,12 @@ class _TransferScreenState extends State<TransferScreen> {
             },
           ),
         ),
-        body: BlocBuilder<TransferBloc, TransferState>(
+        body: BlocConsumer<TransferBloc, TransferState>(
+          listener: (context, state) {
+            if (state is TransferSuccess || state is TransferFailure) {
+              WakelockPlus.disable(); // Release battery lock when transfer ends
+            }
+          },
           builder: (context, state) {
              final content = _buildTransferBody(state);
              return ResponsiveLayout(
