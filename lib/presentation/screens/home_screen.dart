@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../core/di/injection_container.dart';
@@ -165,6 +166,7 @@ class HomeScreen extends StatelessWidget {
           const Spacer(flex: 2),
           _buildActionPanel(context),
           AppSpacing.gapH32,
+          if (kIsWeb) _buildAppDownloadBanner(context),
         ],
       ),
     );
@@ -221,10 +223,111 @@ class HomeScreen extends StatelessWidget {
                         style: TextStyle(color: Colors.grey),
                       ),
                       AppSpacing.gapH48,
-                      _buildActionPanel(context),
+                       _buildActionPanel(context),
+                       if (kIsWeb) ...[
+                         AppSpacing.gapH32,
+                         _buildAppDownloadBanner(context),
+                       ],
                    ],
                  ),
                ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildAppDownloadBanner(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: EdgeInsets.all(AppSizes.p20),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [
+            Theme.of(context).colorScheme.primaryContainer,
+            Theme.of(context).colorScheme.secondaryContainer,
+          ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(AppSizes.radiusLarge),
+        border: Border.all(
+          color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.25),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.download_for_offline_rounded,
+                  color: Theme.of(context).colorScheme.primary, size: 28),
+              AppSpacing.gapW12,
+              Expanded(
+                child: Text(
+                  'Get the App — More Power! 🚀',
+                  style: TextStyle(
+                    fontSize: AppSizes.textSubtitle,
+                    fontWeight: FontWeight.bold,
+                    color: Theme.of(context).colorScheme.onPrimaryContainer,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          AppSpacing.gapH12,
+          _BannerFeatureRow(icon: Icons.wifi_off, text: 'Transfer continues when screen turns off'),
+          AppSpacing.gapH8,
+          _BannerFeatureRow(icon: Icons.play_circle_outline, text: 'Run in background — leave the app freely'),
+          AppSpacing.gapH8,
+          _BannerFeatureRow(icon: Icons.notifications_active_outlined, text: 'Live progress notification'),
+          AppSpacing.gapH8,
+          _BannerFeatureRow(icon: Icons.lock_outline, text: 'No browser tab restrictions'),
+          AppSpacing.gapH16,
+          SizedBox(
+            width: double.infinity,
+            child: FilledButton.icon(
+              onPressed: () {
+                // TODO: Update with your Play Store link
+                // launchUrlString('https://play.google.com/store/apps/details?id=...');
+              },
+              icon: const Icon(Icons.android, size: 20),
+              label: const Text('Download for Android'),
+              style: FilledButton.styleFrom(
+                backgroundColor: Theme.of(context).colorScheme.primary,
+                padding: EdgeInsets.symmetric(vertical: AppSizes.p12),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(AppSizes.radiusMedium),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Row widget for each feature bullet in the app download promotion banner.
+class _BannerFeatureRow extends StatelessWidget {
+  final IconData icon;
+  final String text;
+
+  const _BannerFeatureRow({required this.icon, required this.text});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Icon(icon, size: 18, color: Theme.of(context).colorScheme.primary),
+        AppSpacing.gapW8,
+        Expanded(
+          child: Text(
+            text,
+            style: TextStyle(
+              fontSize: AppSizes.textSmall,
+              fontWeight: FontWeight.w500,
             ),
           ),
         ),
