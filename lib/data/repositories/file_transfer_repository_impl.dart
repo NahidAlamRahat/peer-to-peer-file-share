@@ -80,7 +80,7 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
 
   Completer<void>? _bufferCompleter;
   static const int _maxBufferSize = 1048576; // 1 MB
-  static const int _chunkSize = 65536; // 64 KB
+  static const int _chunkSize = 16384; // 16 KB strict SCTP compatibility
 
   @override
   Stream<FileChunkInfo> get transferProgressStream => _progressController.stream;
@@ -153,26 +153,36 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
              break;
           }
           final uint8Chunk = Uint8List.fromList(chunk);
+          int offset = 0;
           
-          if (_webrtcClient.bufferedAmount > _maxBufferSize) {
-            _bufferCompleter = Completer<void>();
-            await _bufferCompleter!.future;
+          // Slice the potentially massive readStream chunk into strictly 16KB pieces
+          while (offset < uint8Chunk.length) {
+            if (_isCancelled) break;
+            
+            final end = (offset + _chunkSize < uint8Chunk.length) ? offset + _chunkSize : uint8Chunk.length;
+            final slice = uint8Chunk.sublist(offset, end);
+
+            if (_webrtcClient.bufferedAmount > _maxBufferSize) {
+              _bufferCompleter = Completer<void>();
+              await _bufferCompleter!.future;
+            }
+
+            _webrtcClient.sendDataMessageBinary(slice);
+            bytesSent += slice.length;
+            offset += slice.length;
+
+            _emitProgress(
+              controller: _progressController,
+              fileId: fileId,
+              fileName: fileName,
+              totalSize: totalSize,
+              bytesTransferred: bytesSent,
+              fileIndex: i + 1,
+              totalFiles: files.length,
+              lastUpdate: lastUpdate,
+              setLastUpdate: (time) => lastUpdate = time,
+            );
           }
-
-          _webrtcClient.sendDataMessageBinary(uint8Chunk);
-          bytesSent += uint8Chunk.length;
-
-          _emitProgress(
-            controller: _progressController,
-            fileId: fileId,
-            fileName: fileName,
-            totalSize: totalSize,
-            bytesTransferred: bytesSent,
-            fileIndex: i + 1,
-            totalFiles: files.length,
-            lastUpdate: lastUpdate,
-            setLastUpdate: (time) => lastUpdate = time,
-          );
         }
       } else if (file.bytes != null) {
         // Fallback for smaller files / platforms lacking chunk streams
