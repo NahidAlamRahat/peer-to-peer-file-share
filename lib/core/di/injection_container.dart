@@ -1,6 +1,7 @@
 import 'package:get_it/get_it.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../core/services/notification_service.dart';
 import '../../core/services/settings_service.dart';
 import '../../data/datasources/signaling_service.dart';
 import '../../data/datasources/webrtc_client.dart';
@@ -17,6 +18,10 @@ Future<void> init() async {
   // ── 0. External services ────────────────────────────────────────────────────
   final prefs = await SharedPreferences.getInstance();
   sl.registerSingleton<SettingsService>(SettingsService(prefs));
+
+  final notificationService = NotificationService();
+  await notificationService.init();
+  sl.registerSingleton<NotificationService>(notificationService);
 
   // ── 1. Data sources (no dependencies) ──────────────────────────────────────
   sl.registerLazySingleton(() => SignalingService());
@@ -36,7 +41,10 @@ Future<void> init() async {
   sl.registerSingleton<ConnectionBloc>(
     ConnectionBloc(peerRepository: sl()),
   );
-  sl.registerFactory(() => TransferBloc(fileTransferRepository: sl()));
+  // TransferBloc is a singleton so that in-progress transfers survive navigation.
+  sl.registerSingleton<TransferBloc>(
+    TransferBloc(fileTransferRepository: sl()),
+  );
 }
 
 

@@ -15,7 +15,7 @@ class SettingsService {
 
   /// Whether to run the app in the background during transfers (mobile only).
   /// Always false on Web since browser background execution is browser-managed.
-  bool get runInBackground => kIsWeb ? false : (_prefs.getBool(_keyRunInBackground) ?? false);
+  bool get runInBackground => kIsWeb ? false : (_prefs.getBool(_keyRunInBackground) ?? true);
 
   Future<void> setKeepScreenOn(bool value) async {
     await _prefs.setBool(_keyKeepScreenOn, value);

@@ -5,6 +5,7 @@ import 'package:flutter_background/flutter_background.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 import '../../core/di/injection_container.dart';
+import '../../core/services/notification_service.dart';
 import '../../core/services/settings_service.dart';
 import '../../core/theme/app_sizes.dart';
 import '../../core/theme/spacing.dart';
@@ -30,6 +31,7 @@ class TransferScreen extends StatefulWidget {
 
 class _TransferScreenState extends State<TransferScreen> {
   final _settings = sl<SettingsService>();
+  final _notifications = sl<NotificationService>();
 
   @override
   void initState() {
@@ -93,9 +95,17 @@ class _TransferScreenState extends State<TransferScreen> {
         ),
         body: BlocConsumer<TransferBloc, TransferState>(
           listener: (context, state) {
-            if (state is TransferSuccess || state is TransferFailure) {
-              WakelockPlus.disable(); // Release battery lock when transfer ends
-              _stopBackgroundExecution(); // Release foreground service
+            if (state is TransferSuccess) {
+              WakelockPlus.disable();
+              _stopBackgroundExecution();
+              _notifications.showTransferComplete(
+                isSender: widget.role == SessionRole.sender,
+                fileName: state.filePath.split('/').last.split('\\').last,
+              );
+            } else if (state is TransferFailure) {
+              WakelockPlus.disable();
+              _stopBackgroundExecution();
+              _notifications.showTransferFailed(reason: state.error);
             }
           },
           builder: (context, state) {
