@@ -11,6 +11,7 @@ import '../blocs/transfer/transfer_bloc.dart';
 import '../blocs/transfer/transfer_event.dart';
 import '../blocs/transfer/transfer_state.dart';
 import '../widgets/custom_buttons.dart';
+import '../widgets/responsive_layout.dart';
 
 class TransferScreen extends StatefulWidget {
   final SessionRole role;
@@ -33,7 +34,8 @@ class _TransferScreenState extends State<TransferScreen> {
       },
       child: Scaffold(
         appBar: AppBar(
-          title: const Text('Transfer'),
+          title: const Text('Live Transfer'),
+          elevation: 0,
           leading: IconButton(
             icon: const Icon(Icons.arrow_back),
             onPressed: () {
@@ -42,24 +44,14 @@ class _TransferScreenState extends State<TransferScreen> {
             },
           ),
         ),
-        body: DefaultTabController(
-          length: 1,
-          child: Column(
-            children: [
-              Expanded(
-                child: Center(
-                  child: Padding(
-                    padding: EdgeInsets.all(AppSizes.p24),
-                    child: BlocBuilder<TransferBloc, TransferState>(
-                      builder: (context, state) {
-                        return _buildTransferBody(state);
-                      },
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
+        body: BlocBuilder<TransferBloc, TransferState>(
+          builder: (context, state) {
+             final content = _buildTransferBody(state);
+             return ResponsiveLayout(
+               mobileBody: _buildMobileLayout(content),
+               desktopBody: _buildDesktopLayout(content),
+             );
+          },
         ),
       ),
     );
@@ -236,9 +228,6 @@ class _TransferScreenState extends State<TransferScreen> {
           CustomButton(
             text: 'Retry Connection',
             onPressed: () {
-               // Soft reset the transfer screen, keeping them here.
-               // It's tricky to restart just WebRTC fully from here without going back,
-               // so we will advise the user to go back and retry code.
                context.read<ConnectionBloc>().add(ResetConnectionEvent());
                Navigator.of(context).pop();
             },
@@ -247,5 +236,87 @@ class _TransferScreenState extends State<TransferScreen> {
       );
     }
     return const SizedBox();
+  }
+
+  Widget _buildMobileLayout(Widget content) {
+     return Center(
+       child: SingleChildScrollView(
+         child: Padding(
+           padding: EdgeInsets.all(AppSizes.p24),
+           child: content,
+         ),
+       ),
+     );
+  }
+
+  Widget _buildDesktopLayout(Widget content) {
+    return Row(
+      children: [
+        Expanded(
+          flex: 5,
+          child: Container(
+             color: Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.1),
+             child: Center(
+               child: SingleChildScrollView(
+                 padding: EdgeInsets.all(AppSizes.p64),
+                 child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                       Icon(
+                         Icons.import_export_rounded,
+                         size: 150,
+                         color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.8),
+                       ),
+                       AppSpacing.gapH32,
+                       const Text(
+                         'Live Peer-to-Peer\nTransfer',
+                         style: TextStyle(
+                           fontSize: 48, 
+                           fontWeight: FontWeight.bold,
+                           height: 1.2,
+                         ),
+                         textAlign: TextAlign.center,
+                       ),
+                       AppSpacing.gapH16,
+                       Text(
+                         'Your files are traveling securely directly between your devices. Our signaling servers do not store or see your data.',
+                         style: TextStyle(
+                           fontSize: AppSizes.textSubtitle, 
+                           color: Colors.grey,
+                         ),
+                         textAlign: TextAlign.center,
+                       ),
+                    ],
+                 ),
+               ),
+             ),
+          ),
+        ),
+        Expanded(
+          flex: 4,
+          child: Center(
+            child: SingleChildScrollView(
+              padding: EdgeInsets.all(AppSizes.p64),
+              child: Container(
+                 padding: EdgeInsets.all(AppSizes.p48),
+                 constraints: const BoxConstraints(maxWidth: 500),
+                 decoration: BoxDecoration(
+                   color: Theme.of(context).colorScheme.surface,
+                   borderRadius: BorderRadius.circular(AppSizes.radiusLarge),
+                   boxShadow: [
+                     BoxShadow(
+                       color: Colors.black.withValues(alpha: 0.3),
+                       blurRadius: 40,
+                       offset: const Offset(0, 10),
+                     ),
+                   ],
+                 ),
+                 child: content,
+              ),
+            ),
+          ),
+        )
+      ],
+    );
   }
 }

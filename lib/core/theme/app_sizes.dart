@@ -10,6 +10,8 @@ class AppSizes {
   static double get p24 => 24.0;
   static double get p32 => 32.0;
   static double get p48 => 48.0;
+  static double get p64 => 64.0;
+  static double get p96 => 96.0;
 
   // Border Radius
   static double get radiusSmall => 8.0;

@@ -1,29 +1,28 @@
 import 'package:flutter/material.dart';
 
-/// A wrapper widget that constraints the maximum width of the application
-/// making it look great on both mobile and ultra-wide desktop monitors.
+/// A wrapper widget that switches between a mobile view and a desktop split-screen view.
 class ResponsiveLayout extends StatelessWidget {
-  final Widget child;
-  const ResponsiveLayout({super.key, required this.child});
+  final Widget mobileBody;
+  final Widget desktopBody;
+
+  const ResponsiveLayout({
+    super.key,
+    required this.mobileBody,
+    required this.desktopBody,
+  });
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      color: Theme.of(context).scaffoldBackgroundColor,
-      child: Center(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(
-            maxWidth: 600, // Look like a mobile/tablet app centered on desktop
-          ),
-          child: Container(
-            decoration: BoxDecoration(
-              color: Theme.of(context).scaffoldBackgroundColor,
-              boxShadow: const [],
-            ),
-            child: child,
-          ),
-        ),
-      ),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        if (constraints.maxWidth < 800) {
+          // Mobile / Tablet view
+          return mobileBody;
+        } else {
+          // Desktop Wide view
+          return desktopBody;
+        }
+      },
     );
   }
 }

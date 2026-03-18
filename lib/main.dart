@@ -5,7 +5,6 @@ import 'core/theme/app_theme.dart';
 import 'presentation/blocs/connection/connection_bloc.dart';
 import 'presentation/blocs/transfer/transfer_bloc.dart';
 import 'presentation/screens/home_screen.dart';
-import 'presentation/widgets/responsive_layout.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -33,8 +32,7 @@ class P2PFileShareApp extends StatelessWidget {
         debugShowCheckedModeBanner: false,
         theme: AppTheme.lightTheme,
         darkTheme: AppTheme.darkTheme,
-        // Wrap the root screen with ResponsiveLayout
-        home: const ResponsiveLayout(child: HomeScreen()),
+        home: const HomeScreen(),
       ),
     );
   }
