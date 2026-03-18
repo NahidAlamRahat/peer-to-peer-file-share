@@ -2,18 +2,23 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:url_launcher/url_launcher_string.dart';
+
 import '../../core/di/injection_container.dart';
 import '../../core/services/settings_service.dart';
 import '../../core/theme/app_sizes.dart';
 import '../../core/theme/spacing.dart';
+import '../../domain/entities/peer_session.dart';
 import '../blocs/connection/connection_bloc.dart';
 import '../blocs/connection/connection_event.dart';
 import '../blocs/connection/connection_state.dart';
+import '../blocs/transfer/transfer_bloc.dart';
+import '../blocs/transfer/transfer_state.dart';
 import '../widgets/custom_buttons.dart';
 import '../widgets/responsive_layout.dart';
+import 'receive_screen.dart';
 import 'settings_screen.dart';
 import 'share_link_screen.dart';
-import 'receive_screen.dart';
+import 'transfer_screen.dart';
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
@@ -157,18 +162,97 @@ class HomeScreen extends StatelessWidget {
   }
 
   Widget _buildMobileLayout(BuildContext context) {
-    return Padding(
-      padding: EdgeInsets.symmetric(horizontal: AppSizes.p24, vertical: AppSizes.p32),
-      child: Column(
-        children: [
-          _buildServerStatus(),
-          const Spacer(),
-          _buildHeroSection(context, isDesktop: false),
-          const Spacer(flex: 2),
-          _buildActionPanel(context),
-          AppSpacing.gapH32,
-          if (kIsWeb) _buildAppDownloadBanner(context),
-        ],
+    return BlocBuilder<TransferBloc, TransferState>(
+      builder: (context, transferState) {
+        return Padding(
+          padding: EdgeInsets.symmetric(horizontal: AppSizes.p24, vertical: AppSizes.p32),
+          child: Column(
+            children: [
+              _buildServerStatus(),
+              const Spacer(),
+              _buildHeroSection(context, isDesktop: false),
+              const Spacer(flex: 2),
+              if (transferState is TransferInProgress || transferState is TransferSuccess) ...[
+                _buildActiveTransferBanner(context, transferState),
+                AppSpacing.gapH24,
+              ],
+              _buildActionPanel(context),
+              AppSpacing.gapH32,
+              if (kIsWeb) _buildAppDownloadBanner(context),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildActiveTransferBanner(BuildContext context, TransferState state) {
+    String title = 'Transfer in progress...';
+    String fileName = '';
+    double progress = 0;
+
+    if (state is TransferInProgress) {
+      fileName = state.fileName;
+      progress = state.progress;
+    } else if (state is TransferSuccess) {
+      title = 'Transfer complete!';
+      fileName = 'Finished';
+      progress = 1.0;
+    }
+
+    return Container(
+      width: double.infinity,
+      padding: EdgeInsets.all(AppSizes.p16),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.primaryContainer.withValues(alpha: 0.4),
+        borderRadius: BorderRadius.circular(AppSizes.radiusMedium),
+        border: Border.all(color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.2)),
+      ),
+      child: InkWell(
+        onTap: () {
+          // Find the role from current connection state or sl
+          final connectionState = context.read<ConnectionBloc>().state;
+          SessionRole role = SessionRole.sender;
+          if (connectionState is ConnectionConnected) {
+             role = connectionState.role;
+          }
+          
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+               builder: (_) => TransferScreen(role: role),
+            ),
+          );
+        },
+        child: Row(
+          children: [
+            Stack(
+              alignment: Alignment.center,
+              children: [
+                SizedBox(
+                  width: 40,
+                  height: 40,
+                  child: CircularProgressIndicator(
+                    value: progress,
+                    strokeWidth: 4,
+                  ),
+                ),
+                Icon(Icons.play_arrow_rounded, size: 20, color: Theme.of(context).colorScheme.primary),
+              ],
+            ),
+            AppSpacing.gapW16,
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(title, style: const TextStyle(fontWeight: FontWeight.bold)),
+                  Text(fileName, style: TextStyle(fontSize: AppSizes.textSmall), maxLines: 1, overflow: TextOverflow.ellipsis),
+                ],
+              ),
+            ),
+            Icon(Icons.chevron_right, color: Theme.of(context).colorScheme.primary),
+          ],
+        ),
       ),
     );
   }

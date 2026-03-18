@@ -1,11 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import '../../core/di/injection_container.dart';
 import '../../core/theme/app_sizes.dart';
 import '../../core/theme/spacing.dart';
 import '../../domain/entities/peer_session.dart';
 import '../blocs/connection/connection_bloc.dart';
 import '../blocs/connection/connection_event.dart';
 import '../blocs/connection/connection_state.dart';
+import '../blocs/transfer/transfer_bloc.dart';
+import '../blocs/transfer/transfer_state.dart';
 import '../widgets/custom_buttons.dart';
 import '../widgets/responsive_layout.dart';
 import 'transfer_screen.dart';
@@ -23,6 +26,26 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
   bool _waitingForFile = false;
   Map<String, dynamic>? _fileMetadata;
   bool _isSenderOffline = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // Auto-redirect if transfer is already active
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final transferBloc = sl<TransferBloc>();
+      if (transferBloc.state is TransferInProgress) {
+        final connectionBloc = context.read<ConnectionBloc>();
+        SessionRole role = SessionRole.receiver;
+        if (connectionBloc.state is ConnectionConnected) {
+          role = (connectionBloc.state as ConnectionConnected).role;
+        }
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (_) => TransferScreen(role: role)),
+        );
+      }
+    });
+  }
 
   @override
   void dispose() {

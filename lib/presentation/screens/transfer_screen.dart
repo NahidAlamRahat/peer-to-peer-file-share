@@ -78,8 +78,7 @@ class _TransferScreenState extends State<TransferScreen> {
     return PopScope(
       canPop: true,
       onPopInvokedWithResult: (didPop, result) {
-        // Disconnect when moving back
-        context.read<ConnectionBloc>().add(ResetConnectionEvent());
+        // No longer disconnecting on pop. Let it run in background.
       },
       child: Scaffold(
         appBar: AppBar(
@@ -88,7 +87,7 @@ class _TransferScreenState extends State<TransferScreen> {
           leading: IconButton(
             icon: const Icon(Icons.arrow_back),
             onPressed: () {
-              context.read<ConnectionBloc>().add(ResetConnectionEvent());
+              // Just pop. Background service/Bloc handles the rest.
               Navigator.of(context).pop();
             },
           ),
