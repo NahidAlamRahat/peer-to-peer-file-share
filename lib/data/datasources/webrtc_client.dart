@@ -7,20 +7,36 @@ class WebRTCClient {
   RTCDataChannel? _dataChannel;
 
   // Configuration for WebRTC with robust NAT traversal (Global STUN + TURN)
+  // TURN servers are required for mobile data (Symmetric NAT) connections.
+  // Using free OpenRelay TURN servers from metered.ca
   final Map<String, dynamic> _configuration = {
     'iceServers': [
+      // STUN servers (works on WiFi & simple NAT)
       {'urls': 'stun:stun.l.google.com:19302'},
       {'urls': 'stun:stun1.l.google.com:19302'},
-      {'urls': 'stun:stun2.l.google.com:19302'},
-      {'urls': 'stun:stun3.l.google.com:19302'},
-      {'urls': 'stun:stun4.l.google.com:19302'},
       {'urls': 'stun:stun.stunprotocol.org:3478'},
-      // --- ADD YOUR TURN SERVERS HERE FOR PRODUCTION ---
-      // {
-      //   'urls': 'turn:YOUR_TURN_SERVER_URL:3478',
-      //   'username': 'YOUR_USERNAME',
-      //   'credential': 'YOUR_PASSWORD'
-      // },
+      // TURN servers — required for mobile data (Symmetric NAT)
+      // Free relay via OpenRelay (metered.ca) — 50GB/month free
+      {
+        'urls': 'turn:openrelay.metered.ca:80',
+        'username': 'openrelayproject',
+        'credential': 'openrelayproject',
+      },
+      {
+        'urls': 'turn:openrelay.metered.ca:443',
+        'username': 'openrelayproject',
+        'credential': 'openrelayproject',
+      },
+      {
+        'urls': 'turn:openrelay.metered.ca:443?transport=tcp',
+        'username': 'openrelayproject',
+        'credential': 'openrelayproject',
+      },
+      {
+        'urls': 'turns:openrelay.metered.ca:443',
+        'username': 'openrelayproject',
+        'credential': 'openrelayproject',
+      },
     ],
     'sdpSemantics': 'unified-plan',
     'iceTransportPolicy': 'all',
