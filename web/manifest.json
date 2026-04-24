@@ -1,11 +1,11 @@
 {
-    "name": "p2p_file_share",
-    "short_name": "p2p_file_share",
+    "name": "PeerTransfer Link",
+    "short_name": "PeerTransfer",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",
     "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "description": "Secure, fast, peer-to-peer file sharing. No file size limit. No middleman. Fully encrypted.",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [

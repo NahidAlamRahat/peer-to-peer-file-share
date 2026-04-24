@@ -1,16 +1,26 @@
-# p2p_file_share
+# PeerTransfer Link
 
-A new Flutter project.
+**Secure, fast, peer-to-peer file sharing — no file size limit, no middleman, fully encrypted.**
 
-## Getting Started
+PeerTransfer Link is a Flutter app that lets you send and receive files directly between devices using WebRTC. Files never touch a central server — they travel encrypted, peer-to-peer, in real time.
 
-This project is a starting point for a Flutter application.
+## Features
 
-A few resources to get you started if this is your first Flutter project:
+- 🔗 Share files via a simple link or QR code
+- 🔒 End-to-end encrypted (WebRTC DTLS-SRTP)
+- 📦 No file size limit
+- 🔔 Background transfer with live notification
+- 🌐 Works on Android & Web (Vercel hosted)
 
-- [Lab: Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Cookbook: Useful Flutter samples](https://docs.flutter.dev/cookbook)
+## Developer
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+**Nahid Alam Rahat**
+WhatsApp: +880 1642-743187
+
+## Tech Stack
+
+- Flutter (Dart)
+- WebRTC (`flutter_webrtc`)
+- WebSocket Signaling Server (Node.js)
+- BLoC state management
+- Deployed on Vercel (Web)

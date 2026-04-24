@@ -11,14 +11,14 @@ class AboutScreen extends StatelessWidget {
   static const String _playStoreUrl =
       'https://play.google.com/store/apps/details?id=com.nahidrahat.p2pfileshare';
   static const String _developerName = 'Nahid Alam Rahat';
-  static const String _appName = 'P2P File Share';
+  static const String _appName = 'PeerTransfer Link';
   static const String _appVersion = '1.0.0';
   static const String _appTagline =
       'Secure, fast, peer-to-peer file sharing — no limits, no middleman.';
 
   Future<void> _launchWhatsApp(BuildContext context) async {
     final message = Uri.encodeComponent(
-      'Hello! I need support for the P2P File Share app.',
+      'Hello! I need support for the PeerTransfer Link app.',
     );
     final uri = Uri.parse('https://wa.me/$_whatsappNumber?text=$message');
     if (!await launchUrl(uri, mode: LaunchMode.externalApplication)) {

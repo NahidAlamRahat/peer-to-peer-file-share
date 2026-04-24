@@ -6,7 +6,7 @@ class PrivacyPolicyScreen extends StatelessWidget {
   const PrivacyPolicyScreen({super.key});
 
   static const String _developerName = 'Nahid Alam Rahat';
-  static const String _appName = 'P2P File Share';
+  static const String _appName = 'PeerTransfer Link';
   static const String _contactNumber = '+880 1642-743187';
   static const String _lastUpdated = 'April 24, 2026';
 
