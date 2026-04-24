@@ -8,7 +8,7 @@ class PrivacyPolicyScreen extends StatelessWidget {
   static const String _developerName = 'Nahid Alam Rahat';
   static const String _appName = 'P2P File Share';
   static const String _contactNumber = '+880 1642-743187';
-  static const String _lastUpdated = 'April 24, 2024';
+  static const String _lastUpdated = 'April 24, 2026';
 
   @override
   Widget build(BuildContext context) {
@@ -152,7 +152,7 @@ class PrivacyPolicyScreen extends StatelessWidget {
           // Footer
           Center(
             child: Text(
-              '© 2024 $_developerName · $_appName',
+              '© 2026 $_developerName · $_appName',
               style: TextStyle(
                 fontSize: AppSizes.textSmall,
                 color: Colors.grey.shade500,

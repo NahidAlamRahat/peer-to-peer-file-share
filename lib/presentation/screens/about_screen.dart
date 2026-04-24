@@ -129,7 +129,7 @@ class AboutScreen extends StatelessWidget {
                 ),
                 AppSpacing.gapH4,
                 Text(
-                  '© 2024 $_developerName. All rights reserved.',
+                  '© 2026 $_developerName. All rights reserved.',
                   style: TextStyle(
                     fontSize: AppSizes.textSmall,
                     color: Colors.grey.shade500,
