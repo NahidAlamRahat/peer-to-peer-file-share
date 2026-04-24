@@ -17,6 +17,7 @@ import '../blocs/transfer/transfer_state.dart';
 import '../widgets/custom_buttons.dart';
 import '../widgets/responsive_layout.dart';
 import 'receive_screen.dart';
+import 'about_screen.dart';
 import 'settings_screen.dart';
 import 'share_link_screen.dart';
 import 'transfer_screen.dart';
@@ -31,6 +32,14 @@ class HomeScreen extends StatelessWidget {
         title: const Text('P2P File Share'),
         elevation: 0,
         actions: [
+          IconButton(
+            icon: const Icon(Icons.info_outline_rounded),
+            tooltip: 'About',
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const AboutScreen()),
+            ),
+          ),
           IconButton(
             icon: const Icon(Icons.settings_outlined),
             tooltip: 'Settings',
