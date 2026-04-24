@@ -119,8 +119,7 @@ class HomeScreen extends StatelessWidget {
         ),
         AppSpacing.gapH32,
         Text(
-          'Share files seamlessly
-with PeerTransfer Link',
+          'Share files seamlessly\nwith PeerTransfer Link',
           style: TextStyle(
             fontSize: isDesktop ? 48 : 28, 
             fontWeight: FontWeight.bold,
