@@ -249,17 +249,24 @@ class _ShareLinkScreenState extends State<ShareLinkScreen> {
      );
   }
 
-  /// Builds the full shareable link from the session ID.
-  /// On web, uses the actual page origin so the link is correct everywhere.
+  /// Builds the full shareable link from the session ID + file info.
+  /// File info is encoded in URL so receiver can preview before connecting.
   String _buildShareLink(String sessionId) {
+    final totalSize = _selectedFiles.fold<int>(0, (sum, f) => sum + f.size);
+    final firstName = _selectedFiles.isNotEmpty
+        ? Uri.encodeComponent(_selectedFiles.first.name)
+        : '';
+    final count = _selectedFiles.length;
+
+    final params = 'session=$sessionId&name=$firstName&size=$totalSize&count=$count';
+
     if (kIsWeb) {
       try {
-        final origin = Uri.base.origin; // e.g. https://peertransferlink.vercel.app
-        return '$origin/?session=$sessionId';
+        final origin = Uri.base.origin;
+        return '$origin/?$params';
       } catch (_) {}
     }
-    // Fallback for Android / desktop app
-    return 'https://peertransferlink.vercel.app/?session=$sessionId';
+    return 'https://peertransferlink.vercel.app/?$params';
   }
 
   Widget _buildSessionCreatedState(ConnectionCreated state, ScaffoldMessengerState messenger) {

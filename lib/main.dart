@@ -13,33 +13,57 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await di.init();
 
-  // ── Read initial session ID from deep link / share link ──────────────────
   String? initialSessionId;
+  String? initialFileName;
+  int?    initialFileSize;
+  int?    initialFileCount;
 
   if (kIsWeb) {
-    // Web: read ?session= from the URL directly
     try {
-      initialSessionId = Uri.base.queryParameters['session'];
+      final uri = Uri.base;
+      initialSessionId = uri.queryParameters['session'];
+      initialFileName  = uri.queryParameters['name'] != null
+          ? Uri.decodeComponent(uri.queryParameters['name']!)
+          : null;
+      initialFileSize  = int.tryParse(uri.queryParameters['size'] ?? '');
+      initialFileCount = int.tryParse(uri.queryParameters['count'] ?? '');
     } catch (_) {}
   } else {
-    // Android / desktop: read the initial deep link via app_links
     try {
       final appLinks = AppLinks();
       final initialUri = await appLinks.getInitialLink();
       if (initialUri != null) {
         initialSessionId = initialUri.queryParameters['session'];
+        initialFileName  = initialUri.queryParameters['name'] != null
+            ? Uri.decodeComponent(initialUri.queryParameters['name']!)
+            : null;
+        initialFileSize  = int.tryParse(initialUri.queryParameters['size'] ?? '');
+        initialFileCount = int.tryParse(initialUri.queryParameters['count'] ?? '');
       }
     } catch (_) {}
   }
 
-  runApp(P2PFileShareApp(initialSessionId: initialSessionId));
+  runApp(P2PFileShareApp(
+    initialSessionId: initialSessionId,
+    initialFileName:  initialFileName,
+    initialFileSize:  initialFileSize,
+    initialFileCount: initialFileCount,
+  ));
 }
 
 class P2PFileShareApp extends StatelessWidget {
-  /// Session ID extracted from the launch URL/deep link (may be null).
   final String? initialSessionId;
+  final String? initialFileName;
+  final int?    initialFileSize;
+  final int?    initialFileCount;
 
-  const P2PFileShareApp({super.key, this.initialSessionId});
+  const P2PFileShareApp({
+    super.key,
+    this.initialSessionId,
+    this.initialFileName,
+    this.initialFileSize,
+    this.initialFileCount,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -58,9 +82,13 @@ class P2PFileShareApp extends StatelessWidget {
         debugShowCheckedModeBanner: false,
         theme: AppTheme.lightTheme,
         darkTheme: AppTheme.darkTheme,
-        // If opened via a share link, go straight to ReceiveScreen & auto-join
         home: (initialSessionId != null && initialSessionId!.isNotEmpty)
-            ? ReceiveScreen(autoJoinSessionId: initialSessionId)
+            ? ReceiveScreen(
+                autoJoinSessionId:  initialSessionId,
+                preloadedFileName:  initialFileName,
+                preloadedFileSize:  initialFileSize,
+                preloadedFileCount: initialFileCount,
+              )
             : const HomeScreen(),
       ),
     );

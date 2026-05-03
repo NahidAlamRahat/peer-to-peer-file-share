@@ -14,11 +14,21 @@ import '../widgets/responsive_layout.dart';
 import 'transfer_screen.dart';
 
 class ReceiveScreen extends StatefulWidget {
-  /// If provided, the screen will auto-join this session without user input.
-  /// Used when the app is opened via a share link (e.g. ?session=ABC123).
+  /// Session ID from share link (may be null if opened manually).
   final String? autoJoinSessionId;
 
-  const ReceiveScreen({super.key, this.autoJoinSessionId});
+  /// File info pre-loaded from URL params — shown before connecting.
+  final String? preloadedFileName;
+  final int?    preloadedFileSize;
+  final int?    preloadedFileCount;
+
+  const ReceiveScreen({
+    super.key,
+    this.autoJoinSessionId,
+    this.preloadedFileName,
+    this.preloadedFileSize,
+    this.preloadedFileCount,
+  });
 
   @override
   State<ReceiveScreen> createState() => _ReceiveScreenState();
@@ -30,14 +40,13 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
   bool _waitingForFile = false;
   Map<String, dynamic>? _fileMetadata;
   bool _isSenderOffline = false;
+  bool _autoAcceptDownload = false; // true when opened via link — skip confirmation
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final transferBloc = sl<TransferBloc>();
-      // ONLY redirect if transfer is actively InProgress.
-      // Do NOT redirect if it's already Success (finished).
       if (transferBloc.state is TransferInProgress) {
         final connectionBloc = context.read<ConnectionBloc>();
         SessionRole role = SessionRole.receiver;
@@ -51,11 +60,14 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
         return;
       }
 
-      // Auto-join if opened via share link
-      if (widget.autoJoinSessionId != null &&
-          widget.autoJoinSessionId!.isNotEmpty) {
+      if (widget.autoJoinSessionId != null && widget.autoJoinSessionId!.isNotEmpty) {
         _codeController.text = widget.autoJoinSessionId!;
-        _joinSession();
+        // If file info is preloaded from URL — DON'T auto-join.
+        // Show file preview and wait for user to tap Download.
+        if (widget.preloadedFileName == null) {
+          // Old-style link (no file info) — auto-join immediately
+          _joinSession();
+        }
       }
     });
   }
@@ -66,6 +78,7 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
     super.dispose();
   }
 
+  /// Called when user manually enters a code and taps Join.
   void _joinSession() {
     final code = _codeController.text.trim();
     if (code.isNotEmpty) {
@@ -77,6 +90,19 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
       debugPrint('🔗 [UI] Joining session with code: $code');
       context.read<ConnectionBloc>().add(JoinSessionEvent(code));
     }
+  }
+
+  /// Called when receiver taps Download on the link-preview screen.
+  /// Connects to sender and auto-accepts the download without extra confirmation.
+  void _joinSessionFromLink() {
+    setState(() {
+      _autoAcceptDownload = true;
+      _waitingForFile = true;
+      _isSenderOffline = false;
+      _fileMetadata = null;
+    });
+    debugPrint('🔗 [UI] Joining session from link (auto-accept): ${_codeController.text}');
+    context.read<ConnectionBloc>().add(JoinSessionEvent(_codeController.text.trim()));
   }
 
   void _startDownload() {
@@ -110,33 +136,40 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
               final count = state.payload['filesCount'];
               final size = state.payload['totalSize'];
               final sizeMB = (size / (1024 * 1024)).toStringAsFixed(2);
-              debugPrint(
-                '📥 [UI] Received file metadata: $count files ($sizeMB MB)',
-              );
+              debugPrint('📥 [UI] Received file metadata: $count files ($sizeMB MB)');
+              setState(() { _fileMetadata = state.payload; });
 
-              setState(() {
-                _fileMetadata = state.payload;
-              });
+              // Auto-accept: if opened via link, skip confirmation and start download
+              if (_autoAcceptDownload) {
+                debugPrint('⚡ [UI] Auto-accepting download (opened via link)');
+                Future.microtask(() => _startDownload());
+              }
             }
           } else if (state is ConnectionConnected) {
-            // WebRTC connection is ready. We stay on this screen until the user
-            // explicitly clicks "Download" in the UI.
-            debugPrint('🔗 [UI] WebRTC connected. Waiting for explicit start.');
+            debugPrint('🔗 [UI] WebRTC connected. Waiting for file metadata.');
           } else if (state is ConnectionOffline) {
-            setState(() {
-              _isSenderOffline = true;
-            });
+            setState(() { _isSenderOffline = true; });
           } else if (state is ConnectionFailed) {
+            final msg = state.message.toLowerCase();
+            final isSessionError = msg.contains('session') || msg.contains('not found') || msg.contains('timed out') || msg.contains('timeout');
             setState(() {
-              _waitingForFile = false;
+               _waitingForFile = false;
+               _isSenderOffline = false;
+               _autoAcceptDownload = false;
             });
             ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text('Failed to join: ${state.message}')),
+              SnackBar(
+                content: Text(
+                  isSessionError
+                    ? '❌ Session not found or expired. Ask the sender to share a new link.'
+                    : 'Connection failed. Please try again.',
+                ),
+                backgroundColor: Colors.red.shade700,
+                duration: const Duration(seconds: 5),
+              ),
             );
           } else if (state is ConnectionServerError) {
-            setState(() {
-              _waitingForFile = false;
-            });
+            setState(() { _waitingForFile = false; _autoAcceptDownload = false; });
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
                 content: Text(state.message),
@@ -148,8 +181,15 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
         builder: (context, state) {
           Widget content;
 
-          if (state is ConnectionLoading) {
-            content = const Center(child: CircularProgressIndicator());
+          // Show link preview if file info is preloaded and not yet connecting
+          if (widget.preloadedFileName != null && !_waitingForFile) {
+            content = _buildLinkPreviewState();
+          } else if (state is ConnectionLoading || (_waitingForFile && _autoAcceptDownload && _fileMetadata == null)) {
+            // Connecting spinner (auto-accept mode: skip file-ready screen)
+            content = _buildConnectionProgressState(
+              state,
+              customMessage: 'Connecting to sender...',
+            );
           } else if (_waitingForFile) {
             if (_isSenderOffline) {
               content = _buildSenderOfflineState();
@@ -353,6 +393,44 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
             ],
           ),
         ),
+      ],
+    );
+  }
+
+  Widget _buildLinkPreviewState() {
+    final sizeMB = widget.preloadedFileSize != null
+        ? (widget.preloadedFileSize! / (1024 * 1024)).toStringAsFixed(2)
+        : 'Unknown';
+    final count = widget.preloadedFileCount ?? 1;
+    final name = widget.preloadedFileName ?? 'Files';
+
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        Icon(Icons.insert_drive_file, size: AppSizes.iconHuge, color: Theme.of(context).colorScheme.primary),
+        AppSpacing.gapH24,
+        Text(
+          'File(s) Shared With You',
+          style: TextStyle(fontSize: AppSizes.textSubtitle, color: Colors.grey),
+          textAlign: TextAlign.center,
+        ),
+        AppSpacing.gapH8,
+        Text(
+          name,
+          style: TextStyle(fontSize: AppSizes.textTitle, fontWeight: FontWeight.bold),
+          textAlign: TextAlign.center,
+        ),
+        AppSpacing.gapH8,
+        Text(
+          '$count file(s) • $sizeMB MB',
+          style: TextStyle(fontSize: AppSizes.textBody, color: Colors.grey),
+        ),
+        AppSpacing.gapH48,
+        CustomButton(
+          text: 'Download',
+          icon: Icons.download,
+          onPressed: _joinSessionFromLink,
+        )
       ],
     );
   }
