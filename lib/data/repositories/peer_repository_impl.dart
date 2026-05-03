@@ -122,7 +122,12 @@ class PeerRepositoryImpl implements PeerRepository {
     };
 
     _signalingService.onSessionError = (data) {
-      debugPrint("Signaling Error: ${data['message']}");
+      final msg = data['message']?.toString() ?? 'Session error';
+      debugPrint('❌ [REPO] Signaling session error: $msg');
+      // Propagate to UI — e.g. "session not found", "session full", etc.
+      _pendingJoinSessionId = null; // Don't retry on server-side error
+      _sessionStateController.add(SessionState.failed);
+      _serverErrorController.add(msg);
     };
 
     _signalingService.onConnectionError = (errMsg) {
@@ -228,6 +233,20 @@ class PeerRepositoryImpl implements PeerRepository {
     }
 
     _signalingService.joinSession(sessionId);
+
+    // After sending the join, wait up to 30s for WebRTC to establish.
+    // If it doesn't connect in time, treat as failed.
+    const connectTimeout = Duration(seconds: 30);
+    final connectDeadline = DateTime.now().add(connectTimeout);
+    while (_pendingJoinSessionId == sessionId && DateTime.now().isBefore(connectDeadline)) {
+      await Future.delayed(const Duration(seconds: 1));
+    }
+    // If still pending (never connected, never errored), mark as failed
+    if (_pendingJoinSessionId == sessionId) {
+      debugPrint('⏰ [REPO] WebRTC connection timed out after 30s.');
+      _pendingJoinSessionId = null;
+      _sessionStateController.add(SessionState.failed);
+    }
   }
 
   @override
