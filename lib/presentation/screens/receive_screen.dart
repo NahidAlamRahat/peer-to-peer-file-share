@@ -41,6 +41,8 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
   Map<String, dynamic>? _fileMetadata;
   bool _isSenderOffline = false;
   bool _autoAcceptDownload = false; // true when opened via link — skip confirmation
+  bool _sessionExpired = false;
+
 
   @override
   void initState() {
@@ -156,18 +158,16 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
                _waitingForFile = false;
                _isSenderOffline = false;
                _autoAcceptDownload = false;
+               if (isSessionError) _sessionExpired = true;
             });
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text(
-                  isSessionError
-                    ? '❌ Session not found or expired. Ask the sender to share a new link.'
-                    : 'Connection failed. Please try again.',
+            if (!isSessionError) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Connection failed. Please try again.'),
+                  backgroundColor: Colors.red,
                 ),
-                backgroundColor: Colors.red.shade700,
-                duration: const Duration(seconds: 5),
-              ),
-            );
+              );
+            }
           } else if (state is ConnectionServerError) {
             setState(() { _waitingForFile = false; _autoAcceptDownload = false; });
             ScaffoldMessenger.of(context).showSnackBar(
@@ -181,9 +181,11 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
         builder: (context, state) {
           Widget content;
 
-          // Show link preview if file info is preloaded and not yet connecting
-          if (widget.preloadedFileName != null && !_waitingForFile) {
+          if (_sessionExpired) {
+            content = _buildSenderOfflineState(customMessage: 'Session expired or not found. Please ask the sender for a new link.');
+          } else if (widget.preloadedFileName != null && !_waitingForFile) {
             content = _buildLinkPreviewState();
+
           } else if (state is ConnectionLoading || (_waitingForFile && _autoAcceptDownload && _fileMetadata == null)) {
             // Connecting spinner (auto-accept mode: skip file-ready screen)
             content = _buildConnectionProgressState(
@@ -250,24 +252,27 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
     );
   }
 
-  Widget _buildSenderOfflineState() {
+  Widget _buildSenderOfflineState({String? customMessage}) {
     return Column(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
         Icon(Icons.cloud_off, size: AppSizes.iconHuge, color: Colors.redAccent),
         AppSpacing.gapH16,
         Text(
-          'Sender is offline',
+          customMessage ?? 'Sender is offline',
           style: TextStyle(
             fontSize: AppSizes.textHeadline,
             fontWeight: FontWeight.bold,
           ),
-        ),
-        AppSpacing.gapH16,
-        const Text(
-          'Please ask them to open the app\nand turn on internet.',
           textAlign: TextAlign.center,
         ),
+        if (customMessage == null) ...[
+          AppSpacing.gapH16,
+          const Text(
+            'Please ask them to open the app\nand turn on internet.',
+            textAlign: TextAlign.center,
+          ),
+        ],
         AppSpacing.gapH32,
         CustomButton(
           text: 'Go Back',
