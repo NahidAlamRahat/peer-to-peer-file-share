@@ -147,7 +147,12 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
           Widget content;
 
           if (state is ConnectionLoading) {
-            content = const Center(child: CircularProgressIndicator());
+            // Show a meaningful message when auto-joining via share link
+            content = _buildConnectionProgressState(state, 
+              customMessage: widget.autoJoinSessionId != null 
+                  ? 'Connecting to server...' 
+                  : null,
+            );
           } else if (_waitingForFile) {
             if (_isSenderOffline) {
               content = _buildSenderOfflineState();
@@ -253,12 +258,12 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
       );
   }
 
-  Widget _buildConnectionProgressState(ConnectionStateBloc state) {
-       String statusText = 'Waiting for file details from sender...';
+  Widget _buildConnectionProgressState(ConnectionStateBloc state, {String? customMessage}) {
+       String statusText = customMessage ?? 'Waiting for file details from sender...';
        double? progressValue;
 
        if (state is ConnectionProgress) {
-         statusText = state.message;
+         statusText = customMessage ?? state.message;
          progressValue = state.progress;
        }
 

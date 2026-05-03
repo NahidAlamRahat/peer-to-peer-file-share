@@ -172,6 +172,29 @@ class PeerRepositoryImpl implements PeerRepository {
     _currentRole = SessionRole.receiver;
     _currentSessionId = sessionId;
     _sessionStateController.add(SessionState.connecting);
+
+    // If not connected yet (e.g. app just launched via share link),
+    // wait up to 10 seconds for the WebSocket to become ready.
+    if (!_signalingService.isConnected) {
+      debugPrint('⚠️ [REPO] WebSocket not connected yet — waiting for connection before joining...');
+      _signalingService.connect();
+
+      const maxWait = Duration(seconds: 10);
+      const checkInterval = Duration(milliseconds: 300);
+      final deadline = DateTime.now().add(maxWait);
+
+      while (!_signalingService.isConnected && DateTime.now().isBefore(deadline)) {
+        await Future.delayed(checkInterval);
+      }
+
+      if (!_signalingService.isConnected) {
+        debugPrint('❌ [REPO] Timed out waiting for WebSocket connection before joining session.');
+        _sessionStateController.add(SessionState.failed);
+        return;
+      }
+      debugPrint('✅ [REPO] WebSocket connected — now sending join-session.');
+    }
+
     _signalingService.joinSession(sessionId);
   }
 
