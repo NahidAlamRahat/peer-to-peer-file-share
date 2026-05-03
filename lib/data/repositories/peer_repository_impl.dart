@@ -35,7 +35,7 @@ class PeerRepositoryImpl implements PeerRepository {
   Future<void> initialize() async {
     // Only connect if we aren't already. Otherwise we just ensure listeners are attached.
     if (!_signalingService.isConnected) {
-       _signalingService.connect();
+      _signalingService.connect();
     }
     await _webrtcClient.initialize();
     _setupListeners();
@@ -46,7 +46,8 @@ class PeerRepositoryImpl implements PeerRepository {
       _currentSessionId = data['sessionId'];
       _currentRole = SessionRole.sender;
       _sessionStateController.add(SessionState.connecting);
-      if (_createSessionCompleter != null && !_createSessionCompleter!.isCompleted) {
+      if (_createSessionCompleter != null &&
+          !_createSessionCompleter!.isCompleted) {
         _createSessionCompleter!.complete(_currentSessionId!);
       }
       await _webrtcClient.createDataChannel();
@@ -63,7 +64,7 @@ class PeerRepositoryImpl implements PeerRepository {
     _signalingService.onOfferReceived = (data) async {
       final sdp = data['sdp'];
       await _webrtcClient.setRemoteDescription(
-        RTCSessionDescription(sdp['sdp'], sdp['type'])
+        RTCSessionDescription(sdp['sdp'], sdp['type']),
       );
       RTCSessionDescription answer = await _webrtcClient.createAnswer();
       _signalingService.sendAnswer(_currentSessionId!, answer.toMap());
@@ -72,7 +73,7 @@ class PeerRepositoryImpl implements PeerRepository {
     _signalingService.onAnswerReceived = (data) async {
       final sdp = data['sdp'];
       await _webrtcClient.setRemoteDescription(
-        RTCSessionDescription(sdp['sdp'], sdp['type'])
+        RTCSessionDescription(sdp['sdp'], sdp['type']),
       );
     };
 
@@ -88,7 +89,10 @@ class PeerRepositoryImpl implements PeerRepository {
 
     _webrtcClient.onIceCandidate = (candidate) {
       if (_currentSessionId != null) {
-        _signalingService.sendIceCandidate(_currentSessionId!, candidate.toMap());
+        _signalingService.sendIceCandidate(
+          _currentSessionId!,
+          candidate.toMap(),
+        );
       }
     };
 
@@ -99,12 +103,15 @@ class PeerRepositoryImpl implements PeerRepository {
         _disconnectTimer = null;
         _pendingJoinSessionId = null; // Join succeeded — no need to retry
         _sessionStateController.add(SessionState.connected);
-      } else if (state == RTCPeerConnectionState.RTCPeerConnectionStateDisconnected) {
+      } else if (state ==
+          RTCPeerConnectionState.RTCPeerConnectionStateDisconnected) {
         // WebRTC DISCONNECTED is usually temporary (ICE restart).
         // Wait 5 seconds before treating it as truly failed.
         _disconnectTimer ??= Timer(const Duration(seconds: 5), () {
           _disconnectTimer = null;
-          debugPrint('⏰ [WebRTC] Disconnect grace period expired — marking as failed.');
+          debugPrint(
+            '⏰ [WebRTC] Disconnect grace period expired — marking as failed.',
+          );
           _sessionStateController.add(SessionState.failed);
         });
       } else if (state == RTCPeerConnectionState.RTCPeerConnectionStateFailed) {
@@ -125,10 +132,14 @@ class PeerRepositoryImpl implements PeerRepository {
 
     _signalingService.onRegistered = (clientId) {
       debugPrint('Registered with client ID: $clientId');
-      _statusMessageController.add('Server connection established. Ready to share.');
+      _statusMessageController.add(
+        'Server connection established. Ready to share.',
+      );
       // If we were in the middle of joining a session before disconnect, retry now
       if (_pendingJoinSessionId != null) {
-        debugPrint('🔄 [REPO] Retrying pending join for session: $_pendingJoinSessionId');
+        debugPrint(
+          '🔄 [REPO] Retrying pending join for session: $_pendingJoinSessionId',
+        );
         _signalingService.joinSession(_pendingJoinSessionId!);
       }
     };
@@ -155,14 +166,17 @@ class PeerRepositoryImpl implements PeerRepository {
     debugPrint('🔑 [REPO] Requesting to create session...');
 
     if (!_signalingService.isRegistered) {
-      debugPrint('⏳ [REPO] Not registered yet — waiting before creating session...');
+      debugPrint(
+        '⏳ [REPO] Not registered yet — waiting before creating session...',
+      );
       if (!_signalingService.isConnected) {
         _signalingService.connect();
       }
       const maxWait = Duration(seconds: 20);
       const checkInterval = Duration(milliseconds: 300);
       final deadline = DateTime.now().add(maxWait);
-      while (!_signalingService.isRegistered && DateTime.now().isBefore(deadline)) {
+      while (!_signalingService.isRegistered &&
+          DateTime.now().isBefore(deadline)) {
         await Future.delayed(checkInterval);
       }
     }
@@ -174,7 +188,10 @@ class PeerRepositoryImpl implements PeerRepository {
 
     return Future.any([
       _createSessionCompleter!.future,
-      Future.delayed(const Duration(seconds: 15), () => throw 'Timeout creating session'),
+      Future.delayed(
+        const Duration(seconds: 15),
+        () => throw 'Timeout creating session',
+      ),
     ]).whenComplete(() {
       _createSessionCompleter = null;
     });
@@ -197,7 +214,8 @@ class PeerRepositoryImpl implements PeerRepository {
       const maxWait = Duration(seconds: 20);
       const checkInterval = Duration(milliseconds: 300);
       final deadline = DateTime.now().add(maxWait);
-      while (!_signalingService.isRegistered && DateTime.now().isBefore(deadline)) {
+      while (!_signalingService.isRegistered &&
+          DateTime.now().isBefore(deadline)) {
         await Future.delayed(checkInterval);
       }
       if (!_signalingService.isRegistered) {

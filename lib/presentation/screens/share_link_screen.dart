@@ -355,6 +355,33 @@ class _ShareLinkScreenState extends State<ShareLinkScreen> {
           const CircularProgressIndicator(),
           AppSpacing.gapH16,
           const Text('Waiting for receiver to join...', style: TextStyle(color: Colors.grey)),
+          AppSpacing.gapH24,
+          // ── Keep screen open warning ──────────────────────────────────────
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            decoration: BoxDecoration(
+              color: Colors.orange.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: Colors.orange.withValues(alpha: 0.4)),
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.warning_amber_rounded, color: Colors.orange, size: 20),
+                const SizedBox(width: 10),
+                const Expanded(
+                  child: Text(
+                    'Keep this screen open until the receiver joins. Closing the app will end the session.',
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: Colors.orange,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
         ],
       );
   }
