@@ -327,8 +327,8 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
     );
   }
 
-  Widget _buildConnectionProgressState(ConnectionStateBloc state) {
-    String statusText = 'Waiting for file details from sender...';
+  Widget _buildConnectionProgressState(ConnectionStateBloc state, {String? customMessage}) {
+    String statusText = customMessage ?? 'Waiting for file details from sender...';
     double? progressValue;
 
     if (state is ConnectionProgress) {
