@@ -1,4 +1,5 @@
 import 'package:file_picker/file_picker.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -248,44 +249,88 @@ class _ShareLinkScreenState extends State<ShareLinkScreen> {
      );
   }
 
+  /// Builds the full shareable link from the session ID.
+  /// On web, uses the actual page origin so the link is correct everywhere.
+  String _buildShareLink(String sessionId) {
+    if (kIsWeb) {
+      try {
+        final origin = Uri.base.origin; // e.g. https://peertransferlink.vercel.app
+        return '$origin/?session=$sessionId';
+      } catch (_) {}
+    }
+    // Fallback for Android / desktop app
+    return 'https://peertransferlink.vercel.app/?session=$sessionId';
+  }
+
   Widget _buildSessionCreatedState(ConnectionCreated state, ScaffoldMessengerState messenger) {
+      final shareLink = _buildShareLink(state.sessionId);
+
       return Column(
         mainAxisSize: MainAxisSize.min,
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Text(
-            'Ask the receiver to enter this code\nto download:',
+            'Share this link with the receiver:',
             style: TextStyle(fontSize: AppSizes.textSubtitle, color: Colors.grey),
             textAlign: TextAlign.center,
           ),
           AppSpacing.gapH8,
-          Text('${_selectedFiles.length} files selected', style: TextStyle(fontWeight: FontWeight.bold, fontSize: AppSizes.textBody)),
-          AppSpacing.gapH32,
-          GestureDetector(
-            onTap: () {
-              Clipboard.setData(ClipboardData(text: state.sessionId));
-              messenger.showSnackBar(
-                const SnackBar(content: Text('Code copied to clipboard')),
-              );
-            },
-            child: Container(
-              padding: EdgeInsets.symmetric(horizontal: AppSizes.p32, vertical: AppSizes.p16),
-              decoration: BoxDecoration(
-                color: Theme.of(context).colorScheme.primaryContainer,
-                borderRadius: BorderRadius.circular(AppSizes.radiusLarge),
+          Text('${_selectedFiles.length} file(s) selected', style: TextStyle(fontWeight: FontWeight.bold, fontSize: AppSizes.textBody)),
+          AppSpacing.gapH24,
+
+          // ── Link display box ──────────────────────────────────────────────
+          Container(
+            width: double.infinity,
+            padding: EdgeInsets.symmetric(horizontal: AppSizes.p16, vertical: AppSizes.p12),
+            decoration: BoxDecoration(
+              color: Theme.of(context).colorScheme.primaryContainer,
+              borderRadius: BorderRadius.circular(AppSizes.radiusLarge),
+            ),
+            child: Text(
+              shareLink,
+              style: TextStyle(
+                fontSize: AppSizes.textSmall,
+                fontWeight: FontWeight.w600,
+                color: Theme.of(context).colorScheme.onPrimaryContainer,
               ),
-              child: Text(
-                state.sessionId,
-                style: TextStyle(
-                  fontSize: AppSizes.textDisplay,
-                  fontWeight: FontWeight.bold,
-                  letterSpacing: 2,
-                  color: Theme.of(context).colorScheme.onPrimaryContainer,
+              textAlign: TextAlign.center,
+              maxLines: 3,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          AppSpacing.gapH16,
+
+          // ── Copy Link button ──────────────────────────────────────────────
+          SizedBox(
+            width: double.infinity,
+            child: FilledButton.icon(
+              onPressed: () {
+                Clipboard.setData(ClipboardData(text: shareLink));
+                messenger.showSnackBar(
+                  const SnackBar(
+                    content: Text('✅ Link copied! Share it with the receiver.'),
+                    duration: Duration(seconds: 2),
+                  ),
+                );
+              },
+              icon: const Icon(Icons.copy_rounded),
+              label: const Text('Copy Link'),
+              style: FilledButton.styleFrom(
+                padding: EdgeInsets.symmetric(vertical: AppSizes.p16),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(AppSizes.radiusMedium),
                 ),
               ),
             ),
           ),
-          AppSpacing.gapH48,
+          AppSpacing.gapH32,
+
+          // ── QR Code (encodes the full link so camera opens web/app) ───────
+          Text(
+            'Or scan QR code to open directly:',
+            style: TextStyle(fontSize: AppSizes.textSmall, color: Colors.grey),
+          ),
+          AppSpacing.gapH12,
           Container(
             padding: EdgeInsets.all(AppSizes.p16),
             decoration: BoxDecoration(
@@ -300,13 +345,13 @@ class _ShareLinkScreenState extends State<ShareLinkScreen> {
               ]
             ),
             child: QrImageView(
-              data: state.sessionId,
+              data: shareLink,  // Full link so scan = click
               version: QrVersions.auto,
               size: AppSizes.iconQr,
               backgroundColor: Colors.white,
             ),
           ),
-          AppSpacing.gapH48,
+          AppSpacing.gapH32,
           const CircularProgressIndicator(),
           AppSpacing.gapH16,
           const Text('Waiting for receiver to join...', style: TextStyle(color: Colors.grey)),
@@ -395,13 +440,13 @@ class _ShareLinkScreenState extends State<ShareLinkScreen> {
                        ),
                        AppSpacing.gapH16,
                        Text(
-                         'Generate a secure 6-digit session pin or scan the QR code to transfer files instantly.',
-                         style: TextStyle(
-                           fontSize: AppSizes.textSubtitle, 
-                           color: Colors.grey,
-                         ),
-                         textAlign: TextAlign.center,
-                       ),
+                          'Generate a shareable link or scan the QR code to transfer files instantly — no code needed.',
+                          style: TextStyle(
+                            fontSize: AppSizes.textSubtitle, 
+                            color: Colors.grey,
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
                     ],
                  ),
                ),

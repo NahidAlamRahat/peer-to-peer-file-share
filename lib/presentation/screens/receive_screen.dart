@@ -14,7 +14,11 @@ import '../widgets/responsive_layout.dart';
 import 'transfer_screen.dart';
 
 class ReceiveScreen extends StatefulWidget {
-  const ReceiveScreen({super.key});
+  /// If provided, the screen will auto-join this session without user input.
+  /// Used when the app is opened via a share link (e.g. ?session=ABC123).
+  final String? autoJoinSessionId;
+
+  const ReceiveScreen({super.key, this.autoJoinSessionId});
 
   @override
   State<ReceiveScreen> createState() => _ReceiveScreenState();
@@ -30,10 +34,9 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
   @override
   void initState() {
     super.initState();
-    // Auto-redirect if transfer is already active
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final transferBloc = sl<TransferBloc>();
-      // ONLY redirect if transfer is actively InProgress. 
+      // ONLY redirect if transfer is actively InProgress.
       // Do NOT redirect if it's already Success (finished).
       if (transferBloc.state is TransferInProgress) {
         final connectionBloc = context.read<ConnectionBloc>();
@@ -45,6 +48,13 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
           context,
           MaterialPageRoute(builder: (_) => TransferScreen(role: role)),
         );
+        return;
+      }
+
+      // Auto-join if opened via share link
+      if (widget.autoJoinSessionId != null && widget.autoJoinSessionId!.isNotEmpty) {
+        _codeController.text = widget.autoJoinSessionId!;
+        _joinSession();
       }
     });
   }
@@ -348,13 +358,13 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
                        ),
                        AppSpacing.gapH16,
                        Text(
-                         'Simply enter the 6-digit pin provided by the sender. Your files will download directly to your device securely over P2P network.',
-                         style: TextStyle(
-                           fontSize: AppSizes.textSubtitle, 
-                           color: Colors.grey,
-                         ),
-                         textAlign: TextAlign.center,
-                       ),
+                          'Click the share link sent by the sender, or enter a session code to receive files directly on your device.',
+                          style: TextStyle(
+                            fontSize: AppSizes.textSubtitle, 
+                            color: Colors.grey,
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
                     ],
                  ),
                ),
