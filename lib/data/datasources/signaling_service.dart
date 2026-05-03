@@ -9,10 +9,11 @@ class SignalingService {
   WebSocketChannel? _channel;
   Timer? _reconnectTimer;
   bool _isConnected = false;
+  bool _isRegistered = false; // true only after server sends 'registered'
   bool _disposed = false;
   int _reconnectAttempts = 0;
   Timer? _heartbeatTimer;
-  static const int _maxReconnectAttempts = 5;
+  static const int _maxReconnectAttempts = 50; // Keep retrying aggressively
 
   // Callbacks
   Function(dynamic sessionData)? onSessionCreated;
@@ -27,6 +28,7 @@ class SignalingService {
   Function(String error)? onConnectionError;
 
   bool get isConnected => _isConnected;
+  bool get isRegistered => _isRegistered;
 
   void connect() {
     if (_disposed) return;
@@ -38,6 +40,7 @@ class SignalingService {
     } catch (_) {}
     _channel = null;
     _isConnected = false;
+    _isRegistered = false;
 
     try {
       debugPrint('Attempting to connect to signaling server... (attempt ${_reconnectAttempts + 1})');
@@ -52,17 +55,22 @@ class SignalingService {
             _isConnected = true;
             _reconnectAttempts = 0;
             debugPrint('✅ [WS] Connected to signaling server');
+            _startHeartbeat(); // Start heartbeat on first message
           }
           _handleMessage(message as String);
         },
         onDone: () {
           debugPrint('🔌 [WS] Connection closed.');
           _isConnected = false;
+          _isRegistered = false; // Must re-register on reconnect
+          _heartbeatTimer?.cancel();
           if (!_disposed) _scheduleReconnect();
         },
         onError: (error) {
           debugPrint('❌ [WS-ERR] $error');
           _isConnected = false;
+          _isRegistered = false; // Must re-register on reconnect
+          _heartbeatTimer?.cancel();
           final errMsg = _friendlyError(error);
           onConnectionError?.call(errMsg);
           if (onSessionError != null) {
@@ -84,6 +92,8 @@ class SignalingService {
       }).catchError((error) {
         if (_disposed) return;
         _isConnected = false;
+        _isRegistered = false;
+        _heartbeatTimer?.cancel();
         debugPrint('❌ [WS-ERR] WebSocket ready error: $error');
         final errMsg = _friendlyError(error);
         onConnectionError?.call(errMsg);
@@ -121,12 +131,9 @@ class SignalingService {
     _reconnectTimer?.cancel();
 
     if (_reconnectAttempts >= _maxReconnectAttempts) {
-      debugPrint('Max reconnect attempts reached. Giving up.');
-      onConnectionError?.call(
-        'Could not connect to signaling server after $_maxReconnectAttempts attempts. '
-        'Please check your internet and try again.',
-      );
-      return;
+      debugPrint('Max reconnect attempts reached — still retrying with max delay...');
+      // Don't give up — keep retrying with max delay
+      _reconnectAttempts = _maxReconnectAttempts - 1; // Reset so it keeps the max delay
     }
 
     _reconnectAttempts++;
@@ -162,6 +169,7 @@ class SignalingService {
           if (onSessionJoined != null) onSessionJoined!(data);
           break;
         case 'registered':
+          _isRegistered = true; // Server confirmed we are ready
           if (onRegistered != null) onRegistered!(data['clientId']);
           break;
         case 'error':
@@ -237,6 +245,7 @@ class SignalingService {
   void dispose() {
     _disposed = false; // Never permanently dispose the singleton
     _isConnected = false;
+    _isRegistered = false;
     _reconnectTimer?.cancel();
     _heartbeatTimer?.cancel();
     _reconnectAttempts = 0;

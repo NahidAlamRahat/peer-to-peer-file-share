@@ -20,6 +20,7 @@ class PeerRepositoryImpl implements PeerRepository {
   String? _currentSessionId;
   SessionRole? _currentRole;
   Timer? _disconnectTimer; // Debounce for temporary WebRTC disconnects
+  String? _pendingJoinSessionId; // Retry join after reconnect
 
   PeerRepositoryImpl(this._signalingService, this._webrtcClient);
 
@@ -94,9 +95,9 @@ class PeerRepositoryImpl implements PeerRepository {
     _webrtcClient.onConnectionState = (state) {
       debugPrint('🔌 [WebRTC] Connection state: $state');
       if (state == RTCPeerConnectionState.RTCPeerConnectionStateConnected) {
-        // Cancel any pending disconnect timer — we reconnected!
         _disconnectTimer?.cancel();
         _disconnectTimer = null;
+        _pendingJoinSessionId = null; // Join succeeded — no need to retry
         _sessionStateController.add(SessionState.connected);
       } else if (state == RTCPeerConnectionState.RTCPeerConnectionStateDisconnected) {
         // WebRTC DISCONNECTED is usually temporary (ICE restart).
@@ -125,10 +126,16 @@ class PeerRepositoryImpl implements PeerRepository {
     _signalingService.onRegistered = (clientId) {
       debugPrint('Registered with client ID: $clientId');
       _statusMessageController.add('Server connection established. Ready to share.');
+      // If we were in the middle of joining a session before disconnect, retry now
+      if (_pendingJoinSessionId != null) {
+        debugPrint('🔄 [REPO] Retrying pending join for session: $_pendingJoinSessionId');
+        _signalingService.joinSession(_pendingJoinSessionId!);
+      }
     };
 
     _signalingService.onPeerDisconnected = (data) {
       debugPrint("Peer disconnected");
+      _pendingJoinSessionId = null; // Session ended — stop retrying
       _sessionStateController.add(SessionState.offline);
     };
 
@@ -147,10 +154,17 @@ class PeerRepositoryImpl implements PeerRepository {
   Future<String> createSession() async {
     debugPrint('🔑 [REPO] Requesting to create session...');
 
-    if (!_signalingService.isConnected) {
-      debugPrint('⚠️ [REPO] Not connected. Attempting quick reconnect...');
-      _signalingService.connect();
-      await Future.delayed(const Duration(seconds: 2));
+    if (!_signalingService.isRegistered) {
+      debugPrint('⏳ [REPO] Not registered yet — waiting before creating session...');
+      if (!_signalingService.isConnected) {
+        _signalingService.connect();
+      }
+      const maxWait = Duration(seconds: 20);
+      const checkInterval = Duration(milliseconds: 300);
+      final deadline = DateTime.now().add(maxWait);
+      while (!_signalingService.isRegistered && DateTime.now().isBefore(deadline)) {
+        await Future.delayed(checkInterval);
+      }
     }
 
     _currentRole = SessionRole.sender;
@@ -171,28 +185,28 @@ class PeerRepositoryImpl implements PeerRepository {
     debugPrint('🔗 [REPO] Attempting to join session: $sessionId');
     _currentRole = SessionRole.receiver;
     _currentSessionId = sessionId;
+    _pendingJoinSessionId = sessionId; // Track for auto-retry on reconnect
     _sessionStateController.add(SessionState.connecting);
 
-    // If not connected yet (e.g. app just launched via share link),
-    // wait up to 10 seconds for the WebSocket to become ready.
-    if (!_signalingService.isConnected) {
-      debugPrint('⚠️ [REPO] WebSocket not connected yet — waiting for connection before joining...');
-      _signalingService.connect();
-
-      const maxWait = Duration(seconds: 10);
+    // Wait until the server sends 'registered' — only then is it safe to join.
+    if (!_signalingService.isRegistered) {
+      debugPrint('⏳ [REPO] Not registered with server yet — waiting...');
+      if (!_signalingService.isConnected) {
+        _signalingService.connect();
+      }
+      const maxWait = Duration(seconds: 20);
       const checkInterval = Duration(milliseconds: 300);
       final deadline = DateTime.now().add(maxWait);
-
-      while (!_signalingService.isConnected && DateTime.now().isBefore(deadline)) {
+      while (!_signalingService.isRegistered && DateTime.now().isBefore(deadline)) {
         await Future.delayed(checkInterval);
       }
-
-      if (!_signalingService.isConnected) {
-        debugPrint('❌ [REPO] Timed out waiting for WebSocket connection before joining session.');
+      if (!_signalingService.isRegistered) {
+        debugPrint('❌ [REPO] Timed out waiting for server registration.');
+        _pendingJoinSessionId = null;
         _sessionStateController.add(SessionState.failed);
         return;
       }
-      debugPrint('✅ [REPO] WebSocket connected — now sending join-session.');
+      debugPrint('✅ [REPO] Registered with server — now sending join-session.');
     }
 
     _signalingService.joinSession(sessionId);
@@ -201,19 +215,12 @@ class PeerRepositoryImpl implements PeerRepository {
   @override
   Future<void> dispose() async {
     debugPrint('🗑️ [REPO] Disposing session state');
-    // Cancel any pending timers
     _disconnectTimer?.cancel();
     _disconnectTimer = null;
-
-    // Reset session state
     _currentSessionId = null;
     _currentRole = null;
     _createSessionCompleter = null;
-
-    // Dispose WebRTC Client
+    _pendingJoinSessionId = null; // Clear pending join
     _webrtcClient.dispose();
-
-    // DO NOT close stream controllers — they are broadcast and re-used.
-    // Closing them permanently breaks subscriptions in ConnectionBloc.
   }
 }
