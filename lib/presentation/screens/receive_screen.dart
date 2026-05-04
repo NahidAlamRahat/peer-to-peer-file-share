@@ -11,6 +11,7 @@ import '../blocs/transfer/transfer_bloc.dart';
 import '../blocs/transfer/transfer_state.dart';
 import '../widgets/custom_buttons.dart';
 import '../widgets/responsive_layout.dart';
+import 'home_screen.dart';
 import 'transfer_screen.dart';
 
 class ReceiveScreen extends StatefulWidget {
@@ -283,13 +284,19 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
         ],
         AppSpacing.gapH32,
         CustomButton(
-          text: 'Go Back',
+          text: 'Go Home',
           onPressed: () {
             setState(() {
               _waitingForFile = false;
               _isSenderOffline = false;
+              _sessionExpired = false;
             });
             context.read<ConnectionBloc>().add(ResetConnectionEvent());
+            Navigator.pushAndRemoveUntil(
+              context,
+              MaterialPageRoute(builder: (_) => const HomeScreen()),
+              (route) => false,
+            );
           },
         ),
       ],
