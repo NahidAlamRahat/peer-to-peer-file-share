@@ -163,19 +163,27 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
             if (!isSessionError) {
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(
-                  content: Text('Connection failed. Please try again.'),
+                  content: Text('Connection failed. Please try again.', style: TextStyle(color: Colors.white)),
                   backgroundColor: Colors.red,
                 ),
               );
             }
           } else if (state is ConnectionServerError) {
-            setState(() { _waitingForFile = false; _autoAcceptDownload = false; });
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text(state.message),
-                backgroundColor: Colors.red.shade700,
-              ),
-            );
+            final msg = state.message.toLowerCase();
+            final isSessionError = msg.contains('session') || msg.contains('not found') || msg.contains('timed out') || msg.contains('timeout');
+            setState(() { 
+              _waitingForFile = false; 
+              _autoAcceptDownload = false; 
+              if (isSessionError) _sessionExpired = true;
+            });
+            if (!isSessionError) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text(state.message, style: const TextStyle(color: Colors.white)),
+                  backgroundColor: Colors.red.shade700,
+                ),
+              );
+            }
           }
         },
         builder: (context, state) {
