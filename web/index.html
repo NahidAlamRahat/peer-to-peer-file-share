@@ -44,11 +44,34 @@
     }
   </style>
   <script>
-    // Set a timeout to remove the loading container if Flutter initialization fails or takes too long
-    // But usually, we can hook into Flutter's initialization. Since Flutter 3.22+, flutter_bootstrap.js is used.
     window.addEventListener('load', function() {
-      // The flutter_bootstrap.js will append the flutter view.
-      // We can use a MutationObserver to hide the loader once the flutter view is added.
+      // 1. Detect Facebook/Messenger/Instagram In-App Browser
+      const ua = navigator.userAgent || navigator.vendor || window.opera;
+      const isFbOrIg = (ua.indexOf("FBAN") > -1) || (ua.indexOf("FBAV") > -1) || (ua.indexOf("Instagram") > -1);
+
+      if (isFbOrIg) {
+        const loader = document.getElementById('loading-container');
+        if (loader) {
+          loader.innerHTML = `
+            <div style="padding: 30px; text-align: center; max-width: 400px;">
+              <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-bottom: 20px;"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
+              <h2 style="color: white; margin-bottom: 10px; font-family: sans-serif;">Unsupported Browser</h2>
+              <p style="color: #94a3b8; line-height: 1.5; font-family: sans-serif; font-size: 16px;">
+                Messenger and Instagram browsers do not support the features required for this app.
+              </p>
+              <div style="margin-top: 30px; background-color: rgba(59, 130, 246, 0.1); border: 1px solid #3b82f6; padding: 15px; border-radius: 8px;">
+                <p style="color: #60a5fa; margin: 0; font-family: sans-serif; font-weight: bold;">
+                  Tap the 3 dots (⋮) at the top right<br>and select "Open in Browser"
+                </p>
+              </div>
+            </div>
+          `;
+          // We stop here and do not load Flutter because it will crash anyway
+          return;
+        }
+      }
+
+      // 2. Normal Flutter Initialization
       const observer = new MutationObserver(function(mutations) {
         mutations.forEach(function(mutation) {
           if (mutation.addedNodes.length > 0) {
@@ -66,6 +89,20 @@
         });
       });
       observer.observe(document.body, { childList: true });
+      
+      // Fallback if Flutter throws an error during initialization (e.g., WebGL error)
+      window.addEventListener('error', function(e) {
+        const loader = document.getElementById('loading-container');
+        if (loader && document.querySelector('flutter-view') == null) {
+          loader.innerHTML = `
+            <div style="padding: 20px; text-align: center;">
+              <h2 style="color: white; font-family: sans-serif;">Application Error</h2>
+              <p style="color: #94a3b8; font-family: sans-serif;">Your browser might not support WebGL, or an error occurred during loading.</p>
+              <p style="color: #94a3b8; font-family: sans-serif;">Please try opening this link in Chrome or Safari.</p>
+            </div>
+          `;
+        }
+      });
     });
   </script>
   <script src="flutter_bootstrap.js" async></script>
