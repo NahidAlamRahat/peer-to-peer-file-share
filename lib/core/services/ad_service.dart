@@ -22,16 +22,17 @@ class AdService {
   static const String _adsEnabledKey = 'ads_enabled';
 
   // ── AdMob Unit IDs ──────────────────────────────────────────────────────────
-  //  Google's official TEST IDs (safe to use during development).
-  //  ⚠️  REPLACE with your real Ad Unit IDs from AdMob before publishing.
+  //  Google's official TEST IDs — used in debug mode only.
   static const String _testBannerUnitId =
       'ca-app-pub-3940256099942544/6300978111';
   static const String _testInterstitialUnitId =
       'ca-app-pub-3940256099942544/1033173712';
 
-  //  ── YOUR REAL AD UNIT IDs (fill these before release) ───────────────────
-  //  static const String _realBannerUnitId     = 'ca-app-pub-XXXXXXXXXXXXXXXX/XXXXXXXXXX';
-  //  static const String _realInterstitialUnitId = 'ca-app-pub-XXXXXXXXXXXXXXXX/XXXXXXXXXX';
+  //  ── REAL AD UNIT IDs (PeerTransfer Link) ────────────────────────────
+  static const String _realBannerUnitId =
+      'ca-app-pub-7525127374334280/6814266492';
+  static const String _realInterstitialUnitId =
+      'ca-app-pub-7525127374334280/7101206951'; // ✅ Real — PeerTransfer Interstitial
 
   // ── State ───────────────────────────────────────────────────────────────────
   bool _adsEnabled = false;
@@ -40,15 +41,14 @@ class AdService {
   /// In debug mode this is always true so you can test ads locally.
   bool get adsEnabled => kDebugMode ? true : _adsEnabled;
 
-  /// Banner Ad Unit ID to use (test vs production).
-  String get bannerAdUnitId => _testBannerUnitId;
-  //  Replace ↑ with the line below once you have real IDs:
-  //  String get bannerAdUnitId => kDebugMode ? _testBannerUnitId : _realBannerUnitId;
+  /// Banner Ad Unit ID: test in debug, real in release.
+  String get bannerAdUnitId =>
+      kDebugMode ? _testBannerUnitId : _realBannerUnitId;
 
-  /// Interstitial Ad Unit ID to use (test vs production).
-  String get interstitialAdUnitId => _testInterstitialUnitId;
-  //  Replace ↑ with the line below once you have real IDs:
-  //  String get interstitialAdUnitId => kDebugMode ? _testInterstitialUnitId : _realInterstitialUnitId;
+  /// Interstitial Ad Unit ID: test in debug, real in release.
+  /// ⚠️ Replace _realInterstitialUnitId once you create it in AdMob Console.
+  String get interstitialAdUnitId =>
+      kDebugMode ? _testInterstitialUnitId : _realInterstitialUnitId;
 
   // ── Initialise ───────────────────────────────────────────────────────────────
   Future<void> init() async {

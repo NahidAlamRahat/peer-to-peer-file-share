@@ -31,6 +31,60 @@
 
   <title>PeerTransfer Link</title>
   <link rel="manifest" href="manifest.json">
+
+  <!--
+    ══════════════════════════════════════════════════════════════════════════
+    Google AdSense — PeerTransfer Link
+    Publisher ID : ca-pub-7101476702170948
+    ══════════════════════════════════════════════════════════════════════════
+  -->
+  <!-- This meta tag is required for AdSense Site Verification -->
+  <meta name="google-adsense-account" content="ca-pub-7101476702170948">
+
+  <script>
+    // ── AdSense loader (called from Dart when ads_enabled = true) ───────────
+    window.adsenseLoaded = false;
+
+    window.loadAdSense = function () {
+      if (window.adsenseLoaded) return; // prevent double-loading
+      window.adsenseLoaded = true;
+
+      // Inject the AdSense auto-ads script
+      var script = document.createElement('script');
+      script.async = true;
+      script.src = 'https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-7101476702170948';
+      script.setAttribute('crossorigin', 'anonymous');
+      document.head.appendChild(script);
+
+      script.onload = function () {
+        // Push auto-ads config once script is loaded
+        try {
+          (window.adsbygoogle = window.adsbygoogle || []).push({
+            google_ad_client: 'ca-pub-7101476702170948',
+            enable_page_level_ads: true,   // Auto-ads: Google finds best spots
+            overlays: { bottom: true },    // Anchor ad at bottom of page
+          });
+          console.log('✅ AdSense auto-ads loaded.');
+        } catch (e) {
+          console.warn('⚠️ AdSense push error:', e);
+        }
+      };
+    };
+
+    // ── Called from Dart to disable / unload AdSense ─────────────────────────
+    window.unloadAdSense = function () {
+      // Remove any injected adsbygoogle scripts
+      document.querySelectorAll('script[src*="adsbygoogle"]').forEach(function (s) {
+        s.remove();
+      });
+      // Remove any ad iframes
+      document.querySelectorAll('ins.adsbygoogle').forEach(function (ins) {
+        ins.remove();
+      });
+      window.adsenseLoaded = false;
+      console.log('🔇 AdSense unloaded.');
+    };
+  </script>
 </head>
 <body style="background-color: #0F172A; margin: 0; padding: 0;">
   <div id="loading-container" style="display: flex; flex-direction: column; justify-content: center; align-items: center; height: 100vh; width: 100vw; position: absolute; top: 0; left: 0; z-index: 1000; background-color: #0F172A; transition: opacity 0.5s ease-out;">

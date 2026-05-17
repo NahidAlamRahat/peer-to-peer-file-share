@@ -1,31 +1,58 @@
+// ignore: avoid_web_libraries_in_flutter
+import 'dart:js' as js;
+
 import 'package:app_links/app_links.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
+
 import 'core/di/injection_container.dart' as di;
 import 'core/services/ad_service.dart';
 import 'core/services/interstitial_ad_service.dart';
-import 'firebase_options.dart';
 import 'core/theme/app_theme.dart';
+import 'firebase_options.dart';
 import 'presentation/blocs/connection/connection_bloc.dart';
 import 'presentation/blocs/transfer/transfer_bloc.dart';
 import 'presentation/screens/home_screen.dart';
 import 'presentation/screens/receive_screen.dart';
 
+/// Calls the JavaScript function defined in web/index.html to
+/// dynamically inject the AdSense auto-ads script when ads are enabled.
+void _loadWebAdSense() {
+  try {
+    js.context.callMethod('loadAdSense');
+    debugPrint('📢 [WebAds] AdSense loaded via JS.');
+  } catch (e) {
+    debugPrint('⚠️ [WebAds] loadAdSense JS call failed: $e');
+  }
+}
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // ── Firebase + AdMob initialisation ──────────────────────────────────────
+  // ── Firebase initialisation (runs on ALL platforms: web + mobile) ─────────
+  await Firebase.initializeApp(
+    options: DefaultFirebaseOptions.currentPlatform,
+  );
+
+  // ── AdMob SDK (Android / iOS only — not available on web) ─────────────────
   if (!kIsWeb) {
-    await Firebase.initializeApp(
-      options: DefaultFirebaseOptions.currentPlatform,
-    );
     await MobileAds.instance.initialize();
-    await AdService.instance.init();
-    // Pre-load the interstitial so it is ready for the first transfer.
+  }
+
+  // ── AdService: fetch Remote Config ads_enabled (works on web + mobile) ────
+  await AdService.instance.init();
+
+  if (!kIsWeb) {
+    // Mobile: pre-load interstitial so it is ready for the first transfer.
     InterstitialAdService.instance.preload();
+  } else {
+    // Web: dynamically inject AdSense script only if ads_enabled = true.
+    if (AdService.instance.adsEnabled) {
+      _loadWebAdSense();
+    }
   }
 
   await di.init();
@@ -67,8 +94,6 @@ void main() async {
     initialFileCount: initialFileCount,
   ));
 }
-
-
 
 class P2PFileShareApp extends StatelessWidget {
   final String? initialSessionId;
