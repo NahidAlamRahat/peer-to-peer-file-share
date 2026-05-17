@@ -1,6 +1,3 @@
-// ignore: avoid_web_libraries_in_flutter
-import 'dart:js' as js;
-
 import 'package:app_links/app_links.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/foundation.dart';
@@ -17,17 +14,6 @@ import 'presentation/blocs/connection/connection_bloc.dart';
 import 'presentation/blocs/transfer/transfer_bloc.dart';
 import 'presentation/screens/home_screen.dart';
 import 'presentation/screens/receive_screen.dart';
-
-/// Calls the JavaScript function defined in web/index.html to
-/// dynamically inject the AdSense auto-ads script when ads are enabled.
-void _loadWebAdSense() {
-  try {
-    js.context.callMethod('loadAdSense');
-    debugPrint('📢 [WebAds] AdSense loaded via JS.');
-  } catch (e) {
-    debugPrint('⚠️ [WebAds] loadAdSense JS call failed: $e');
-  }
-}
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -48,12 +34,9 @@ void main() async {
   if (!kIsWeb) {
     // Mobile: pre-load interstitial so it is ready for the first transfer.
     InterstitialAdService.instance.preload();
-  } else {
-    // Web: dynamically inject AdSense script only if ads_enabled = true.
-    if (AdService.instance.adsEnabled) {
-      _loadWebAdSense();
-    }
   }
+  // NOTE: Web AdSense is handled entirely via the script in web/index.html.
+  // No JS interop needed — Google's auto-ads script manages placement.
 
   await di.init();
 
