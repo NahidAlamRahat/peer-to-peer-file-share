@@ -1,8 +1,13 @@
 import 'package:app_links/app_links.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:google_mobile_ads/google_mobile_ads.dart';
 import 'core/di/injection_container.dart' as di;
+import 'core/services/ad_service.dart';
+import 'core/services/interstitial_ad_service.dart';
+import 'firebase_options.dart';
 import 'core/theme/app_theme.dart';
 import 'presentation/blocs/connection/connection_bloc.dart';
 import 'presentation/blocs/transfer/transfer_bloc.dart';
@@ -11,6 +16,18 @@ import 'presentation/screens/receive_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // ── Firebase + AdMob initialisation ──────────────────────────────────────
+  if (!kIsWeb) {
+    await Firebase.initializeApp(
+      options: DefaultFirebaseOptions.currentPlatform,
+    );
+    await MobileAds.instance.initialize();
+    await AdService.instance.init();
+    // Pre-load the interstitial so it is ready for the first transfer.
+    InterstitialAdService.instance.preload();
+  }
+
   await di.init();
 
   String? initialSessionId;
@@ -50,6 +67,8 @@ void main() async {
     initialFileCount: initialFileCount,
   ));
 }
+
+
 
 class P2PFileShareApp extends StatelessWidget {
   final String? initialSessionId;

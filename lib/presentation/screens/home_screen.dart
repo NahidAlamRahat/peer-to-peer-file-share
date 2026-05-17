@@ -16,6 +16,7 @@ import '../blocs/transfer/transfer_event.dart';
 import '../blocs/transfer/transfer_state.dart';
 import '../widgets/custom_buttons.dart';
 import '../widgets/responsive_layout.dart';
+import '../widgets/ad_banner_widget.dart';
 import 'receive_screen.dart';
 import 'about_screen.dart';
 import 'settings_screen.dart';
@@ -121,7 +122,7 @@ class HomeScreen extends StatelessWidget {
         Text(
           'Share files seamlessly\nwith PeerTransfer Link',
           style: TextStyle(
-            fontSize: isDesktop ? 48 : 28, 
+            fontSize: isDesktop ? 48 : 28,
             fontWeight: FontWeight.bold,
             height: 1.2,
           ),
@@ -131,7 +132,7 @@ class HomeScreen extends StatelessWidget {
         Text(
           'No file size limit. Directly peer-to-peer. Fully encrypted.',
           style: TextStyle(
-            fontSize: isDesktop ? AppSizes.textSubtitle : AppSizes.textBody, 
+            fontSize: isDesktop ? AppSizes.textSubtitle : AppSizes.textBody,
             color: Colors.grey,
           ),
           textAlign: TextAlign.center,
@@ -187,7 +188,10 @@ class HomeScreen extends StatelessWidget {
                 AppSpacing.gapH24,
               ],
               _buildActionPanel(context),
-              AppSpacing.gapH32,
+              AppSpacing.gapH16,
+              // ── Banner Ad ────────────────────────────────────────────────────
+              const AdBannerWidget(),
+              AppSpacing.gapH16,
               if (kIsWeb) _buildAppDownloadBanner(context),
             ],
           ),
@@ -270,10 +274,10 @@ class HomeScreen extends StatelessWidget {
                           children: [
                             Text(title, style: const TextStyle(fontWeight: FontWeight.bold)),
                             Text(
-                              fileName, 
-                              style: TextStyle(fontSize: AppSizes.textSmall), 
-                              maxLines: 1, 
-                              overflow: TextOverflow.ellipsis
+                              fileName,
+                              style: TextStyle(fontSize: AppSizes.textSmall),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
                             ),
                           ],
                         ),
@@ -301,7 +305,7 @@ class HomeScreen extends StatelessWidget {
   Widget _buildDesktopLayout(BuildContext context) {
     return Row(
       children: [
-        // Left side: Hero Map/Illustration
+        // Left side: Hero Section
         Expanded(
           flex: 5,
           child: Container(
@@ -314,7 +318,7 @@ class HomeScreen extends StatelessWidget {
             ),
           ),
         ),
-        // Right side: Action Panel Component
+        // Right side: Action Panel
         Expanded(
           flex: 4,
           child: Center(
@@ -350,8 +354,11 @@ class HomeScreen extends StatelessWidget {
                       ),
                       AppSpacing.gapH48,
                        _buildActionPanel(context),
+                       AppSpacing.gapH16,
+                       // ── Banner Ad ─────────────────────────────────────────
+                       const AdBannerWidget(),
                        if (kIsWeb) ...[
-                         AppSpacing.gapH32,
+                         AppSpacing.gapH16,
                          _buildAppDownloadBanner(context),
                        ],
                    ],
@@ -415,7 +422,6 @@ class HomeScreen extends StatelessWidget {
             width: double.infinity,
             child: FilledButton.icon(
               onPressed: () {
-                // Link to the APK hosted on the same server/Vercel
                 launchUrlString(
                   '/apk/app-release.apk',
                   mode: LaunchMode.externalApplication,

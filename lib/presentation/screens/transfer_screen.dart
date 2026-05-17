@@ -5,6 +5,8 @@ import 'package:flutter_background/flutter_background.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 import '../../core/di/injection_container.dart';
+import '../../core/services/ad_service.dart';
+import '../../core/services/interstitial_ad_service.dart';
 import '../../core/services/notification_service.dart';
 import '../../core/services/settings_service.dart';
 import '../../core/theme/app_sizes.dart';
@@ -101,6 +103,13 @@ class _TransferScreenState extends State<TransferScreen> {
                 isSender: widget.role == SessionRole.sender,
                 fileName: state.filePath.split('/').last.split('\\').last,
               );
+              // ── Show interstitial ad after transfer completes ────────────────
+              if (!kIsWeb && AdService.instance.adsEnabled) {
+                // Small delay so the success UI renders first
+                Future.delayed(const Duration(seconds: 1), () {
+                  InterstitialAdService.instance.show();
+                });
+              }
             } else if (state is TransferFailure) {
               WakelockPlus.disable();
               _stopBackgroundExecution();

@@ -11,6 +11,7 @@ import '../blocs/transfer/transfer_bloc.dart';
 import '../blocs/transfer/transfer_state.dart';
 import '../widgets/custom_buttons.dart';
 import '../widgets/responsive_layout.dart';
+import '../widgets/ad_banner_widget.dart';
 import 'home_screen.dart';
 import 'transfer_screen.dart';
 
@@ -459,7 +460,18 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
   Widget _buildMobileLayout(Widget content) {
     return Center(
       child: SingleChildScrollView(
-        child: Padding(padding: EdgeInsets.all(AppSizes.p24), child: content),
+        child: Padding(
+          padding: EdgeInsets.all(AppSizes.p24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              content,
+              const SizedBox(height: 24),
+              // ── Banner Ad at the bottom while waiting ─────────────────────────
+              const AdBannerWidget(),
+            ],
+          ),
+        ),
       ),
     );
   }

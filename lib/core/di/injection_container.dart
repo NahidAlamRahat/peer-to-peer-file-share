@@ -1,6 +1,7 @@
 import 'package:get_it/get_it.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../core/services/ad_service.dart';
 import '../../core/services/notification_service.dart';
 import '../../core/services/settings_service.dart';
 import '../../data/datasources/signaling_service.dart';
@@ -22,6 +23,9 @@ Future<void> init() async {
   final notificationService = NotificationService();
   await notificationService.init();
   sl.registerSingleton<NotificationService>(notificationService);
+
+  // AdService is a singleton — already initialised in main() before di.init().
+  sl.registerSingleton<AdService>(AdService.instance);
 
   // ── 1. Data sources (no dependencies) ──────────────────────────────────────
   sl.registerLazySingleton(() => SignalingService());

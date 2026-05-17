@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "877064445496",
+    "project_id": "peertransfer-app",
+    "storage_bucket": "peertransfer-app.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:877064445496:android:aeb7d839839d1b2b52d0cd",
+        "android_client_info": {
+          "package_name": "com.example.p2p_file_share"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDULp-MYR8bi2dl3Cpf01odez_aLcgKtbs"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
