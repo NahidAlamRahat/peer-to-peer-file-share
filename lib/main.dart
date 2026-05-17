@@ -3,11 +3,11 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:google_mobile_ads/google_mobile_ads.dart';
 
 import 'core/di/injection_container.dart' as di;
 import 'core/services/ad_service.dart';
 import 'core/services/interstitial_ad_service.dart';
+import 'core/services/mobile_ads_init.dart'; // conditional: no-op on web
 import 'core/theme/app_theme.dart';
 import 'firebase_options.dart';
 import 'presentation/blocs/connection/connection_bloc.dart';
@@ -18,25 +18,21 @@ import 'presentation/screens/receive_screen.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // ── Firebase initialisation (runs on ALL platforms: web + mobile) ─────────
+  // ── Firebase (runs on ALL platforms: web + mobile) ────────────────────────
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
 
-  // ── AdMob SDK (Android / iOS only — not available on web) ─────────────────
-  if (!kIsWeb) {
-    await MobileAds.instance.initialize();
-  }
+  // ── MobileAds SDK (no-op on web via conditional import) ───────────────────
+  await initializeMobileAds();
 
-  // ── AdService: fetch Remote Config ads_enabled (works on web + mobile) ────
+  // ── AdService: fetch Remote Config ads_enabled ────────────────────────────
   await AdService.instance.init();
 
+  // ── Preload interstitial on mobile only ───────────────────────────────────
   if (!kIsWeb) {
-    // Mobile: pre-load interstitial so it is ready for the first transfer.
     InterstitialAdService.instance.preload();
   }
-  // NOTE: Web AdSense is handled entirely via the script in web/index.html.
-  // No JS interop needed — Google's auto-ads script manages placement.
 
   await di.init();
 
