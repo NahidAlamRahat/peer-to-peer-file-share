@@ -584,7 +584,7 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
     } else {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const Text('Camera permission denied'),
+        const SnackBar(content: Text('Camera permission denied')),
       );
     }
   }
