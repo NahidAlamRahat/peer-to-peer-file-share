@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../core/di/injection_container.dart';
@@ -559,20 +560,16 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
   }
 
   Future<void> _scanQRCode() async {
+    if (kIsWeb) {
+      // On Web, permission_handler doesn't work well with camera.
+      // We skip it and let the browser handle the permission prompt natively.
+      _navigateToScanner();
+      return;
+    }
+
     final status = await Permission.camera.request();
     if (status.isGranted) {
-      if (!mounted) return;
-      final result = await Navigator.push(
-        context,
-        MaterialPageRoute(builder: (_) => const QRScannerScreen()),
-      );
-
-      if (result != null && result is String) {
-        setState(() {
-          _codeController.text = result;
-        });
-        _joinSession();
-      }
+      _navigateToScanner();
     } else if (status.isPermanentlyDenied) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -587,8 +584,23 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
     } else {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Camera permission denied')),
+        const Text('Camera permission denied'),
       );
+    }
+  }
+
+  Future<void> _navigateToScanner() async {
+    if (!mounted) return;
+    final result = await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const QRScannerScreen()),
+    );
+
+    if (result != null && result is String) {
+      setState(() {
+        _codeController.text = result;
+      });
+      _joinSession();
     }
   }
 }
