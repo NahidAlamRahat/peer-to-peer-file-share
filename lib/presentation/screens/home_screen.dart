@@ -70,6 +70,9 @@ class HomeScreen extends StatelessWidget {
                 ),
               ),
             );
+          } else {
+            // Hide the error banner immediately when connection is restored
+            ScaffoldMessenger.of(context).hideCurrentSnackBar();
           }
         },
         child: ResponsiveLayout(
