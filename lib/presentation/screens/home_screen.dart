@@ -30,7 +30,7 @@ class HomeScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('PeerTransfer Link'),
+        title: const Text('PeerTransfer'),
         elevation: 0,
         actions: [
           IconButton(
@@ -123,7 +123,7 @@ class HomeScreen extends StatelessWidget {
         ),
         AppSpacing.gapH32,
         Text(
-          'Share files seamlessly\nwith PeerTransfer Link',
+          'Share files seamlessly\nwith PeerTransfer',
           style: TextStyle(
             fontSize: isDesktop ? 48 : 28,
             fontWeight: FontWeight.bold,

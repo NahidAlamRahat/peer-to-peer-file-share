@@ -266,7 +266,7 @@ class _ShareLinkScreenState extends State<ShareLinkScreen> {
         return '$origin/?$params';
       } catch (_) {}
     }
-    return 'https://peertransferlink.vercel.app/?$params';
+    return 'https://peertransfer.app/?$params';
   }
 
   Widget _buildSessionCreatedState(ConnectionCreated state, ScaffoldMessengerState messenger) {

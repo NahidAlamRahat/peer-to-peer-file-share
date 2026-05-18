@@ -1,8 +1,8 @@
-# PeerTransfer Link
+# PeerTransfer
 
 **Secure, fast, peer-to-peer file sharing — no file size limit, no middleman, fully encrypted.**
 
-PeerTransfer Link is a Flutter app that lets you send and receive files directly between devices using WebRTC. Files never touch a central server — they travel encrypted, peer-to-peer, in real time.
+PeerTransfer is a Flutter app that lets you send and receive files directly between devices using WebRTC. Files never touch a central server — they travel encrypted, peer-to-peer, in real time.
 
 ## Features
 

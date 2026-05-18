@@ -12,6 +12,8 @@ import '../blocs/transfer/transfer_state.dart';
 import '../widgets/custom_buttons.dart';
 import '../widgets/responsive_layout.dart';
 import '../widgets/ad_banner_widget.dart';
+import 'package:permission_handler/permission_handler.dart';
+import 'qr_scanner_screen.dart';
 import 'home_screen.dart';
 import 'transfer_screen.dart';
 
@@ -248,6 +250,11 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
             ),
             filled: true,
             fillColor: Theme.of(context).colorScheme.surfaceContainerHighest,
+            suffixIcon: IconButton(
+              icon: const Icon(Icons.qr_code_scanner, color: Colors.blueAccent),
+              onPressed: _scanQRCode,
+              tooltip: 'Scan QR Code',
+            ),
           ),
           textAlign: TextAlign.center,
           style: TextStyle(
@@ -549,5 +556,39 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
         ),
       ],
     );
+  }
+
+  Future<void> _scanQRCode() async {
+    final status = await Permission.camera.request();
+    if (status.isGranted) {
+      if (!mounted) return;
+      final result = await Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => const QRScannerScreen()),
+      );
+
+      if (result != null && result is String) {
+        setState(() {
+          _codeController.text = result;
+        });
+        _joinSession();
+      }
+    } else if (status.isPermanentlyDenied) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('Camera permission is required to scan QR codes. Please enable it in Settings.'),
+          action: SnackBarAction(
+            label: 'Settings',
+            onPressed: () => openAppSettings(),
+          ),
+        ),
+      );
+    } else {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Camera permission denied')),
+      );
+    }
   }
 }

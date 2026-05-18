@@ -101,7 +101,7 @@ class P2PFileShareApp extends StatelessWidget {
         ),
       ],
       child: MaterialApp(
-        title: 'PeerTransfer Link',
+        title: 'PeerTransfer',
         debugShowCheckedModeBanner: false,
         theme: AppTheme.lightTheme,
         darkTheme: AppTheme.darkTheme,

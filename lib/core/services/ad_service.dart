@@ -28,7 +28,7 @@ class AdService {
   static const String _testInterstitialUnitId =
       'ca-app-pub-3940256099942544/1033173712';
 
-  //  ── REAL AD UNIT IDs (PeerTransfer Link) ────────────────────────────
+  //  ── REAL AD UNIT IDs (PeerTransfer) ────────────────────────────
   static const String _realBannerUnitId =
       'ca-app-pub-7101476702170948/6523757924';
   static const String _realInterstitialUnitId =

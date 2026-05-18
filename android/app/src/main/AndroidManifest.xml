@@ -7,14 +7,15 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.CAMERA" />
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
 
     <application
-        android:label="PeerTransfer Link"
+        android:label="PeerTransfer"
         android:name="${applicationName}"
         android:enableOnBackInvokedCallback="true"
         android:icon="@mipmap/ic_launcher">
-        <!-- AdMob App ID — PeerTransfer Link (Real) -->
+        <!-- AdMob App ID — PeerTransfer (Real) -->
         <meta-data
             android:name="com.google.android.gms.ads.APPLICATION_ID"
             android:value="ca-app-pub-7101476702170948~8331515226"/>
@@ -46,7 +47,7 @@
                 <category android:name="android.intent.category.BROWSABLE"/>
                 <data
                     android:scheme="https"
-                    android:host="peertransferlink.vercel.app"
+                    android:host="peertransfer.app"
                     android:pathPrefix="/"/>
             </intent-filter>
         </activity>

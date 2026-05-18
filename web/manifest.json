@@ -1,5 +1,5 @@
 {
-    "name": "PeerTransfer Link",
+    "name": "PeerTransfer",
     "short_name": "PeerTransfer",
     "start_url": ".",
     "display": "standalone",
