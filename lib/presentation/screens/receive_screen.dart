@@ -466,21 +466,20 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
   }
 
   Widget _buildMobileLayout(Widget content) {
-    return Center(
-      child: SingleChildScrollView(
-        child: Padding(
-          padding: EdgeInsets.all(AppSizes.p24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              content,
-              const SizedBox(height: 24),
-              // ── Banner Ad at the bottom while waiting ─────────────────────────
-              const AdBannerWidget(),
-            ],
+    return Column(
+      children: [
+        Expanded(
+          child: Center(
+            child: SingleChildScrollView(
+              padding: EdgeInsets.all(AppSizes.p24),
+              child: content,
+            ),
           ),
         ),
-      ),
+        // ── Banner Ad strictly pinned to the bottom ─────────────────────────
+        const AdBannerWidget(),
+        SizedBox(height: MediaQuery.of(context).padding.bottom > 0 ? 0 : AppSizes.p16),
+      ],
     );
   }
 

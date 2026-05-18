@@ -179,11 +179,11 @@ class HomeScreen extends StatelessWidget {
     return BlocBuilder<TransferBloc, TransferState>(
       builder: (context, transferState) {
         return Padding(
-          padding: EdgeInsets.symmetric(horizontal: AppSizes.p24, vertical: AppSizes.p32),
+          padding: EdgeInsets.symmetric(horizontal: AppSizes.p24, vertical: AppSizes.p16),
           child: Column(
             children: [
               _buildServerStatus(),
-              const Spacer(),
+              const Spacer(flex: 2),
               _buildHeroSection(context, isDesktop: false),
               const Spacer(flex: 2),
               if (transferState is TransferInProgress || transferState is TransferSuccess) ...[
@@ -191,11 +191,13 @@ class HomeScreen extends StatelessWidget {
                 AppSpacing.gapH24,
               ],
               _buildActionPanel(context),
-              AppSpacing.gapH16,
+              const Spacer(flex: 1), // Pushes action panel up and pins ad banner to the bottom
               // ── Banner Ad ────────────────────────────────────────────────────
               const AdBannerWidget(),
-              AppSpacing.gapH16,
-              if (kIsWeb) _buildAppDownloadBanner(context),
+              if (kIsWeb) ...[
+                AppSpacing.gapH16,
+                _buildAppDownloadBanner(context),
+              ],
             ],
           ),
         );
