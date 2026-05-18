@@ -30,9 +30,9 @@ class AdService {
 
   //  ── REAL AD UNIT IDs (PeerTransfer Link) ────────────────────────────
   static const String _realBannerUnitId =
-      'ca-app-pub-7525127374334280/6814266492';
+      'ca-app-pub-7101476702170948/6523757924';
   static const String _realInterstitialUnitId =
-      'ca-app-pub-7525127374334280/7101206951'; // ✅ Real — PeerTransfer Interstitial
+      'ca-app-pub-7101476702170948/7461286689'; // ✅ Real — PeerTransfer Interstitial
 
   // ── State ───────────────────────────────────────────────────────────────────
   bool _adsEnabled = false;

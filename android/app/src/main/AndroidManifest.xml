@@ -17,7 +17,7 @@
         <!-- AdMob App ID — PeerTransfer Link (Real) -->
         <meta-data
             android:name="com.google.android.gms.ads.APPLICATION_ID"
-            android:value="ca-app-pub-7525127374334280~9440429832"/>
+            android:value="ca-app-pub-7101476702170948~8331515226"/>
         <activity
             android:name=".MainActivity"
             android:exported="true"
