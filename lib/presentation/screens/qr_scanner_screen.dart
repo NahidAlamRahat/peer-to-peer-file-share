@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 
@@ -13,7 +14,7 @@ class QRScannerScreen extends StatefulWidget {
 class _QRScannerScreenState extends State<QRScannerScreen> {
   final MobileScannerController controller = MobileScannerController(
     detectionSpeed: DetectionSpeed.normal,
-    facing: CameraFacing.back,
+    facing: kIsWeb ? null : CameraFacing.back,
   );
 
   bool _isScanned = false;
