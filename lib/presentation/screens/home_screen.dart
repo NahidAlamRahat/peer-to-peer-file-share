@@ -116,10 +116,26 @@ class HomeScreen extends StatelessWidget {
     return Column(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        Icon(
-          Icons.cloud_upload_outlined,
-          size: isDesktop ? 150 : 100,
-          color: Theme.of(context).colorScheme.primary,
+        Container(
+          width: isDesktop ? 140 : 100,
+          height: isDesktop ? 140 : 100,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: Theme.of(context).colorScheme.primaryContainer.withValues(alpha: 0.35),
+            boxShadow: [
+              BoxShadow(
+                color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.35),
+                blurRadius: isDesktop ? 40 : 28,
+                spreadRadius: 4,
+              ),
+            ],
+          ),
+          child: ClipOval(
+            child: Image.asset(
+              'assets/logo.png',
+              fit: BoxFit.cover,
+            ),
+          ),
         ),
         AppSpacing.gapH32,
         Text(

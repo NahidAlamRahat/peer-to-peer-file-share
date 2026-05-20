@@ -173,15 +173,24 @@ class AboutScreen extends StatelessWidget {
       child: Column(
         children: [
           Container(
-            padding: const EdgeInsets.all(20),
+            width: 100,
+            height: 100,
             decoration: BoxDecoration(
-              color: colorScheme.primary.withValues(alpha: 0.15),
               shape: BoxShape.circle,
+              color: colorScheme.primaryContainer.withValues(alpha: 0.35),
+              boxShadow: [
+                BoxShadow(
+                  color: colorScheme.primary.withValues(alpha: 0.4),
+                  blurRadius: 32,
+                  spreadRadius: 4,
+                ),
+              ],
             ),
-            child: Icon(
-              Icons.cloud_upload_outlined,
-              size: 64,
-              color: colorScheme.primary,
+            child: ClipOval(
+              child: Image.asset(
+                'assets/logo.png',
+                fit: BoxFit.cover,
+              ),
             ),
           ),
           AppSpacing.gapH16,
