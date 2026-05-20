@@ -117,22 +117,22 @@ class HomeScreen extends StatelessWidget {
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
         Container(
-          width: isDesktop ? 140 : 100,
-          height: isDesktop ? 140 : 100,
           decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            color: Theme.of(context).colorScheme.primaryContainer.withValues(alpha: 0.35),
+            borderRadius: BorderRadius.circular(isDesktop ? 36 : 28),
             boxShadow: [
               BoxShadow(
-                color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.35),
-                blurRadius: isDesktop ? 40 : 28,
-                spreadRadius: 4,
+                color: Colors.black.withValues(alpha: 0.25),
+                blurRadius: 20,
+                offset: const Offset(0, 6),
               ),
             ],
           ),
-          child: ClipOval(
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(isDesktop ? 36 : 28),
             child: Image.asset(
               'assets/logo.png',
+              width: isDesktop ? 160 : 110,
+              height: isDesktop ? 160 : 110,
               fit: BoxFit.cover,
             ),
           ),

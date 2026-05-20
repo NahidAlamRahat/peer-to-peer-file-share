@@ -173,22 +173,22 @@ class AboutScreen extends StatelessWidget {
       child: Column(
         children: [
           Container(
-            width: 100,
-            height: 100,
             decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: colorScheme.primaryContainer.withValues(alpha: 0.35),
+              borderRadius: BorderRadius.circular(24),
               boxShadow: [
                 BoxShadow(
-                  color: colorScheme.primary.withValues(alpha: 0.4),
-                  blurRadius: 32,
-                  spreadRadius: 4,
+                  color: Colors.black.withValues(alpha: 0.2),
+                  blurRadius: 12,
+                  offset: const Offset(0, 4),
                 ),
               ],
             ),
-            child: ClipOval(
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(24),
               child: Image.asset(
                 'assets/logo.png',
+                width: 96,
+                height: 96,
                 fit: BoxFit.cover,
               ),
             ),
