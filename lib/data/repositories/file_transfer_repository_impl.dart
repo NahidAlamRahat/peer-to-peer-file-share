@@ -240,6 +240,10 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
       // Small delay between files
       await Future.delayed(const Duration(milliseconds: 50));
     }
+
+    if (_isCancelled) {
+      throw Exception('Transfer cancelled.');
+    }
   }
 
   DateTime _lastReceiveUpdate = DateTime.now();

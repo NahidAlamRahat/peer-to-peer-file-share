@@ -147,8 +147,43 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('Receive File'), elevation: 0),
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) async {
+        if (didPop) return;
+        
+        if (_waitingForFile) {
+          final shouldPop = await showDialog<bool>(
+            context: context,
+            builder: (context) => AlertDialog(
+              title: const Text('Cancel Connection?'),
+              content: const Text('Are you sure you want to cancel connecting to the sender?'),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(false),
+                  child: const Text('No, Stay', style: TextStyle(fontWeight: FontWeight.bold)),
+                ),
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(true),
+                  child: const Text('Yes, Cancel', style: TextStyle(color: Colors.red)),
+                ),
+              ],
+            ),
+          ) ?? false;
+
+          if (shouldPop && context.mounted) {
+            context.read<ConnectionBloc>().add(ResetConnectionEvent());
+            Navigator.of(context).pop();
+          }
+        } else {
+          if (context.mounted) {
+            context.read<ConnectionBloc>().add(ResetConnectionEvent());
+            Navigator.of(context).pop();
+          }
+        }
+      },
+      child: Scaffold(
+        appBar: AppBar(title: const Text('Receive File'), elevation: 0),
       body: BlocConsumer<ConnectionBloc, ConnectionStateBloc>(
         listener: (context, state) {
           if (state is ConnectionMessageReceived) {
@@ -236,7 +271,7 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
           );
         },
       ),
-    );
+    ));
   }
 
   Widget _buildEnterCodeState() {
