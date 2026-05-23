@@ -9,6 +9,7 @@ import '../blocs/connection/connection_bloc.dart';
 import '../blocs/connection/connection_event.dart';
 import '../blocs/connection/connection_state.dart';
 import '../blocs/transfer/transfer_bloc.dart';
+import '../blocs/transfer/transfer_event.dart';
 import '../blocs/transfer/transfer_state.dart';
 import '../widgets/custom_buttons.dart';
 import '../widgets/responsive_layout.dart';
@@ -67,6 +68,13 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
         return;
       }
 
+      // If a previous session left us in a failed/cancelled state, reset it
+      // so the next receive attempt works cleanly.
+      if (transferBloc.state is TransferFailure ||
+          transferBloc.state is TransferSuccess) {
+        transferBloc.add(ResetTransferEvent());
+      }
+
       if (widget.autoJoinSessionId != null && widget.autoJoinSessionId!.isNotEmpty) {
         _codeController.text = widget.autoJoinSessionId!;
         // If file info is preloaded from URL — DON'T auto-join.
@@ -102,6 +110,8 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
   /// Called when receiver taps Download on the link-preview screen.
   /// Connects to sender and auto-accepts the download without extra confirmation.
   void _joinSessionFromLink() {
+    // Reset any old transfer state so _isCancelled flag is cleared
+    context.read<TransferBloc>().add(ResetTransferEvent());
     setState(() {
       _autoAcceptDownload = true;
       _waitingForFile = true;
@@ -114,6 +124,9 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
 
   void _startDownload() {
     if (_fileMetadata != null) {
+      // 0. Reset any old transfer state so _isCancelled is cleared
+      context.read<TransferBloc>().add(ResetTransferEvent());
+
       // 1. Tell sender we accepted the download
       context.read<ConnectionBloc>().add(
         SendMessageEvent({'action': 'accept_download'}),

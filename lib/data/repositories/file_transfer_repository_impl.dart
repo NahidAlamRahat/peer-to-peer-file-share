@@ -107,6 +107,12 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
   }
 
   @override
+  void resetTransferState() {
+    _isCancelled = false;
+    resetReceiveState();
+  }
+
+  @override
   Future<void> sendFiles(List<ShareFile> files) async {
     _isCancelled = false;
     

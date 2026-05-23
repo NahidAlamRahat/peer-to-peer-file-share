@@ -125,6 +125,7 @@ class TransferBloc extends Bloc<TransferEvent, TransferState> {
     ResetTransferEvent event,
     Emitter<TransferState> emit,
   ) {
+    fileTransferRepository.resetTransferState();
     emit(TransferInitial());
   }
 

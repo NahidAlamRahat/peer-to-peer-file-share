@@ -17,4 +17,7 @@ abstract class FileTransferRepository {
   void saveFileManually(String filePath);
   
   void cancelTransfer();
+  
+  /// Resets the internal transfer state (like cancel flags) between sessions.
+  void resetTransferState();
 }
