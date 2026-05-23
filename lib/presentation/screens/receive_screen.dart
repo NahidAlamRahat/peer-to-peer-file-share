@@ -285,15 +285,16 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
         ),
         AppSpacing.gapH24,
         Text(
-          'Enter the 6-digit code or complete ID from the sender:',
+          'Enter the 6-digit session code from the sender:',
           style: TextStyle(fontSize: AppSizes.textSubtitle),
           textAlign: TextAlign.center,
         ),
         AppSpacing.gapH32,
         TextField(
           controller: _codeController,
+          keyboardType: TextInputType.number,
           decoration: InputDecoration(
-            labelText: 'Enter Code',
+            labelText: 'Session Code',
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(AppSizes.radiusLarge),
             ),
