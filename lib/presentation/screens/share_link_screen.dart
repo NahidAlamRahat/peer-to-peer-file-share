@@ -97,12 +97,57 @@ class _ShareLinkScreenState extends State<ShareLinkScreen> {
     final connectionBloc = context.read<ConnectionBloc>();
     final messenger = ScaffoldMessenger.of(context);
 
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Share File'),
-        elevation: 0,
-      ),
-      body: BlocConsumer<ConnectionBloc, ConnectionStateBloc>(
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) async {
+        if (didPop) return;
+
+        // Only warn if a session is active (files selected + session created/connected)
+        final state = context.read<ConnectionBloc>().state;
+        final isSessionActive = _selectedFiles.isNotEmpty &&
+            (state is ConnectionCreated ||
+                state is ConnectionConnected ||
+                state is ConnectionMessageReceived);
+
+        if (isSessionActive) {
+          final shouldPop = await showDialog<bool>(
+            context: context,
+            builder: (context) => AlertDialog(
+              title: const Text('Cancel Session?'),
+              content: const Text(
+                  'If you go back now, the session will end and the receiver will not be able to connect. Are you sure?'),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(false),
+                  child: const Text('No, Stay',
+                      style: TextStyle(fontWeight: FontWeight.bold)),
+                ),
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(true),
+                  child: const Text('Yes, Cancel',
+                      style: TextStyle(color: Colors.red)),
+                ),
+              ],
+            ),
+          ) ?? false;
+
+          if (shouldPop && context.mounted) {
+            context.read<ConnectionBloc>().add(ResetConnectionEvent());
+            Navigator.of(context).pop();
+          }
+        } else {
+          if (context.mounted) {
+            context.read<ConnectionBloc>().add(ResetConnectionEvent());
+            Navigator.of(context).pop();
+          }
+        }
+      },
+      child: Scaffold(
+        appBar: AppBar(
+          title: const Text('Share File'),
+          elevation: 0,
+        ),
+        body: BlocConsumer<ConnectionBloc, ConnectionStateBloc>(
         listener: (context, state) async {
           if (state is ConnectionCreated && _selectedFiles.isNotEmpty) {
             debugPrint('✅ [UI] Link generated! Session ID: ${state.sessionId}');
@@ -166,7 +211,7 @@ class _ShareLinkScreenState extends State<ShareLinkScreen> {
           );
         },
       ),
-    );
+    ));
   }
 
   Widget _buildFileSelectionState() {
