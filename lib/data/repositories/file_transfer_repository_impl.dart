@@ -98,6 +98,9 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
   void cancelTransfer() {
     _isCancelled = true;
     _webrtcClient.sendDataMessage(RTCDataChannelMessage(jsonEncode({'type': 'cancel'})));
+    if (_bufferCompleter != null && !_bufferCompleter!.isCompleted) {
+      _bufferCompleter!.complete();
+    }
     _fileSaver?.discard();
     _fileSaver = null;
     _progressController.addError('Transfer cancelled');
@@ -274,6 +277,9 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
           }
         } else if (decoded['type'] == 'cancel') {
           _isCancelled = true;
+          if (_bufferCompleter != null && !_bufferCompleter!.isCompleted) {
+            _bufferCompleter!.complete();
+          }
           await _fileSaver?.discard();
           _fileSaver = null;
           _progressController.addError('Transfer cancelled by peer');

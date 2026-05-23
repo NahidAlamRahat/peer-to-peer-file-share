@@ -358,6 +358,7 @@ class _TransferScreenState extends State<TransferScreen> {
           CustomButton(
             text: 'Retry Connection',
             onPressed: () {
+               context.read<TransferBloc>().add(ResetTransferEvent());
                context.read<ConnectionBloc>().add(ResetConnectionEvent());
                Navigator.of(context).pop();
             },
