@@ -4,8 +4,8 @@ echo    Auto-Deploy Script for PeerTransfer
 echo ==========================================
 echo.
 
-echo [1/4] Building latest APK...
-call flutter build apk --release
+echo [1/4] Building latest APK (Optimized size)...
+call flutter build apk --release --target-platform android-arm,android-arm64
 if %errorlevel% neq 0 (
     echo [Error] Failed to build APK.
     pause
