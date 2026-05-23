@@ -428,7 +428,7 @@ class HomeScreen extends StatelessWidget {
             child: FilledButton.icon(
               onPressed: () {
                 launchUrlString(
-                  'https://github.com/NahidAlamRahat/peer-to-peer-file-share/releases/latest/download/PeerTransfer.apk',
+                  '/apk/PeerTransfer.apk',
                   mode: LaunchMode.externalApplication,
                 );
               },
