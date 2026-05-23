@@ -78,21 +78,47 @@ class _TransferScreenState extends State<TransferScreen> {
   @override
   Widget build(BuildContext context) {
     return PopScope(
-      canPop: true,
-      onPopInvokedWithResult: (didPop, result) {
-        // No longer disconnecting on pop. Let it run in background.
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) async {
+        if (didPop) return;
+        
+        final state = context.read<TransferBloc>().state;
+        if (state is TransferInProgress || state is TransferInitial) {
+          final shouldPop = await showDialog<bool>(
+            context: context,
+            builder: (context) => AlertDialog(
+              title: const Text('Cancel Transfer?'),
+              content: const Text('If you exit now, the file transfer will be cancelled. Are you sure you want to exit?'),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(false),
+                  child: const Text('No, Stay', style: TextStyle(fontWeight: FontWeight.bold)),
+                ),
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(true),
+                  child: const Text('Yes, Exit', style: TextStyle(color: Colors.red)),
+                ),
+              ],
+            ),
+          ) ?? false;
+
+          if (shouldPop && context.mounted) {
+            context.read<TransferBloc>().add(CancelTransferEvent());
+            context.read<ConnectionBloc>().add(ResetConnectionEvent());
+            Navigator.of(context).pop();
+          }
+        } else {
+          if (context.mounted) {
+            context.read<TransferBloc>().add(ResetTransferEvent());
+            context.read<ConnectionBloc>().add(ResetConnectionEvent());
+            Navigator.of(context).pop();
+          }
+        }
       },
       child: Scaffold(
         appBar: AppBar(
           title: const Text('Live Transfer'),
           elevation: 0,
-          leading: IconButton(
-            icon: const Icon(Icons.arrow_back),
-            onPressed: () {
-              // Just pop. Background service/Bloc handles the rest.
-              Navigator.of(context).pop();
-            },
-          ),
         ),
         body: BlocConsumer<TransferBloc, TransferState>(
           listener: (context, state) {
@@ -305,16 +331,7 @@ class _TransferScreenState extends State<TransferScreen> {
             textAlign: TextAlign.center, 
             style: const TextStyle(color: Colors.grey)
           ),
-          if (state.filePath.startsWith('blob:') && widget.role == SessionRole.receiver) ...[
-            AppSpacing.gapH32,
-            CustomButton(
-              text: 'Save File to Device',
-              icon: Icons.save_alt,
-              onPressed: () {
-                context.read<TransferBloc>().add(SaveFileManuallyEvent(state.filePath));
-              },
-            ),
-          ],
+
           AppSpacing.gapH16,
           CustomButton(
             text: 'Finish',
