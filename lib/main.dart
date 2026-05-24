@@ -14,6 +14,7 @@ import 'presentation/blocs/connection/connection_bloc.dart';
 import 'presentation/blocs/transfer/transfer_bloc.dart';
 import 'presentation/screens/home_screen.dart';
 import 'presentation/screens/receive_screen.dart';
+import 'presentation/screens/splash_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -105,14 +106,12 @@ class P2PFileShareApp extends StatelessWidget {
         debugShowCheckedModeBanner: false,
         theme: AppTheme.lightTheme,
         darkTheme: AppTheme.darkTheme,
-        home: (initialSessionId != null && initialSessionId!.isNotEmpty)
-            ? ReceiveScreen(
-                autoJoinSessionId:  initialSessionId,
-                preloadedFileName:  initialFileName,
-                preloadedFileSize:  initialFileSize,
-                preloadedFileCount: initialFileCount,
-              )
-            : const HomeScreen(),
+        home: SplashScreen(
+          initialSessionId:  initialSessionId,
+          initialFileName:   initialFileName,
+          initialFileSize:   initialFileSize,
+          initialFileCount:  initialFileCount,
+        ),
       ),
     );
   }
