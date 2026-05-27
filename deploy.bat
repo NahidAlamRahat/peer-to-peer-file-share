@@ -15,7 +15,7 @@ if %errorlevel% neq 0 (
 echo.
 echo [2/4] Copying APK to Web folder...
 if not exist web\apk mkdir web\apk
-copy /Y build\app\outputs\flutter-apk\app-release.apk web\apk\PeerTransfer.apk
+powershell -Command "Copy-Item -Path 'build\app\outputs\flutter-apk\app-release.apk' -Destination 'web\apk\PeerTransfer.apk' -Force"
 
 echo.
 echo [3/4] Adding changes to Git...

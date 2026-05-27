@@ -75,6 +75,90 @@ class _TransferScreenState extends State<TransferScreen> {
     super.dispose();
   }
 
+  Future<void> _confirmAndCancelTransfer(BuildContext context) async {
+    final primaryColor = Theme.of(context).colorScheme.primary;
+    
+    final shouldCancel = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => AlertDialog(
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppSizes.radiusLarge),
+        ),
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: Colors.red.withValues(alpha: 0.1),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(
+                Icons.warning_amber_rounded,
+                color: Colors.redAccent,
+                size: 24,
+              ),
+            ),
+            AppSpacing.gapW12,
+            const Text(
+              'Cancel Transfer?',
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: 20,
+              ),
+            ),
+          ],
+        ),
+        content: const Text(
+          'Are you sure you want to stop the file transfer? This will disconnect the peer connection and cancel the current sharing session. Any unfinished files will need to be sent again.',
+          style: TextStyle(
+            fontSize: 15,
+            height: 1.4,
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            style: TextButton.styleFrom(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+            ),
+            child: Text(
+              'Keep Sharing',
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                color: primaryColor,
+              ),
+            ),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.redAccent,
+              foregroundColor: Colors.white,
+              elevation: 0,
+              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(AppSizes.radiusMedium),
+              ),
+            ),
+            child: const Text(
+              'Yes, Cancel',
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+        ],
+      ),
+    ) ?? false;
+
+    if (shouldCancel && context.mounted) {
+      context.read<TransferBloc>().add(CancelTransferEvent());
+      context.read<ConnectionBloc>().add(ResetConnectionEvent());
+      Navigator.of(context).pop();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return PopScope(
@@ -84,29 +168,7 @@ class _TransferScreenState extends State<TransferScreen> {
         
         final state = context.read<TransferBloc>().state;
         if (state is TransferInProgress || state is TransferInitial) {
-          final shouldPop = await showDialog<bool>(
-            context: context,
-            builder: (context) => AlertDialog(
-              title: const Text('Cancel Transfer?'),
-              content: const Text('If you exit now, the file transfer will be cancelled. Are you sure you want to exit?'),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.of(context).pop(false),
-                  child: const Text('No, Stay', style: TextStyle(fontWeight: FontWeight.bold)),
-                ),
-                TextButton(
-                  onPressed: () => Navigator.of(context).pop(true),
-                  child: const Text('Yes, Exit', style: TextStyle(color: Colors.red)),
-                ),
-              ],
-            ),
-          ) ?? false;
-
-          if (shouldPop && context.mounted) {
-            context.read<TransferBloc>().add(CancelTransferEvent());
-            context.read<ConnectionBloc>().add(ResetConnectionEvent());
-            Navigator.of(context).pop();
-          }
+          _confirmAndCancelTransfer(context);
         } else {
           if (context.mounted) {
             context.read<TransferBloc>().add(ResetTransferEvent());
@@ -303,9 +365,7 @@ class _TransferScreenState extends State<TransferScreen> {
           AppSpacing.gapH32,
           if (state.progress < 1.0)
             TextButton.icon(
-              onPressed: () {
-                context.read<TransferBloc>().add(CancelTransferEvent());
-              },
+              onPressed: () => _confirmAndCancelTransfer(context),
               icon: const Icon(Icons.cancel, color: Colors.red),
               label: const Text('Cancel Transfer', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
             ),
