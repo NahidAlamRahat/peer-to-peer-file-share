@@ -15,6 +15,7 @@ import '../../domain/entities/peer_session.dart';
 import '../../domain/entities/share_file.dart';
 import '../blocs/connection/connection_bloc.dart';
 import '../blocs/connection/connection_event.dart';
+import '../blocs/connection/connection_state.dart';
 import '../blocs/transfer/transfer_bloc.dart';
 import '../blocs/transfer/transfer_event.dart';
 import '../blocs/transfer/transfer_state.dart';
@@ -162,6 +163,8 @@ class _TransferScreenState extends State<TransferScreen> {
       );
       Future.delayed(const Duration(milliseconds: 400), () {
         tBloc.add(CancelTransferEvent());
+      });
+      Future.delayed(const Duration(milliseconds: 1500), () {
         cBloc.add(ResetConnectionEvent());
       });
     }
@@ -197,7 +200,16 @@ class _TransferScreenState extends State<TransferScreen> {
           title: const Text('Live Transfer'),
           elevation: 0,
         ),
-        body: BlocConsumer<TransferBloc, TransferState>(
+        body: BlocListener<ConnectionBloc, ConnectionStateBloc>(
+          listener: (context, connectionState) {
+            final transferState = context.read<TransferBloc>().state;
+            if (transferState is TransferInProgress) {
+              if (connectionState is ConnectionFailed || connectionState is ConnectionOffline || connectionState is ConnectionInitial) {
+                 context.read<TransferBloc>().add(const TransferErrorEvent('Connection to peer was lost.'));
+              }
+            }
+          },
+          child: BlocConsumer<TransferBloc, TransferState>(
           listener: (context, state) {
             if (state is TransferSuccess) {
               WakelockPlus.disable();
@@ -227,6 +239,7 @@ class _TransferScreenState extends State<TransferScreen> {
              );
           },
         ),
+        ), // Close BlocListener
       ),
     );
   }
