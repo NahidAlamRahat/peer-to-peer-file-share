@@ -153,9 +153,13 @@ class _TransferScreenState extends State<TransferScreen> {
     ) ?? false;
 
     if (shouldCancel && context.mounted) {
-      context.read<TransferBloc>().add(CancelTransferEvent());
-      context.read<ConnectionBloc>().add(ResetConnectionEvent());
+      final tBloc = context.read<TransferBloc>();
+      final cBloc = context.read<ConnectionBloc>();
       Navigator.of(context).pop();
+      Future.delayed(const Duration(milliseconds: 400), () {
+        tBloc.add(CancelTransferEvent());
+        cBloc.add(ResetConnectionEvent());
+      });
     }
   }
 
@@ -171,9 +175,13 @@ class _TransferScreenState extends State<TransferScreen> {
           _confirmAndCancelTransfer(context);
         } else {
           if (context.mounted) {
-            context.read<TransferBloc>().add(ResetTransferEvent());
-            context.read<ConnectionBloc>().add(ResetConnectionEvent());
+            final tBloc = context.read<TransferBloc>();
+            final cBloc = context.read<ConnectionBloc>();
             Navigator.of(context).pop();
+            Future.delayed(const Duration(milliseconds: 400), () {
+              tBloc.add(ResetTransferEvent());
+              cBloc.add(ResetConnectionEvent());
+            });
           }
         }
       },
@@ -398,9 +406,13 @@ class _TransferScreenState extends State<TransferScreen> {
             icon: Icons.check_circle_outline,
             isPrimary: false,
             onPressed: () {
-              context.read<TransferBloc>().add(ResetTransferEvent());
-              context.read<ConnectionBloc>().add(ResetConnectionEvent());
+              final tBloc = context.read<TransferBloc>();
+              final cBloc = context.read<ConnectionBloc>();
               Navigator.of(context).popUntil((route) => route.isFirst);
+              Future.delayed(const Duration(milliseconds: 400), () {
+                tBloc.add(ResetTransferEvent());
+                cBloc.add(ResetConnectionEvent());
+              });
             },
           ),
         ],
@@ -418,9 +430,13 @@ class _TransferScreenState extends State<TransferScreen> {
           CustomButton(
             text: 'Retry Connection',
             onPressed: () {
-               context.read<TransferBloc>().add(ResetTransferEvent());
-               context.read<ConnectionBloc>().add(ResetConnectionEvent());
+               final tBloc = context.read<TransferBloc>();
+               final cBloc = context.read<ConnectionBloc>();
                Navigator.of(context).pop();
+               Future.delayed(const Duration(milliseconds: 400), () {
+                 tBloc.add(ResetTransferEvent());
+                 cBloc.add(ResetConnectionEvent());
+               });
             },
           )
         ],
