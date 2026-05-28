@@ -20,6 +20,7 @@ import '../blocs/transfer/transfer_event.dart';
 import '../blocs/transfer/transfer_state.dart';
 import '../widgets/custom_buttons.dart';
 import '../widgets/responsive_layout.dart';
+import 'home_screen.dart';
 
 class TransferScreen extends StatefulWidget {
   final SessionRole role;
@@ -155,7 +156,10 @@ class _TransferScreenState extends State<TransferScreen> {
     if (shouldCancel && context.mounted) {
       final tBloc = context.read<TransferBloc>();
       final cBloc = context.read<ConnectionBloc>();
-      Navigator.of(context).pop();
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(builder: (_) => const HomeScreen()),
+        (route) => false,
+      );
       Future.delayed(const Duration(milliseconds: 400), () {
         tBloc.add(CancelTransferEvent());
         cBloc.add(ResetConnectionEvent());
@@ -177,7 +181,10 @@ class _TransferScreenState extends State<TransferScreen> {
           if (context.mounted) {
             final tBloc = context.read<TransferBloc>();
             final cBloc = context.read<ConnectionBloc>();
-            Navigator.of(context).pop();
+            Navigator.of(context).pushAndRemoveUntil(
+              MaterialPageRoute(builder: (_) => const HomeScreen()),
+              (route) => false,
+            );
             Future.delayed(const Duration(milliseconds: 400), () {
               tBloc.add(ResetTransferEvent());
               cBloc.add(ResetConnectionEvent());
@@ -408,7 +415,10 @@ class _TransferScreenState extends State<TransferScreen> {
             onPressed: () {
               final tBloc = context.read<TransferBloc>();
               final cBloc = context.read<ConnectionBloc>();
-              Navigator.of(context).popUntil((route) => route.isFirst);
+              Navigator.of(context).pushAndRemoveUntil(
+                MaterialPageRoute(builder: (_) => const HomeScreen()),
+                (route) => false,
+              );
               Future.delayed(const Duration(milliseconds: 400), () {
                 tBloc.add(ResetTransferEvent());
                 cBloc.add(ResetConnectionEvent());
@@ -432,7 +442,10 @@ class _TransferScreenState extends State<TransferScreen> {
             onPressed: () {
                final tBloc = context.read<TransferBloc>();
                final cBloc = context.read<ConnectionBloc>();
-               Navigator.of(context).pop();
+               Navigator.of(context).pushAndRemoveUntil(
+                 MaterialPageRoute(builder: (_) => const HomeScreen()),
+                 (route) => false,
+               );
                Future.delayed(const Duration(milliseconds: 400), () {
                  tBloc.add(ResetTransferEvent());
                  cBloc.add(ResetConnectionEvent());
