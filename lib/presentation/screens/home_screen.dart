@@ -9,7 +9,6 @@ import '../../core/theme/app_sizes.dart';
 import '../../core/theme/spacing.dart';
 import '../../domain/entities/peer_session.dart';
 import '../blocs/connection/connection_bloc.dart';
-import '../blocs/connection/connection_event.dart';
 import '../blocs/connection/connection_state.dart';
 import '../blocs/transfer/transfer_bloc.dart';
 import '../blocs/transfer/transfer_event.dart';
@@ -53,32 +52,9 @@ class HomeScreen extends StatelessWidget {
           ),
         ],
       ),
-      body: BlocListener<ConnectionBloc, ConnectionStateBloc>(
-        listener: (context, state) {
-          if (state is ConnectionServerError) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text(state.message),
-                backgroundColor: Colors.orange.shade800,
-                duration: const Duration(seconds: 5),
-                action: SnackBarAction(
-                  label: 'Retry',
-                  textColor: Colors.white,
-                  onPressed: () {
-                    context.read<ConnectionBloc>().add(ResetConnectionEvent());
-                  },
-                ),
-              ),
-            );
-          } else {
-            // Hide the error banner immediately when connection is restored
-            ScaffoldMessenger.of(context).hideCurrentSnackBar();
-          }
-        },
-        child: ResponsiveLayout(
-          mobileBody: _buildMobileLayout(context),
-          desktopBody: _buildDesktopLayout(context),
-        ),
+      body: ResponsiveLayout(
+        mobileBody: _buildMobileLayout(context),
+        desktopBody: _buildDesktopLayout(context),
       ),
     );
   }

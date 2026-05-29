@@ -12,7 +12,6 @@ import 'core/theme/app_theme.dart';
 import 'firebase_options.dart';
 import 'presentation/blocs/connection/connection_bloc.dart';
 import 'presentation/blocs/transfer/transfer_bloc.dart';
-import 'presentation/screens/home_screen.dart';
 import 'presentation/screens/receive_screen.dart';
 import 'presentation/screens/splash_screen.dart';
 
