@@ -93,40 +93,6 @@
         sBar.src = 'https://pl29583442.effectivecpmnetwork.com/a1/06/ed/a106edc96e107a31cce7dce81eb16742.js';
         document.body.appendChild(sBar);
 
-        // Native Banner (Styled to only show 1 block and stay small)
-        var nContainer = document.createElement('div');
-        nContainer.id = 'container-94e1bddb3e559fe0d5fcd01f8f538a82';
-        nContainer.style.position = 'fixed';
-        nContainer.style.bottom = '20px';
-        nContainer.style.right = '20px';
-        nContainer.style.width = '300px';  // Limits to 1 ad block!
-        nContainer.style.maxWidth = '90vw';
-        nContainer.style.zIndex = '99999';
-        nContainer.style.backgroundColor = 'white';
-        nContainer.style.borderRadius = '8px';
-        nContainer.style.boxShadow = '0 4px 6px rgba(0,0,0,0.3)';
-        
-        // Add a close button to Native Banner so users can hide it
-        var closeBtn = document.createElement('div');
-        closeBtn.innerHTML = '×';
-        closeBtn.style.position = 'absolute';
-        closeBtn.style.top = '0px';
-        closeBtn.style.right = '5px';
-        closeBtn.style.cursor = 'pointer';
-        closeBtn.style.fontSize = '20px';
-        closeBtn.style.color = 'black';
-        closeBtn.style.fontWeight = 'bold';
-        closeBtn.style.zIndex = '100000';
-        closeBtn.onclick = function() { nContainer.style.display = 'none'; };
-        nContainer.appendChild(closeBtn);
-
-        document.body.appendChild(nContainer);
-        var nScript = document.createElement('script');
-        nScript.async = true;
-        nScript.dataset.cfasync = 'false';
-        nScript.src = 'https://pl29583441.effectivecpmnetwork.com/94e1bddb3e559fe0d5fcd01f8f538a82/invoke.js';
-        document.body.appendChild(nScript);
-
         // Popunder
         try {
           var KEY = 'pt_pop_ts';
