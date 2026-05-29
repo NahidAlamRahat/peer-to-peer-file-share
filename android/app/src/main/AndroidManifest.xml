@@ -49,6 +49,10 @@
                     android:scheme="https"
                     android:host="peertransfer.app"
                     android:pathPrefix="/"/>
+                <data
+                    android:scheme="https"
+                    android:host="www.peertransfer.app"
+                    android:pathPrefix="/"/>
             </intent-filter>
         </activity>
         <!-- flutter_background Foreground Service entry point -->
