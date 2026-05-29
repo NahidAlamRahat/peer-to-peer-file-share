@@ -1,0 +1,12 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.example.p2p_file_share",
+      "sha256_cert_fingerprints": [
+        "4F:A4:D9:3B:16:98:85:95:80:E1:EF:82:19:78:5D:A0:3B:42:63:3F:D9:5E:5C:C5:44:1E:98:B2:9F:C7:B5:E0"
+      ]
+    }
+  }
+]

@@ -75,7 +75,9 @@ void main() async {
   ));
 }
 
-class P2PFileShareApp extends StatelessWidget {
+final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
+
+class P2PFileShareApp extends StatefulWidget {
   final String? initialSessionId;
   final String? initialFileName;
   final int?    initialFileSize;
@@ -90,6 +92,40 @@ class P2PFileShareApp extends StatelessWidget {
   });
 
   @override
+  State<P2PFileShareApp> createState() => _P2PFileShareAppState();
+}
+
+class _P2PFileShareAppState extends State<P2PFileShareApp> {
+  late final AppLinks _appLinks;
+  
+  @override
+  void initState() {
+    super.initState();
+    if (!kIsWeb) {
+      _appLinks = AppLinks();
+      _appLinks.uriLinkStream.listen((uri) {
+        final sessionId = uri.queryParameters['session'];
+        if (sessionId != null && sessionId.isNotEmpty) {
+          final fileName = uri.queryParameters['name'] != null ? Uri.decodeComponent(uri.queryParameters['name']!) : null;
+          final fileSize = int.tryParse(uri.queryParameters['size'] ?? '');
+          final fileCount = int.tryParse(uri.queryParameters['count'] ?? '');
+
+          navigatorKey.currentState?.push(
+            MaterialPageRoute(
+              builder: (_) => ReceiveScreen(
+                autoJoinSessionId: sessionId,
+                preloadedFileName: fileName,
+                preloadedFileSize: fileSize,
+                preloadedFileCount: fileCount,
+              ),
+            ),
+          );
+        }
+      });
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     return MultiBlocProvider(
       providers: [
@@ -102,15 +138,16 @@ class P2PFileShareApp extends StatelessWidget {
         ),
       ],
       child: MaterialApp(
+        navigatorKey: navigatorKey,
         title: 'PeerTransfer',
         debugShowCheckedModeBanner: false,
         theme: AppTheme.lightTheme,
         darkTheme: AppTheme.darkTheme,
         home: SplashScreen(
-          initialSessionId:  initialSessionId,
-          initialFileName:   initialFileName,
-          initialFileSize:   initialFileSize,
-          initialFileCount:  initialFileCount,
+          initialSessionId:  widget.initialSessionId,
+          initialFileName:   widget.initialFileName,
+          initialFileSize:   widget.initialFileSize,
+          initialFileCount:  widget.initialFileCount,
         ),
       ),
     );

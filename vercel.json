@@ -3,7 +3,17 @@
   "outputDirectory": "build/web",
   "installCommand": "git clone https://github.com/flutter/flutter.git --depth 1 -b stable && flutter/bin/flutter config --enable-web && flutter/bin/flutter pub get",
   "framework": null,
+  "headers": [
+    {
+      "source": "/.well-known/assetlinks.json",
+      "headers": [
+        { "key": "Content-Type", "value": "application/json" },
+        { "key": "Cache-Control", "value": "public, max-age=3600" }
+      ]
+    }
+  ],
   "rewrites": [
-    { "source": "/(.*)", "destination": "/index.html" }
+    { "source": "/.well-known/:path*", "destination": "/.well-known/:path*" },
+    { "source": "/:path*",             "destination": "/index.html" }
   ]
 }
