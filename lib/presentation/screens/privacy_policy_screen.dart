@@ -8,7 +8,7 @@ class PrivacyPolicyScreen extends StatelessWidget {
   static const String _developerName = 'Nahid Alam Rahat';
   static const String _appName = 'PeerTransfer';
   static const String _contactNumber = '+880 1642-743187';
-  static const String _lastUpdated = 'April 24, 2026';
+  static const String _lastUpdated = 'May 31, 2026';
 
   @override
   Widget build(BuildContext context) {
@@ -87,17 +87,26 @@ class PrivacyPolicyScreen extends StatelessWidget {
 
           _PolicySection(
             icon: Icons.folder_open_outlined,
-            title: '2. What Data We Collect',
+            title: '2. What Data We Collect & Access',
             content:
-                '• **Files you choose to share:** We temporarily access files only when you explicitly select them for transfer. Files are streamed directly to the recipient device and are never stored on our servers.\n\n'
-                '• **No personal information collected:** We do not collect your name, email address, phone number, or any other personally identifiable information.\n\n'
-                '• **No usage analytics or tracking:** We do not use third-party analytics, advertising SDKs, or crash-reporting tools that transmit data off-device.\n\n'
-                '• **Signaling server:** A minimal signaling server is used only to help establish the WebRTC connection between peers. It exchanges connection metadata (ICE candidates, session descriptions) and does not receive, store, or process your actual file data.',
+                '• **Camera:** We use the camera solely for scanning QR codes locally to connect devices. No images are saved or transmitted to any server.\n\n'
+                '• **Files you choose to share:** We access files only when you explicitly select them for transfer. Files are transferred directly between devices and are never stored on our servers.\n\n'
+                '• **No usage tracking:** We do not collect your personal information.\n\n'
+                '• **Signaling server:** A minimal signaling server is used only to help establish the WebRTC connection between peers. It does not receive or store your actual file data.',
+          ),
+
+          _PolicySection(
+            icon: Icons.ad_units_outlined,
+            title: '3. Third-Party Services (Ads)',
+            content:
+                'Our app uses third-party services, primarily **Google AdMob**, to serve advertisements.\n\n'
+                'AdMob may collect and use data such as your device\'s Advertising ID, IP address, and interaction data to serve personalized or non-personalized ads. We do not control the data collected by Google AdMob.\n\n'
+                'For more information, please review the Google Privacy Policy online.',
           ),
 
           _PolicySection(
             icon: Icons.share_outlined,
-            title: '3. How We Use Your Data',
+            title: '4. How We Use Data',
             content:
                 'Data is used solely to provide the file-sharing functionality:\n\n'
                 '• Establish a secure peer-to-peer WebRTC connection between sender and receiver.\n'
@@ -108,14 +117,14 @@ class PrivacyPolicyScreen extends StatelessWidget {
 
           _PolicySection(
             icon: Icons.lock_outline_rounded,
-            title: '4. Security',
+            title: '5. Security',
             content:
                 '$_appName uses WebRTC, which encrypts all data-channel traffic using DTLS-SRTP by default. Your files are encrypted in transit. No file content is stored on any server. The signaling server only handles short-lived session negotiation messages and does not retain logs of connections.',
           ),
 
           _PolicySection(
             icon: Icons.storage_outlined,
-            title: '5. Local Storage',
+            title: '6. Local Storage',
             content:
                 'The app stores minimal data locally on your device:\n\n'
                 '• **App settings** (e.g., Keep Screen Awake, Run in Background) — saved in device preferences.\n'
@@ -125,21 +134,21 @@ class PrivacyPolicyScreen extends StatelessWidget {
 
           _PolicySection(
             icon: Icons.child_care_outlined,
-            title: "6. Children's Privacy",
+            title: "7. Children's Privacy",
             content:
                 '$_appName is not directed at children under the age of 13. We do not knowingly collect any personal information from children. If you believe a child has provided personal information through our app, please contact us so we can take appropriate action.',
           ),
 
           _PolicySection(
             icon: Icons.update_outlined,
-            title: '7. Changes to This Policy',
+            title: '8. Changes to This Policy',
             content:
                 'We may update this Privacy Policy from time to time. Any changes will be reflected in the "Last updated" date at the top of this page. We encourage you to review this policy periodically. Continued use of the app after changes constitutes acceptance of the updated policy.',
           ),
 
           _PolicySection(
             icon: Icons.contact_support_outlined,
-            title: '8. Contact Us',
+            title: '9. Contact Us',
             content:
                 'If you have any questions, concerns, or requests regarding this Privacy Policy or your data, please contact us:\n\n'
                 '👤 Developer: $_developerName\n'

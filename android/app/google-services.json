@@ -9,7 +9,7 @@
       "client_info": {
         "mobilesdk_app_id": "1:877064445496:android:aeb7d839839d1b2b52d0cd",
         "android_client_info": {
-          "package_name": "com.example.p2p_file_share"
+          "package_name": "com.peertransfer.app"
         }
       },
       "oauth_client": [],

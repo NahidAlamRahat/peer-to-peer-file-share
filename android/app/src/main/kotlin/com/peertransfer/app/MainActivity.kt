@@ -1,4 +1,4 @@
-package com.example.p2p_file_share
+package com.peertransfer.app
 
 import io.flutter.embedding.android.FlutterFragmentActivity
 
