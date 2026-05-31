@@ -32,32 +32,75 @@
   <link rel="icon" type="image/png" href="favicon.png?v=2" />
 
   <title>PeerTransfer</title>
-  <link rel="manifest" href="manifest.json">
-</head>
-
-<body style="background-color: #0F172A; margin: 0; padding: 0;">
-  <div id="loading-container"
-    style="display: flex; flex-direction: column; justify-content: center; align-items: center; height: 100vh; width: 100vw; position: absolute; top: 0; left: 0; z-index: 1000; background-color: #0F172A; transition: opacity 0.5s ease-out;">
-    <div
-      style="width: 50px; height: 50px; border: 4px solid rgba(255, 255, 255, 0.1); border-left-color: #3b82f6; border-radius: 50%; animation: spin 1s linear infinite;">
-    </div>
-    <div
-      style="margin-top: 20px; color: #94a3b8; font-family: sans-serif; font-size: 16px; font-weight: 500; letter-spacing: 0.5px;">
-      Loading PeerTransfer...</div>
-  </div>
-
-
   <style>
+    :root {
+      --bg-color: #F8F9FA;
+      --heading-color: #1A1A1A;
+      --text-color: #4A5568;
+      --spinner-track: rgba(0, 0, 0, 0.1);
+      --spinner-accent: #3b82f6;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg-color: #0F172A;
+        --heading-color: #FFFFFF;
+        --text-color: #94A3B8;
+        --spinner-track: rgba(255, 255, 255, 0.1);
+        --spinner-accent: #3b82f6;
+      }
+    }
+    body {
+      background-color: var(--bg-color);
+      margin: 0;
+      padding: 0;
+    }
+    #loading-container {
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      width: 100vw;
+      position: absolute;
+      top: 0;
+      left: 0;
+      z-index: 1000;
+      background-color: var(--bg-color);
+      transition: opacity 0.5s ease-out;
+    }
+    .spinner {
+      width: 50px;
+      height: 50px;
+      border: 4px solid var(--spinner-track);
+      border-left-color: var(--spinner-accent);
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+    }
+    .loading-text {
+      margin-top: 20px;
+      color: var(--text-color);
+      font-family: sans-serif;
+      font-size: 16px;
+      font-weight: 500;
+      letter-spacing: 0.5px;
+    }
     @keyframes spin {
       0% {
         transform: rotate(0deg);
       }
-
       100% {
         transform: rotate(360deg);
       }
     }
   </style>
+  <link rel="manifest" href="manifest.json">
+</head>
+
+<body>
+  <div id="loading-container">
+    <div class="spinner"></div>
+    <div class="loading-text">Loading PeerTransfer...</div>
+  </div>
   <script>
     window.addEventListener('load', function () {
       // 1. Detect Facebook/Messenger/Instagram In-App Browser
@@ -70,8 +113,8 @@
           loader.innerHTML = `
             <div style="padding: 30px; text-align: center; max-width: 400px;">
               <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-bottom: 20px;"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
-              <h2 style="color: white; margin-bottom: 10px; font-family: sans-serif;">Unsupported Browser</h2>
-              <p style="color: #94a3b8; line-height: 1.5; font-family: sans-serif; font-size: 16px;">
+              <h2 style="color: var(--heading-color); margin-bottom: 10px; font-family: sans-serif;">Unsupported Browser</h2>
+              <p style="color: var(--text-color); line-height: 1.5; font-family: sans-serif; font-size: 16px;">
                 Messenger and Instagram browsers do not support the features required for this app.
               </p>
               <div style="margin-top: 30px; background-color: rgba(59, 130, 246, 0.1); border: 1px solid #3b82f6; padding: 15px; border-radius: 8px;">
@@ -135,9 +178,9 @@
         if (loader && document.querySelector('flutter-view') == null) {
           loader.innerHTML = `
             <div style="padding: 20px; text-align: center;">
-              <h2 style="color: white; font-family: sans-serif;">Application Error</h2>
-              <p style="color: #94a3b8; font-family: sans-serif;">Your browser might not support WebGL, or an error occurred during loading.</p>
-              <p style="color: #94a3b8; font-family: sans-serif;">Please try opening this link in Chrome or Safari.</p>
+              <h2 style="color: var(--heading-color); font-family: sans-serif;">Application Error</h2>
+              <p style="color: var(--text-color); font-family: sans-serif;">Your browser might not support WebGL, or an error occurred during loading.</p>
+              <p style="color: var(--text-color); font-family: sans-serif;">Please try opening this link in Chrome or Safari.</p>
             </div>
           `;
         }
