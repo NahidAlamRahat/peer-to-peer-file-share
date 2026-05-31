@@ -7,6 +7,7 @@ class PrivacyPolicyScreen extends StatelessWidget {
 
   static const String _developerName = 'Nahid Alam Rahat';
   static const String _appName = 'PeerTransfer';
+  static const String _contactEmail = 'nahidrahat007@gmail.com';
   static const String _contactNumber = '+880 1642-743187';
   static const String _lastUpdated = 'May 31, 2026';
 
@@ -152,6 +153,7 @@ class PrivacyPolicyScreen extends StatelessWidget {
             content:
                 'If you have any questions, concerns, or requests regarding this Privacy Policy or your data, please contact us:\n\n'
                 '👤 Developer: $_developerName\n'
+                '📧 Email: $_contactEmail\n'
                 '📱 WhatsApp: $_contactNumber\n\n'
                 'We aim to respond within 48 hours.',
           ),
