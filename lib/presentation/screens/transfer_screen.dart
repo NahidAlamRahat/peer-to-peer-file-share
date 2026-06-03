@@ -49,6 +49,8 @@ class _TransferScreenState extends State<TransferScreen> {
     if (!kIsWeb && _settings.runInBackground) {
       _startBackgroundExecution();
     }
+    // Request notification permission when starting a transfer
+    _notifications.requestPermission();
   }
 
   Future<void> _startBackgroundExecution() async {

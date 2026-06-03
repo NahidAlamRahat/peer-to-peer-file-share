@@ -25,7 +25,11 @@ class NotificationService {
     // v21 uses named parameter `settings:`
     await _plugin.initialize(settings: initSettings);
 
-    // Request Android 13+ POST_NOTIFICATIONS permission
+    // Removed requestNotificationsPermission from here to avoid blocking app start.
+  }
+
+  Future<void> requestPermission() async {
+    if (kIsWeb) return;
     final android = _plugin.resolvePlatformSpecificImplementation<
         AndroidFlutterLocalNotificationsPlugin>();
     await android?.requestNotificationsPermission();
