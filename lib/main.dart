@@ -18,24 +18,10 @@ import 'presentation/screens/receive_screen.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // ── Firebase (runs on ALL platforms: web + mobile) ────────────────────────
-  await Firebase.initializeApp(
-    options: DefaultFirebaseOptions.currentPlatform,
-  );
-
-  // ── MobileAds SDK (no-op on web via conditional import) ───────────────────
-  await initializeMobileAds();
-
-  // ── AdService: fetch Remote Config ads_enabled ────────────────────────────
-  await AdService.instance.init();
-
-  // ── Preload interstitial on mobile only ───────────────────────────────────
-  if (!kIsWeb) {
-    InterstitialAdService.instance.preload();
-  }
-
+  // ── DI only — fast (SharedPreferences + service registration) ─────────────
   await di.init();
 
+  // ── Parse deep-link before showing UI ──────────────────────────────────────
   String? initialSessionId;
   String? initialFileName;
   int?    initialFileSize;
@@ -51,27 +37,32 @@ void main() async {
       initialFileSize  = int.tryParse(uri.queryParameters['size'] ?? '');
       initialFileCount = int.tryParse(uri.queryParameters['count'] ?? '');
     } catch (_) {}
-  } else {
-    try {
-      final appLinks = AppLinks();
-      final initialUri = await appLinks.getInitialLink();
-      if (initialUri != null) {
-        initialSessionId = initialUri.queryParameters['session'];
-        initialFileName  = initialUri.queryParameters['name'] != null
-            ? Uri.decodeComponent(initialUri.queryParameters['name']!)
-            : null;
-        initialFileSize  = int.tryParse(initialUri.queryParameters['size'] ?? '');
-        initialFileCount = int.tryParse(initialUri.queryParameters['count'] ?? '');
-      }
-    } catch (_) {}
   }
+  // Mobile deep link parsing is moved to initState to avoid blocking main()
 
+  // ── Launch UI immediately ─────────────────────────────────────────────────
   runApp(P2PFileShareApp(
     initialSessionId: initialSessionId,
     initialFileName:  initialFileName,
     initialFileSize:  initialFileSize,
     initialFileCount: initialFileCount,
   ));
+
+  // ── Firebase + MobileAds in background (non-blocking) ────────────────────
+  _initHeavyServices();
+}
+
+Future<void> _initHeavyServices() async {
+  try {
+    await Future.wait([
+      Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform),
+      initializeMobileAds(),
+    ]);
+    AdService.instance.init(); // Remote Config — fire-and-forget
+    if (!kIsWeb) {
+      InterstitialAdService.instance.preload();
+    }
+  } catch (_) {}
 }
 
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();

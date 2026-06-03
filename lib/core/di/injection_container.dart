@@ -21,7 +21,7 @@ Future<void> init() async {
   sl.registerSingleton<SettingsService>(SettingsService(prefs));
 
   final notificationService = NotificationService();
-  await notificationService.init();
+  notificationService.init(); // fire-and-forget: no need to block startup
   sl.registerSingleton<NotificationService>(notificationService);
 
   // AdService is a singleton — already initialised in main() before di.init().

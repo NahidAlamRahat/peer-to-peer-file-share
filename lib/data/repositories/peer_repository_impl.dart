@@ -31,14 +31,19 @@ class PeerRepositoryImpl implements PeerRepository {
   Stream<String> get serverErrorStream => _serverErrorController.stream;
   Stream<String> get statusMessageStream => _statusMessageController.stream;
 
+  bool _listenersSetup = false;
+
   @override
   Future<void> initialize() async {
-    // Only connect if we aren't already. Otherwise we just ensure listeners are attached.
+    // Only connect the WebSocket — fast, non-blocking
     if (!_signalingService.isConnected) {
       _signalingService.connect();
     }
-    await _webrtcClient.initialize();
-    _setupListeners();
+    // WebRTC initialized lazily on first session — NOT here
+    if (!_listenersSetup) {
+      _setupListeners();
+      _listenersSetup = true;
+    }
   }
 
   void _setupListeners() {
@@ -170,6 +175,9 @@ class PeerRepositoryImpl implements PeerRepository {
   Future<String> createSession() async {
     debugPrint('🔑 [REPO] Requesting to create session...');
 
+    // Initialize WebRTC lazily on first use
+    await _webrtcClient.initialize();
+
     if (!_signalingService.isRegistered) {
       debugPrint(
         '⏳ [REPO] Not registered yet — waiting before creating session...',
@@ -205,6 +213,10 @@ class PeerRepositoryImpl implements PeerRepository {
   @override
   Future<void> joinSession(String sessionId) async {
     debugPrint('🔗 [REPO] Attempting to join session: $sessionId');
+
+    // Initialize WebRTC lazily on first use
+    await _webrtcClient.initialize();
+
     _currentRole = SessionRole.receiver;
     _currentSessionId = sessionId;
     _pendingJoinSessionId = sessionId; // Track for auto-retry on reconnect

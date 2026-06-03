@@ -49,7 +49,11 @@ class WebRTCClient {
   Function(RTCPeerConnectionState state)? onConnectionState;
   Function(int amount)? onBufferedAmountLow;
 
+  bool _initialized = false;
+
   Future<void> initialize() async {
+    if (_initialized && _peerConnection != null) return; // Already ready
+
     // Close previous connection if it exists (safe re-initialization)
     _dataChannel?.close();
     await _peerConnection?.close();
@@ -75,6 +79,8 @@ class WebRTCClient {
       _dataChannel = channel;
       _setupDataChannelListeners();
     };
+
+    _initialized = true;
   }
 
   Future<void> createDataChannel() async {
@@ -154,5 +160,6 @@ class WebRTCClient {
     _peerConnection?.close();
     _dataChannel = null;
     _peerConnection = null;
+    _initialized = false; // Allow re-initialization for next session
   }
 }
