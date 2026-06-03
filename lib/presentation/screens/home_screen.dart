@@ -46,7 +46,8 @@ class HomeScreen extends StatelessWidget {
             onPressed: () => Navigator.push(
               context,
               MaterialPageRoute(
-                builder: (_) => SettingsScreen(settingsService: sl<SettingsService>()),
+                builder: (_) =>
+                    SettingsScreen(settingsService: sl<SettingsService>()),
               ),
             ),
           ),
@@ -62,28 +63,31 @@ class HomeScreen extends StatelessWidget {
   Widget _buildServerStatus() {
     return BlocBuilder<ConnectionBloc, ConnectionStateBloc>(
       builder: (context, state) {
-         if (state is ConnectionServerError) {
-            return Container(
-              padding: const EdgeInsets.symmetric(vertical: 8),
-              width: double.infinity,
-              decoration: BoxDecoration(
-                color: Colors.red.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(AppSizes.radiusMedium),
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const Icon(Icons.error_outline, size: 16, color: Colors.red),
-                  AppSpacing.gapW8,
-                  Text(
-                    'Signaling Server Offline',
-                    style: TextStyle(color: Colors.red, fontSize: AppSizes.textSmall),
+        if (state is ConnectionServerError) {
+          return Container(
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            width: double.infinity,
+            decoration: BoxDecoration(
+              color: Colors.red.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(AppSizes.radiusMedium),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(Icons.error_outline, size: 16, color: Colors.red),
+                AppSpacing.gapW8,
+                Text(
+                  'Signaling Server Offline',
+                  style: TextStyle(
+                    color: Colors.red,
+                    fontSize: AppSizes.textSmall,
                   ),
-                ],
-              ),
-            );
-          }
-          return const SizedBox.shrink();
+                ),
+              ],
+            ),
+          );
+        }
+        return const SizedBox.shrink();
       },
     );
   }
@@ -155,19 +159,25 @@ class HomeScreen extends StatelessWidget {
     return BlocBuilder<TransferBloc, TransferState>(
       builder: (context, transferState) {
         return Padding(
-          padding: EdgeInsets.symmetric(horizontal: AppSizes.p24, vertical: AppSizes.p16),
+          padding: EdgeInsets.symmetric(
+            horizontal: AppSizes.p24,
+            vertical: AppSizes.p16,
+          ),
           child: Column(
             children: [
               _buildServerStatus(),
               const Spacer(flex: 2),
               _buildHeroSection(context, isDesktop: false),
               const Spacer(flex: 2),
-              if (transferState is TransferInProgress || transferState is TransferSuccess) ...[
+              if (transferState is TransferInProgress ||
+                  transferState is TransferSuccess) ...[
                 _buildActiveTransferBanner(context, transferState),
                 AppSpacing.gapH24,
               ],
               _buildActionPanel(context),
-              const Spacer(flex: 1), // Pushes action panel up and pins ad banner to the bottom
+              const Spacer(
+                flex: 1,
+              ), // Pushes action panel up and pins ad banner to the bottom
               // ── Banner Ad ────────────────────────────────────────────────────
               const AdBannerWidget(),
               if (kIsWeb) ...[
@@ -203,9 +213,13 @@ class HomeScreen extends StatelessWidget {
     return Container(
       width: double.infinity,
       decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.primaryContainer.withValues(alpha: 0.4),
+        color: Theme.of(
+          context,
+        ).colorScheme.primaryContainer.withValues(alpha: 0.4),
         borderRadius: BorderRadius.circular(AppSizes.radiusMedium),
-        border: Border.all(color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.2)),
+        border: Border.all(
+          color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.2),
+        ),
       ),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(AppSizes.radiusMedium),
@@ -242,9 +256,17 @@ class HomeScreen extends StatelessWidget {
                                 strokeWidth: 3,
                               ),
                             ),
-                            Icon(Icons.play_arrow_rounded, size: 16, color: Theme.of(context).colorScheme.primary),
+                            Icon(
+                              Icons.play_arrow_rounded,
+                              size: 16,
+                              color: Theme.of(context).colorScheme.primary,
+                            ),
                           ] else ...[
-                            Icon(Icons.check_circle_rounded, size: 32, color: Colors.green.shade600),
+                            Icon(
+                              Icons.check_circle_rounded,
+                              size: 32,
+                              color: Colors.green.shade600,
+                            ),
                           ],
                         ],
                       ),
@@ -253,7 +275,12 @@ class HomeScreen extends StatelessWidget {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(title, style: const TextStyle(fontWeight: FontWeight.bold)),
+                            Text(
+                              title,
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
                             Text(
                               fileName,
                               style: TextStyle(fontSize: AppSizes.textSmall),
@@ -268,7 +295,12 @@ class HomeScreen extends StatelessWidget {
                 ),
               ),
             ),
-            VerticalDivider(width: 1, color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.1)),
+            VerticalDivider(
+              width: 1,
+              color: Theme.of(
+                context,
+              ).colorScheme.primary.withValues(alpha: 0.1),
+            ),
             IconButton(
               onPressed: () {
                 context.read<TransferBloc>().add(ResetTransferEvent());
@@ -290,7 +322,9 @@ class HomeScreen extends StatelessWidget {
         Expanded(
           flex: 5,
           child: Container(
-            color: Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.1),
+            color: Theme.of(
+              context,
+            ).colorScheme.surfaceContainerHighest.withValues(alpha: 0.1),
             child: Center(
               child: SingleChildScrollView(
                 padding: EdgeInsets.all(AppSizes.p64),
@@ -305,46 +339,49 @@ class HomeScreen extends StatelessWidget {
           child: Center(
             child: SingleChildScrollView(
               padding: EdgeInsets.all(AppSizes.p64),
-               child: Container(
-                 padding: EdgeInsets.all(AppSizes.p48),
-                 constraints: const BoxConstraints(maxWidth: 500),
-                 decoration: BoxDecoration(
-                   color: Theme.of(context).colorScheme.surface,
-                   borderRadius: BorderRadius.circular(AppSizes.radiusLarge),
-                   boxShadow: [
-                     BoxShadow(
-                       color: Colors.black.withValues(alpha: 0.3),
-                       blurRadius: 40,
-                       offset: const Offset(0, 10),
-                     ),
-                   ],
-                 ),
-                 child: Column(
-                   mainAxisSize: MainAxisSize.min,
-                   children: [
-                      _buildServerStatus(),
-                      AppSpacing.gapH32,
-                      const Text(
-                        'Get Started',
-                        style: TextStyle(fontSize: 32, fontWeight: FontWeight.bold),
+              child: Container(
+                padding: EdgeInsets.all(AppSizes.p48),
+                constraints: const BoxConstraints(maxWidth: 500),
+                decoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.surface,
+                  borderRadius: BorderRadius.circular(AppSizes.radiusLarge),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.3),
+                      blurRadius: 40,
+                      offset: const Offset(0, 10),
+                    ),
+                  ],
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    _buildServerStatus(),
+                    AppSpacing.gapH32,
+                    const Text(
+                      'Get Started',
+                      style: TextStyle(
+                        fontSize: 32,
+                        fontWeight: FontWeight.bold,
                       ),
-                      AppSpacing.gapH8,
-                      const Text(
-                        'Choose an action to proceed.',
-                        style: TextStyle(color: Colors.grey),
-                      ),
-                      AppSpacing.gapH48,
-                       _buildActionPanel(context),
-                       AppSpacing.gapH16,
-                       // ── Banner Ad ─────────────────────────────────────────
-                       const AdBannerWidget(),
-                       if (kIsWeb) ...[
-                         AppSpacing.gapH16,
-                         _buildAppDownloadBanner(context),
-                       ],
-                   ],
-                 ),
-               ),
+                    ),
+                    AppSpacing.gapH8,
+                    const Text(
+                      'Choose an action to proceed.',
+                      style: TextStyle(color: Colors.grey),
+                    ),
+                    AppSpacing.gapH48,
+                    _buildActionPanel(context),
+                    AppSpacing.gapH16,
+                    // ── Banner Ad ─────────────────────────────────────────
+                    const AdBannerWidget(),
+                    if (kIsWeb) ...[
+                      AppSpacing.gapH16,
+                      _buildAppDownloadBanner(context),
+                    ],
+                  ],
+                ),
+              ),
             ),
           ),
         ),
@@ -375,8 +412,11 @@ class HomeScreen extends StatelessWidget {
         children: [
           Row(
             children: [
-              Icon(Icons.download_for_offline_rounded,
-                  color: Theme.of(context).colorScheme.primary, size: 28),
+              Icon(
+                Icons.download_for_offline_rounded,
+                color: Theme.of(context).colorScheme.primary,
+                size: 28,
+              ),
               AppSpacing.gapW12,
               Expanded(
                 child: Text(
@@ -391,13 +431,25 @@ class HomeScreen extends StatelessWidget {
             ],
           ),
           AppSpacing.gapH12,
-          _BannerFeatureRow(icon: Icons.wifi_off, text: 'Transfer continues when screen turns off'),
+          _BannerFeatureRow(
+            icon: Icons.wifi_off,
+            text: 'Transfer continues when screen turns off',
+          ),
           AppSpacing.gapH8,
-          _BannerFeatureRow(icon: Icons.play_circle_outline, text: 'Run in background — leave the app freely'),
+          _BannerFeatureRow(
+            icon: Icons.play_circle_outline,
+            text: 'Run in background — leave the app freely',
+          ),
           AppSpacing.gapH8,
-          _BannerFeatureRow(icon: Icons.notifications_active_outlined, text: 'Live progress notification'),
+          _BannerFeatureRow(
+            icon: Icons.notifications_active_outlined,
+            text: 'Live progress notification',
+          ),
           AppSpacing.gapH8,
-          _BannerFeatureRow(icon: Icons.lock_outline, text: 'No browser tab restrictions'),
+          _BannerFeatureRow(
+            icon: Icons.lock_outline,
+            text: 'No browser tab restrictions',
+          ),
           AppSpacing.gapH16,
           SizedBox(
             width: double.infinity,

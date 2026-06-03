@@ -12,8 +12,8 @@ import 'core/theme/app_theme.dart';
 import 'firebase_options.dart';
 import 'presentation/blocs/connection/connection_bloc.dart';
 import 'presentation/blocs/transfer/transfer_bloc.dart';
+import 'presentation/screens/home_screen.dart';
 import 'presentation/screens/receive_screen.dart';
-import 'presentation/screens/splash_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -142,12 +142,14 @@ class _P2PFileShareAppState extends State<P2PFileShareApp> {
         debugShowCheckedModeBanner: false,
         theme: AppTheme.lightTheme,
         darkTheme: AppTheme.darkTheme,
-        home: SplashScreen(
-          initialSessionId:  widget.initialSessionId,
-          initialFileName:   widget.initialFileName,
-          initialFileSize:   widget.initialFileSize,
-          initialFileCount:  widget.initialFileCount,
-        ),
+        home: (widget.initialSessionId != null && widget.initialSessionId!.isNotEmpty)
+            ? ReceiveScreen(
+                autoJoinSessionId: widget.initialSessionId,
+                preloadedFileName:  widget.initialFileName,
+                preloadedFileSize:  widget.initialFileSize,
+                preloadedFileCount: widget.initialFileCount,
+              )
+            : const HomeScreen(),
       ),
     );
   }
