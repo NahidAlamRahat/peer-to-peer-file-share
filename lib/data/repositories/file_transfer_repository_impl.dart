@@ -62,9 +62,35 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
     _webrtcClient.setBufferedAmountLowThreshold(65536); // 64 KB
     _webrtcClient.onBufferedAmountLow = (amount) {
       _currentDartBuffer = amount;
-      _bufferCompleter?.complete();
+      if (_bufferCompleter != null && !_bufferCompleter!.isCompleted) {
+        _bufferCompleter!.complete();
+      }
       _bufferCompleter = null;
     };
+  }
+
+  /// Wait until the WebRTC buffer drains below [_maxBufferSize].
+  /// Uses polling so it never deadlocks on platforms where
+  /// onBufferedAmountLow is unreliable (e.g. Flutter Web).
+  Future<void> _waitForBuffer() async {
+    const pollInterval = Duration(milliseconds: 20);
+    const maxWait = Duration(seconds: 30);
+    final deadline = DateTime.now().add(maxWait);
+
+    while (!_isCancelled) {
+      final real = _webrtcClient.bufferedAmount;
+      if (real <= _maxBufferSize) {
+        _currentDartBuffer = real;
+        return;
+      }
+      if (DateTime.now().isAfter(deadline)) {
+        debugPrint('⚠️ [P2P] Buffer drain timeout — continuing anyway.');
+        _currentDartBuffer = 0;
+        return;
+      }
+      // Yield to event loop so UI never freezes
+      await Future.delayed(pollInterval);
+    }
   }
 
   /// Reset receiving state between transfers
@@ -188,9 +214,7 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
 
             _currentDartBuffer += slice.length;
             if (_currentDartBuffer > _maxBufferSize) {
-              _bufferCompleter = Completer<void>();
-              await _bufferCompleter!.future;
-              _currentDartBuffer = _webrtcClient.bufferedAmount;
+              await _waitForBuffer();
             }
 
             _webrtcClient.sendDataMessageBinary(slice);
@@ -224,9 +248,7 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
 
           _currentDartBuffer += chunk.length;
           if (_currentDartBuffer > _maxBufferSize) {
-            _bufferCompleter = Completer<void>();
-            await _bufferCompleter!.future;
-            _currentDartBuffer = _webrtcClient.bufferedAmount;
+            await _waitForBuffer();
           }
 
           _webrtcClient.sendDataMessageBinary(chunk);
