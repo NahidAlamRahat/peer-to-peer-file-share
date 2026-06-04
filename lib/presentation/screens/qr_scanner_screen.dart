@@ -176,7 +176,7 @@ class _ScannerOverlayShape extends ShapeBorder {
     
     // Dim background
     final Paint backgroundPaint = Paint()
-      ..color = Colors.black.withOpacity(0.6)
+      ..color = Colors.black.withValues(alpha: 0.6)
       ..style = PaintingStyle.fill;
     
     final Path bgPath = Path()

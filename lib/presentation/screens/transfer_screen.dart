@@ -3,7 +3,6 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_background/flutter_background.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:url_launcher/url_launcher_string.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 import '../../core/di/injection_container.dart';
 import '../../core/services/ad_service.dart';
@@ -263,15 +262,18 @@ class _TransferScreenState extends State<TransferScreen> {
               onPressed: () async {
                 FilePickerResult? result = await FilePicker.platform.pickFiles(
                   allowMultiple: true,
-                  withData: true,
+                  withReadStream: true, // Stream-based: safe for 1GB+ files, no RAM crash
                 );
                 if (result != null && result.files.isNotEmpty) {
-                  final validFiles = result.files.where((f) => f.bytes != null).toList();
+                  final validFiles = result.files
+                      .where((f) => f.readStream != null || f.bytes != null)
+                      .toList();
                   if (validFiles.isNotEmpty) {
                     final shareFiles = validFiles.map((pf) => ShareFile(
                       name: pf.name,
-                      size: pf.bytes!.length,
-                      bytes: pf.bytes!,
+                      size: pf.size,
+                      readStream: pf.readStream,
+                      bytes: pf.bytes,
                     )).toList();
                     // ignore: use_build_context_synchronously
                     context.read<TransferBloc>().add(SendFilesEvent(shareFiles));
@@ -429,10 +431,6 @@ class _TransferScreenState extends State<TransferScreen> {
             icon: Icons.check_circle_outline,
             isPrimary: false,
             onPressed: () {
-              if (kIsWeb) {
-                // Show Adsterra Smartlink auto-ad when transfer finishes
-                launchUrlString('https://www.effectivecpmnetwork.com/xi5is7dew0?key=f892ea74716f32230fa66a11f6354dcc', mode: LaunchMode.externalApplication);
-              }
               final tBloc = context.read<TransferBloc>();
               final cBloc = context.read<ConnectionBloc>();
               Navigator.of(context).pushAndRemoveUntil(

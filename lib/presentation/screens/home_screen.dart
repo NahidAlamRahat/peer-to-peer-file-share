@@ -63,9 +63,14 @@ class HomeScreen extends StatelessWidget {
   Widget _buildServerStatus() {
     return BlocBuilder<ConnectionBloc, ConnectionStateBloc>(
       builder: (context, state) {
-        if (state is ConnectionServerError) {
+        if (state is ConnectionServerError || state is ConnectionFailed) {
+          final isServerError = state is ConnectionServerError;
+          final errorMessage = isServerError
+              ? 'Signaling Server Offline'
+              : (state as ConnectionFailed).message;
+
           return Container(
-            padding: const EdgeInsets.symmetric(vertical: 8),
+            padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
             width: double.infinity,
             decoration: BoxDecoration(
               color: Colors.red.withValues(alpha: 0.1),
@@ -76,11 +81,15 @@ class HomeScreen extends StatelessWidget {
               children: [
                 const Icon(Icons.error_outline, size: 16, color: Colors.red),
                 AppSpacing.gapW8,
-                Text(
-                  'Signaling Server Offline',
-                  style: TextStyle(
-                    color: Colors.red,
-                    fontSize: AppSizes.textSmall,
+                Expanded(
+                  child: Text(
+                    errorMessage,
+                    style: TextStyle(
+                      color: Colors.red,
+                      fontSize: AppSizes.textSmall,
+                      fontWeight: FontWeight.w500,
+                    ),
+                    textAlign: TextAlign.center,
                   ),
                 ),
               ],

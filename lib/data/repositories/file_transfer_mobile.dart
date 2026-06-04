@@ -21,8 +21,10 @@ class MobileFileSaver implements P2PFileSaver {
     File savePath = File('${dir.path}/$fileName');
     int counter = 1;
     while (await savePath.exists()) {
-      final nameWithoutExt = fileName.split('.').first;
-      final ext = fileName.contains('.') ? '.${fileName.split('.').last}' : '';
+      // Use lastIndexOf to correctly handle filenames like "my.doc.v2.pdf"
+      final lastDot = fileName.lastIndexOf('.');
+      final nameWithoutExt = lastDot > 0 ? fileName.substring(0, lastDot) : fileName;
+      final ext = lastDot > 0 ? fileName.substring(lastDot) : '';
       savePath = File('${dir.path}/$nameWithoutExt ($counter)$ext');
       counter++;
     }

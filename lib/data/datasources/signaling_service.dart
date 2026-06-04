@@ -10,7 +10,7 @@ class SignalingService {
   Timer? _reconnectTimer;
   bool _isConnected = false;
   bool _isRegistered = false; // true only after server sends 'registered'
-  bool _disposed = false;
+  final bool _disposed = false;
   int _reconnectAttempts = 0;
   Timer? _heartbeatTimer;
   static const int _maxReconnectAttempts = 50; // Keep retrying aggressively
@@ -243,7 +243,9 @@ class SignalingService {
   }
 
   void dispose() {
-    _disposed = false; // Never permanently dispose the singleton
+    // Singleton: we intentionally do NOT set _disposed = true.
+    // dispose() is called between sessions to clear state/callbacks,
+    // but the WebSocket should auto-reconnect for the next session.
     _isConnected = false;
     _isRegistered = false;
     _reconnectTimer?.cancel();

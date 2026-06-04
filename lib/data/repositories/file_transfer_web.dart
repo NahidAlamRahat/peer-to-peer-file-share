@@ -1,5 +1,5 @@
 import 'dart:typed_data';
-// ignore: avoid_web_libraries_in_flutter
+// ignore: avoid_web_libraries_in_flutter, deprecated_member_use
 import 'dart:html' as html;
 import 'file_saver.dart';
 
@@ -8,6 +8,7 @@ P2PFileSaver getFileSaver() => WebFileSaver();
 class WebFileSaver implements P2PFileSaver {
   final List<dynamic> _chunks = [];
   late String _fileName;
+  String? _blobUrl; // Track blob URL for proper cleanup
 
   String _getMimeType(String fileName) {
     final ext = fileName.split('.').last.toLowerCase();
@@ -28,6 +29,11 @@ class WebFileSaver implements P2PFileSaver {
 
   @override
   Future<void> init(String fileName) async {
+    // Revoke previous blob URL if any (prevents memory leak between files)
+    if (_blobUrl != null) {
+      html.Url.revokeObjectUrl(_blobUrl!);
+      _blobUrl = null;
+    }
     _fileName = fileName;
     _chunks.clear();
   }
@@ -35,7 +41,7 @@ class WebFileSaver implements P2PFileSaver {
   @override
   void addChunk(Uint8List chunk) {
     // Array of Blob parts inside Javascript, bypassing Dart heap limitations
-    _chunks.add(chunk); 
+    _chunks.add(chunk);
   }
 
   @override
@@ -43,19 +49,16 @@ class WebFileSaver implements P2PFileSaver {
     final mimeType = _getMimeType(_fileName);
     final blob = html.Blob(_chunks, mimeType);
     final url = html.Url.createObjectUrlFromBlob(blob);
-    
-    // Attempt auto-download (might be blocked on mobile)
+    _blobUrl = url; // Track for later revocation
+
+    // Attempt auto-download (might be blocked on mobile browsers)
     html.AnchorElement(href: url)
       ..setAttribute('download', _fileName)
       ..click();
-      
-    // DO NOT revoke the URL here so the user can manually click a button if blocked
-    // html.Url.revokeObjectUrl(url);
-    
-    // DO NOT clear chunks yet in case they need to re-download. 
-    // Wait for discard() or next init().
-    
-    return url; // Returning the Blob URL to the UI so it can be re-triggered manually
+
+    // DO NOT revoke the URL here — user may need to manually click download
+    // URL will be revoked in discard() when the session ends.
+    return url; // Return Blob URL so UI can re-trigger manually if blocked
   }
 
   @override
@@ -69,6 +72,12 @@ class WebFileSaver implements P2PFileSaver {
 
   @override
   Future<void> discard() async {
+    // Revoke blob URL to free browser memory (critical for large files)
+    if (_blobUrl != null) {
+      html.Url.revokeObjectUrl(_blobUrl!);
+      _blobUrl = null;
+    }
     _chunks.clear();
   }
 }
+

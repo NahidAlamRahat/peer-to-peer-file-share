@@ -239,7 +239,7 @@ class PeerRepositoryImpl implements PeerRepository {
         debugPrint('❌ [REPO] Timed out waiting for server registration.');
         _pendingJoinSessionId = null;
         _sessionStateController.add(SessionState.failed);
-        return;
+        throw Exception('Server unreachable. Please check your internet connection.');
       }
       debugPrint('✅ [REPO] Registered with server — now sending join-session.');
     }
@@ -258,6 +258,7 @@ class PeerRepositoryImpl implements PeerRepository {
       debugPrint('⏰ [REPO] WebRTC connection timed out after 30s.');
       _pendingJoinSessionId = null;
       _sessionStateController.add(SessionState.failed);
+      throw Exception('Connection timed out. Please make sure the sender is still waiting on the Share screen.');
     }
   }
 

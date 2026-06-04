@@ -95,7 +95,8 @@ class ConnectionBloc extends Bloc<ConnectionEvent, ConnectionStateBloc> {
       currentRole = SessionRole.receiver;
       await peerRepository.joinSession(event.sessionId);
     } catch (e) {
-      emit(ConnectionFailed(e.toString()));
+      final msg = e.toString().replaceAll('Exception: ', '');
+      emit(ConnectionFailed(msg));
     }
   }
 
@@ -106,7 +107,10 @@ class ConnectionBloc extends Bloc<ConnectionEvent, ConnectionStateBloc> {
     if (event.state == SessionState.connected) {
       emit(ConnectionConnected(currentRole!));
     } else if (event.state == SessionState.failed) {
-      emit(const ConnectionFailed('Connection failed or disconnected'));
+      // Don't overwrite if we already have a specific error message
+      if (state is! ConnectionFailed && state is! ConnectionServerError) {
+        emit(const ConnectionFailed('Connection failed or disconnected'));
+      }
     } else if (event.state == SessionState.offline) {
       emit(ConnectionOffline());
     }
