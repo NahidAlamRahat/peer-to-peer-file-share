@@ -14,7 +14,9 @@ class NotificationService {
   Future<void> init() async {
     if (kIsWeb) return;
 
-    const androidInit = AndroidInitializationSettings('@drawable/ic_notification');
+    const androidInit = AndroidInitializationSettings(
+      '@drawable/ic_notification',
+    );
     const darwinInit = DarwinInitializationSettings();
     const initSettings = InitializationSettings(
       android: androidInit,
@@ -30,36 +32,41 @@ class NotificationService {
 
   Future<void> requestPermission() async {
     if (kIsWeb) return;
-    final android = _plugin.resolvePlatformSpecificImplementation<
-        AndroidFlutterLocalNotificationsPlugin>();
+    final android = _plugin
+        .resolvePlatformSpecificImplementation<
+          AndroidFlutterLocalNotificationsPlugin
+        >();
     await android?.requestNotificationsPermission();
   }
 
   NotificationDetails get _details => const NotificationDetails(
-        android: AndroidNotificationDetails(
-          _channelId,
-          _channelName,
-          channelDescription: _channelDesc,
-          importance: Importance.high,
-          priority: Priority.high,
-        ),
-      );
+    android: AndroidNotificationDetails(
+      _channelId,
+      _channelName,
+      channelDescription: _channelDesc,
+      importance: Importance.high,
+      priority: Priority.high,
+    ),
+  );
 
-  NotificationDetails _progressDetails(int progress, int maxProgress) =>
-      NotificationDetails(
-        android: AndroidNotificationDetails(
-          _channelId,
-          _channelName,
-          channelDescription: _channelDesc,
-          importance: Importance.low, // Low importance so it doesn't pop up or make sound continuously
-          priority: Priority.low,
-          onlyAlertOnce: true,
-          showProgress: true,
-          maxProgress: maxProgress,
-          progress: progress,
-          ongoing: true,
-        ),
-      );
+  NotificationDetails _progressDetails(
+    int progress,
+    int maxProgress,
+  ) => NotificationDetails(
+    android: AndroidNotificationDetails(
+      _channelId,
+      _channelName,
+      channelDescription: _channelDesc,
+      importance: Importance
+          .low, // Low importance so it doesn't pop up or make sound continuously
+      priority: Priority.low,
+      onlyAlertOnce: true,
+      showProgress: true,
+      maxProgress: maxProgress,
+      progress: progress,
+      ongoing: true,
+    ),
+  );
 
   Future<void> showProgressNotification({
     required int progress,
@@ -88,7 +95,7 @@ class NotificationService {
     final body = isSender
         ? '"$fileName" sent successfully.'
         : '"$fileName" saved to your device.';
-    
+
     await _plugin.show(
       id: 1001,
       title: title,
