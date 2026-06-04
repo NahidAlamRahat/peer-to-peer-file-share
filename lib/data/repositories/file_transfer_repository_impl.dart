@@ -79,6 +79,7 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
   }
 
   Completer<void>? _bufferCompleter;
+  final Map<String, Completer<void>> _ackCompleters = {};
   static const int _maxBufferSize = 1048576; // 1 MB
   static const int _chunkSize = 16384; // 16 KB strict SCTP compatibility
 
@@ -100,6 +101,12 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
     if (_bufferCompleter != null && !_bufferCompleter!.isCompleted) {
       _bufferCompleter!.complete();
     }
+    for (final completer in _ackCompleters.values) {
+      if (!completer.isCompleted) {
+        completer.completeError('Transfer cancelled');
+      }
+    }
+    _ackCompleters.clear();
     _fileSaver?.discard();
     _fileSaver = null;
     _progressController.addError('Transfer cancelled');
@@ -108,6 +115,12 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
   @override
   void resetTransferState() {
     _isCancelled = false;
+    for (final completer in _ackCompleters.values) {
+      if (!completer.isCompleted) {
+        completer.completeError('Transfer reset');
+      }
+    }
+    _ackCompleters.clear();
     resetReceiveState();
   }
 
@@ -234,10 +247,20 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
         'type': 'eof',
         'fileId': fileId,
       };
+      
+      final Completer<void> ackCompleter = Completer<void>();
+      _ackCompleters[fileId] = ackCompleter;
+
       _webrtcClient.sendDataMessage(RTCDataChannelMessage(jsonEncode(eof)));
       
-      // Small delay between files
-      await Future.delayed(const Duration(milliseconds: 50));
+      try {
+        await ackCompleter.future;
+      } catch (e) {
+        if (!_isCancelled) {
+          throw Exception('Failed to wait for receiver to acknowledge file save: $e');
+        }
+      }
+      _ackCompleters.remove(fileId);
     }
 
     if (_isCancelled) {
@@ -283,7 +306,15 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
             final savedPath = await _fileSaver!.closeAndSave();
             _fileReceivedController.add(savedPath);
             _fileSaver = null;
+
+            _webrtcClient.sendDataMessage(RTCDataChannelMessage(jsonEncode({
+              'type': 'ack',
+              'fileId': decoded['fileId'],
+            })));
           }
+        } else if (decoded['type'] == 'ack') {
+          final String fileId = decoded['fileId'];
+          _ackCompleters[fileId]?.complete();
         } else if (decoded['type'] == 'cancel') {
           _isCancelled = true;
           if (_bufferCompleter != null && !_bufferCompleter!.isCompleted) {

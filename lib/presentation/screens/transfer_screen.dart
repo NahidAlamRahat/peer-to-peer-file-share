@@ -52,11 +52,13 @@ class _TransferScreenState extends State<TransferScreen> {
     _notifications.requestPermission();
   }
 
+  DateTime _lastNotificationUpdate = DateTime.now();
+
   Future<void> _startBackgroundExecution() async {
     const androidConfig = FlutterBackgroundAndroidConfig(
       notificationTitle: 'P2P File Transfer',
-      notificationText: 'Transferring files in the background...',
-      notificationIcon: AndroidResource(name: 'ic_launcher', defType: 'mipmap'),
+      notificationText: 'Running in the background to ensure transfer completes.',
+      notificationIcon: AndroidResource(name: 'ic_notification', defType: 'drawable'),
       notificationImportance: AndroidNotificationImportance.high,
       enableWifiLock: true,
     );
@@ -70,6 +72,7 @@ class _TransferScreenState extends State<TransferScreen> {
     if (!kIsWeb && FlutterBackground.isBackgroundExecutionEnabled) {
       await FlutterBackground.disableBackgroundExecution();
     }
+    _notifications.cancelProgressNotification();
   }
 
   @override
@@ -213,7 +216,17 @@ class _TransferScreenState extends State<TransferScreen> {
           },
           child: BlocConsumer<TransferBloc, TransferState>(
           listener: (context, state) {
-            if (state is TransferSuccess) {
+            if (state is TransferInProgress) {
+              final now = DateTime.now();
+              // Throttle notification updates to once per 500ms
+              if (now.difference(_lastNotificationUpdate).inMilliseconds > 500 || state.progress >= 1.0) {
+                _lastNotificationUpdate = now;
+                _notifications.showProgressNotification(
+                  progress: (state.progress * 100).toInt(),
+                  fileName: state.fileName,
+                );
+              }
+            } else if (state is TransferSuccess) {
               WakelockPlus.disable();
               _stopBackgroundExecution();
               _notifications.showTransferComplete(

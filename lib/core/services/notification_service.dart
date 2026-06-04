@@ -45,6 +45,40 @@ class NotificationService {
         ),
       );
 
+  NotificationDetails _progressDetails(int progress, int maxProgress) =>
+      NotificationDetails(
+        android: AndroidNotificationDetails(
+          _channelId,
+          _channelName,
+          channelDescription: _channelDesc,
+          importance: Importance.low, // Low importance so it doesn't pop up or make sound continuously
+          priority: Priority.low,
+          onlyAlertOnce: true,
+          showProgress: true,
+          maxProgress: maxProgress,
+          progress: progress,
+          ongoing: true,
+        ),
+      );
+
+  Future<void> showProgressNotification({
+    required int progress,
+    required String fileName,
+  }) async {
+    if (kIsWeb) return;
+    await _plugin.show(
+      id: 1003, // Separate ID for progress
+      title: 'Transferring...',
+      body: '$fileName (${(progress).toInt()}%)',
+      notificationDetails: _progressDetails(progress, 100),
+    );
+  }
+
+  Future<void> cancelProgressNotification() async {
+    if (kIsWeb) return;
+    await _plugin.cancel(id: 1003);
+  }
+
   Future<void> showTransferComplete({
     required bool isSender,
     required String fileName,
@@ -54,7 +88,7 @@ class NotificationService {
     final body = isSender
         ? '"$fileName" sent successfully.'
         : '"$fileName" saved to your device.';
-    // v21 uses named parameters id:, title:, body:, notificationDetails:
+    
     await _plugin.show(
       id: 1001,
       title: title,
