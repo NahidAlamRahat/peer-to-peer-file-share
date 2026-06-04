@@ -59,9 +59,10 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
 
   FileTransferRepositoryImpl(this._webrtcClient) {
     _webrtcClient.onDataMessage = _handleDataMessage;
-    _webrtcClient.setBufferedAmountLowThreshold(65536); // 64 KB
+    _webrtcClient.setBufferedAmountLowThreshold(32768); // 32 KB — fires early so sender unblocks promptly
     _webrtcClient.onBufferedAmountLow = (amount) {
-      _currentDartBuffer = amount;
+      // Buffer has drained — reset Dart-side counter and unblock sender
+      _currentDartBuffer = 0;
       if (_bufferCompleter != null && !_bufferCompleter!.isCompleted) {
         _bufferCompleter!.complete();
       }
@@ -69,28 +70,20 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
     };
   }
 
-  /// Wait until the WebRTC buffer drains below [_maxBufferSize].
-  /// Uses polling so it never deadlocks on platforms where
-  /// onBufferedAmountLow is unreliable (e.g. Flutter Web).
+  /// Wait for WebRTC buffer to drain using onBufferedAmountLow callback.
+  /// Falls back to a 5-second timeout so the app never freezes.
+  /// NOTE: Do NOT use bufferedAmount here — it returns 0 on Android (flutter_webrtc bug).
   Future<void> _waitForBuffer() async {
-    const pollInterval = Duration(milliseconds: 20);
-    const maxWait = Duration(seconds: 30);
-    final deadline = DateTime.now().add(maxWait);
-
-    while (!_isCancelled) {
-      final real = _webrtcClient.bufferedAmount;
-      if (real <= _maxBufferSize) {
-        _currentDartBuffer = real;
-        return;
-      }
-      if (DateTime.now().isAfter(deadline)) {
-        debugPrint('⚠️ [P2P] Buffer drain timeout — continuing anyway.');
-        _currentDartBuffer = 0;
-        return;
-      }
-      // Yield to event loop so UI never freezes
-      await Future.delayed(pollInterval);
+    _bufferCompleter = Completer<void>();
+    try {
+      await _bufferCompleter!.future.timeout(const Duration(seconds: 5));
+    } on TimeoutException {
+      debugPrint('⚠️ [P2P] onBufferedAmountLow timeout — resetting counter and continuing.');
+    } catch (_) {
+      // cancelled
     }
+    _currentDartBuffer = 0;
+    _bufferCompleter = null;
   }
 
   /// Reset receiving state between transfers
@@ -108,7 +101,7 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
   Completer<void>? _bufferCompleter;
   int _currentDartBuffer = 0;
   final Map<String, Completer<void>> _ackCompleters = {};
-  static const int _maxBufferSize = 1048576; // 1 MB
+  static const int _maxBufferSize = 262144; // 256 KB — small window keeps sender/receiver in sync
   static const int _chunkSize = 16384; // 16 KB strict SCTP compatibility
 
   @override
