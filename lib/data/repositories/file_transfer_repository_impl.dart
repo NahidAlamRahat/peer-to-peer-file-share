@@ -61,6 +61,7 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
     _webrtcClient.onDataMessage = _handleDataMessage;
     _webrtcClient.setBufferedAmountLowThreshold(65536); // 64 KB
     _webrtcClient.onBufferedAmountLow = (amount) {
+      _currentDartBuffer = amount;
       _bufferCompleter?.complete();
       _bufferCompleter = null;
     };
@@ -79,6 +80,7 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
   }
 
   Completer<void>? _bufferCompleter;
+  int _currentDartBuffer = 0;
   final Map<String, Completer<void>> _ackCompleters = {};
   static const int _maxBufferSize = 1048576; // 1 MB
   static const int _chunkSize = 16384; // 16 KB strict SCTP compatibility
@@ -184,9 +186,11 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
             final end = (offset + _chunkSize < uint8Chunk.length) ? offset + _chunkSize : uint8Chunk.length;
             final slice = uint8Chunk.sublist(offset, end);
 
-            if (_webrtcClient.bufferedAmount > _maxBufferSize) {
+            _currentDartBuffer += slice.length;
+            if (_currentDartBuffer > _maxBufferSize) {
               _bufferCompleter = Completer<void>();
               await _bufferCompleter!.future;
+              _currentDartBuffer = _webrtcClient.bufferedAmount;
             }
 
             _webrtcClient.sendDataMessageBinary(slice);
@@ -218,9 +222,11 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
           final int currentChunkSize = remaining < _chunkSize ? remaining : _chunkSize;
           final chunk = bytes.sublist(bytesSent, bytesSent + currentChunkSize);
 
-          if (_webrtcClient.bufferedAmount > _maxBufferSize) {
+          _currentDartBuffer += chunk.length;
+          if (_currentDartBuffer > _maxBufferSize) {
             _bufferCompleter = Completer<void>();
             await _bufferCompleter!.future;
+            _currentDartBuffer = _webrtcClient.bufferedAmount;
           }
 
           _webrtcClient.sendDataMessageBinary(chunk);
