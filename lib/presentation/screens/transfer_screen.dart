@@ -316,7 +316,7 @@ class _TransferScreenState extends State<TransferScreen> {
           AppSpacing.gapH16,
           Text(
             widget.role == SessionRole.sender 
-                ? 'Preparing transfer...' 
+                ? 'Verifying Connection...' 
                 : 'Connecting to peer...',
             style: TextStyle(
               fontSize: AppSizes.textHeadline,
@@ -326,7 +326,7 @@ class _TransferScreenState extends State<TransferScreen> {
           AppSpacing.gapH8,
           Text(
             widget.role == SessionRole.sender 
-                ? 'Reading files and initializing chunks...'
+                ? 'Checking peer status before transfer...'
                 : 'Waiting for sender to start...',
             style: TextStyle(
               color: Colors.orange,
