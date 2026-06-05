@@ -20,8 +20,10 @@ import 'file_transfer_web.dart'
 /// For a 50MB file this means ~10% ahead. Fewer ACK round-trips = faster feel.
 const int _windowSize = 5242880; // 5 MB per window
 
-/// Max single WebRTC chunk size (16 KB = SCTP safe limit on all platforms).
-const int _chunkSize = 16384; // 16 KB
+/// Max single WebRTC chunk size (64 KB).
+/// Modern browsers and native WebRTC implementations handle 64KB-256KB perfectly well.
+/// 64KB reduces event loop overhead and JS interop crossings by 4x compared to 16KB.
+const int _chunkSize = 65536; // 64 KB
 
 void _emitProgress({
   required StreamController<FileChunkInfo> controller,

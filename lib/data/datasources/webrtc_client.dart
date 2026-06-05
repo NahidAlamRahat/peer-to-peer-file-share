@@ -149,9 +149,9 @@ class WebRTCClient {
     }
   }
   
-  void sendDataMessageBinary(List<int> bytes) {
+  void sendDataMessageBinary(Uint8List bytes) {
     if (_dataChannel != null && _dataChannel!.state == RTCDataChannelState.RTCDataChannelOpen) {
-      _dataChannel!.send(RTCDataChannelMessage.fromBinary(Uint8List.fromList(bytes)));
+      _dataChannel!.send(RTCDataChannelMessage.fromBinary(bytes));
     }
   }
 
