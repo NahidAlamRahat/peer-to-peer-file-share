@@ -54,12 +54,19 @@ class TransferBloc extends Bloc<TransferEvent, TransferState> {
     SendFilesEvent event,
     Emitter<TransferState> emit,
   ) async {
+    // Reset speed tracking for fresh transfer
+    _lastUpdate = null;
+    _lastBytes = 0;
+    _currentSpeed = 0;
+
     try {
       await fileTransferRepository.sendFiles(event.files);
-      emit(const TransferSuccess('__SENT__'));
+      // Only emit success if transfer was NOT cancelled
+      if (!fileTransferRepository.isCancelled) {
+        emit(const TransferSuccess('__SENT__'));
+      }
     } catch (e) {
-      // Only emit failure if not already handled by cancel/peer-cancel
-      if (state is! TransferCancelledByPeer) {
+      if (state is! TransferCancelledByPeer && state is! TransferInitial) {
         emit(TransferFailure(e.toString()));
       }
     }
@@ -116,9 +123,15 @@ class TransferBloc extends Bloc<TransferEvent, TransferState> {
     CancelTransferEvent event,
     Emitter<TransferState> emit,
   ) {
-    // Canceller: go home silently — UI is handled by transfer_screen directly.
-    // Just clean up repository state. No state emit here so screen doesn't show error.
+    // Cancel repository (sends 'who' to peer) and fully reset state
     fileTransferRepository.cancelTransfer(myRole: event.myRole);
+    fileTransferRepository.resetTransferState();
+    // Reset speed counters
+    _lastUpdate = null;
+    _lastBytes = 0;
+    _currentSpeed = 0;
+    // Emit TransferInitial so if user comes back to transfer screen it's fresh
+    emit(TransferInitial());
   }
 
   void _onPeerCancelled(
@@ -145,6 +158,9 @@ class TransferBloc extends Bloc<TransferEvent, TransferState> {
     Emitter<TransferState> emit,
   ) {
     fileTransferRepository.resetTransferState();
+    _lastUpdate = null;
+    _lastBytes = 0;
+    _currentSpeed = 0;
     emit(TransferInitial());
   }
 

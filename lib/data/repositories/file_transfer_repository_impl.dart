@@ -51,6 +51,9 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
   // ── Sender state ──────────────────────────────────────────────────────────
   bool _isCancelled = false;
 
+  @override
+  bool get isCancelled => _isCancelled;
+
   /// Called when the remote peer sends a cancel signal.
   /// [cancellerRole] is 'sender' or 'receiver'.
   Function(String cancellerRole)? onPeerCancelled;
@@ -271,8 +274,9 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
       _ackCompleters.remove(fileId);
     }
 
-    // Cancelled — return quietly. Bloc's CancelTransferEvent already handles UI.
-    if (_isCancelled) return;
+    if (_isCancelled) {
+      throw Exception('Transfer cancelled.');
+    }
   }
 
   // ── RECEIVER ──────────────────────────────────────────────────────────────

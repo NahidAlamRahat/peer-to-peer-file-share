@@ -21,6 +21,9 @@ abstract class FileTransferRepository {
   /// Resets the internal transfer state (like cancel flags) between sessions.
   void resetTransferState();
 
+  /// Whether the transfer is currently cancelled.
+  bool get isCancelled;
+
   /// Callback fired when the REMOTE peer cancels. Set this from the bloc.
   set onPeerCancelled(Function(String cancellerRole)? callback);
 }

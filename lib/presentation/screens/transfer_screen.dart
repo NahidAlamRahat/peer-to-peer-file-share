@@ -163,17 +163,14 @@ class _TransferScreenState extends State<TransferScreen> {
       final myRole = widget.role == SessionRole.sender ? 'sender' : 'receiver';
       final tBloc = context.read<TransferBloc>();
       final cBloc = context.read<ConnectionBloc>();
+      // Cancel state immediately so HomeScreen doesn't show old banner
+      tBloc.add(CancelTransferEvent(myRole: myRole));
+      cBloc.add(ResetConnectionEvent());
       // Canceller: go home silently — NO notification, NO error screen
       Navigator.of(context).pushAndRemoveUntil(
         MaterialPageRoute(builder: (_) => const HomeScreen()),
         (route) => false,
       );
-      Future.delayed(const Duration(milliseconds: 400), () {
-        tBloc.add(CancelTransferEvent(myRole: myRole));
-      });
-      Future.delayed(const Duration(milliseconds: 1500), () {
-        cBloc.add(ResetConnectionEvent());
-      });
     }
   }
 
@@ -191,14 +188,12 @@ class _TransferScreenState extends State<TransferScreen> {
           if (context.mounted) {
             final tBloc = context.read<TransferBloc>();
             final cBloc = context.read<ConnectionBloc>();
+            tBloc.add(ResetTransferEvent());
+            cBloc.add(ResetConnectionEvent());
             Navigator.of(context).pushAndRemoveUntil(
               MaterialPageRoute(builder: (_) => const HomeScreen()),
               (route) => false,
             );
-            Future.delayed(const Duration(milliseconds: 400), () {
-              tBloc.add(ResetTransferEvent());
-              cBloc.add(ResetConnectionEvent());
-            });
           }
         }
       },
@@ -480,14 +475,12 @@ class _TransferScreenState extends State<TransferScreen> {
             onPressed: () {
                final tBloc = context.read<TransferBloc>();
                final cBloc = context.read<ConnectionBloc>();
+               tBloc.add(ResetTransferEvent());
+               cBloc.add(ResetConnectionEvent());
                Navigator.of(context).pushAndRemoveUntil(
                  MaterialPageRoute(builder: (_) => const HomeScreen()),
                  (route) => false,
                );
-               Future.delayed(const Duration(milliseconds: 400), () {
-                 tBloc.add(ResetTransferEvent());
-                 cBloc.add(ResetConnectionEvent());
-               });
             },
           )
         ],
@@ -514,14 +507,12 @@ class _TransferScreenState extends State<TransferScreen> {
             onPressed: () {
               final tBloc = context.read<TransferBloc>();
               final cBloc = context.read<ConnectionBloc>();
+              tBloc.add(ResetTransferEvent());
+              cBloc.add(ResetConnectionEvent());
               Navigator.of(context).pushAndRemoveUntil(
                 MaterialPageRoute(builder: (_) => const HomeScreen()),
                 (route) => false,
               );
-              Future.delayed(const Duration(milliseconds: 400), () {
-                tBloc.add(ResetTransferEvent());
-                cBloc.add(ResetConnectionEvent());
-              });
             },
           ),
         ],
