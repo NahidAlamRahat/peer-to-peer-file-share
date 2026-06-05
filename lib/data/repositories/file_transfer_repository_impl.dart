@@ -14,32 +14,33 @@ import 'file_saver.dart';
 // Web-only download trigger
 import 'file_transfer_web.dart' if (dart.library.io) 'file_transfer_mobile.dart';
 
+/// How many bytes sender sends per "window" before waiting for receiver ACK.
+/// 5MB window → sender is at most 5MB ahead of receiver.
+/// For a 50MB file this means ~10% ahead. Fewer ACK round-trips = faster feel.
+const int _windowSize = 5242880; // 5 MB per window
+
+/// Max single WebRTC chunk size (16 KB = SCTP safe limit on all platforms).
+const int _chunkSize = 16384; // 16 KB
+
 void _emitProgress({
-    required StreamController<FileChunkInfo> controller,
-    required String fileId,
-    required String fileName,
-    required int totalSize,
-    required int bytesTransferred,
-    required int fileIndex,
-    required int totalFiles,
-    required DateTime lastUpdate,
-    required Function(DateTime) setLastUpdate,
-  }) {
-    if (controller.isClosed) return;
-    final now = DateTime.now();
-    // Throttle to 10 UI updates per second (100ms) to prevent Main Thread lock on mobile Wait, 100ms is 0.1s
-    if (now.difference(lastUpdate).inMilliseconds >= 100 || bytesTransferred == totalSize) {
-      controller.add(FileChunkInfo(
-        fileId: fileId,
-        fileName: fileName,
-        totalSize: totalSize,
-        bytesTransferred: bytesTransferred,
-        fileIndex: fileIndex,
-        totalFiles: totalFiles,
-      ));
-      setLastUpdate(now);
-    }
-  }
+  required StreamController<FileChunkInfo> controller,
+  required String fileId,
+  required String fileName,
+  required int totalSize,
+  required int bytesTransferred,
+  required int fileIndex,
+  required int totalFiles,
+}) {
+  if (controller.isClosed) return;
+  controller.add(FileChunkInfo(
+    fileId: fileId,
+    fileName: fileName,
+    totalSize: totalSize,
+    bytesTransferred: bytesTransferred,
+    fileIndex: fileIndex,
+    totalFiles: totalFiles,
+  ));
+}
 
 class FileTransferRepositoryImpl implements FileTransferRepository {
   final WebRTCClient _webrtcClient;
@@ -47,7 +48,16 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
   final _progressController = StreamController<FileChunkInfo>.broadcast();
   final _fileReceivedController = StreamController<String>.broadcast();
 
-  // state for receiving
+  // ── Sender state ──────────────────────────────────────────────────────────
+  bool _isCancelled = false;
+
+  /// Completer that unblocks the sender when receiver ACKs a window.
+  Completer<void>? _windowAckCompleter;
+
+  /// Completer that unblocks the sender after receiver saves the full file.
+  final Map<String, Completer<void>> _ackCompleters = {};
+
+  // ── Receiver state ────────────────────────────────────────────────────────
   String? _receivingFileId;
   String? _receivingFileName;
   int _receivingTotalSize = 0;
@@ -55,54 +65,18 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
   int _receivingFileIndex = 1;
   int _receivingTotalFiles = 1;
   P2PFileSaver? _fileSaver;
-  bool _isCancelled = false;
+
+  /// Bytes received in the current window (reset after each window_ack).
+  int _windowBytesReceived = 0;
+
+  /// The window size we expect per window (sent in metadata).
+  int _remoteWindowSize = _windowSize;
 
   FileTransferRepositoryImpl(this._webrtcClient) {
     _webrtcClient.onDataMessage = _handleDataMessage;
-    _webrtcClient.setBufferedAmountLowThreshold(32768); // 32 KB — fires early so sender unblocks promptly
-    _webrtcClient.onBufferedAmountLow = (amount) {
-      // Buffer has drained — reset Dart-side counter and unblock sender
-      _currentDartBuffer = 0;
-      if (_bufferCompleter != null && !_bufferCompleter!.isCompleted) {
-        _bufferCompleter!.complete();
-      }
-      _bufferCompleter = null;
-    };
   }
 
-  /// Wait for WebRTC buffer to drain using onBufferedAmountLow callback.
-  /// Falls back to a 5-second timeout so the app never freezes.
-  /// NOTE: Do NOT use bufferedAmount here — it returns 0 on Android (flutter_webrtc bug).
-  Future<void> _waitForBuffer() async {
-    _bufferCompleter = Completer<void>();
-    try {
-      await _bufferCompleter!.future.timeout(const Duration(seconds: 5));
-    } on TimeoutException {
-      debugPrint('⚠️ [P2P] onBufferedAmountLow timeout — resetting counter and continuing.');
-    } catch (_) {
-      // cancelled
-    }
-    _currentDartBuffer = 0;
-    _bufferCompleter = null;
-  }
-
-  /// Reset receiving state between transfers
-  void resetReceiveState() {
-    _receivingFileId = null;
-    _receivingFileName = null;
-    _receivingTotalSize = 0;
-    _receivedBytes = 0;
-    _receivingFileIndex = 1;
-    _receivingTotalFiles = 1;
-    _fileSaver = null;
-    _bufferCompleter = null;
-  }
-
-  Completer<void>? _bufferCompleter;
-  int _currentDartBuffer = 0;
-  final Map<String, Completer<void>> _ackCompleters = {};
-  static const int _maxBufferSize = 262144; // 256 KB — small window keeps sender/receiver in sync
-  static const int _chunkSize = 16384; // 16 KB strict SCTP compatibility
+  // ── Public API ────────────────────────────────────────────────────────────
 
   @override
   Stream<FileChunkInfo> get transferProgressStream => _progressController.stream;
@@ -118,135 +92,103 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
   @override
   void cancelTransfer() {
     _isCancelled = true;
-    _webrtcClient.sendDataMessage(RTCDataChannelMessage(jsonEncode({'type': 'cancel'})));
-    if (_bufferCompleter != null && !_bufferCompleter!.isCompleted) {
-      _bufferCompleter!.complete();
-    }
-    for (final completer in _ackCompleters.values) {
-      if (!completer.isCompleted) {
-        completer.completeError('Transfer cancelled');
-      }
+    _webrtcClient.sendDataMessage(
+        RTCDataChannelMessage(jsonEncode({'type': 'cancel'})));
+    _windowAckCompleter?.complete();
+    _windowAckCompleter = null;
+    for (final c in _ackCompleters.values) {
+      if (!c.isCompleted) c.completeError('Transfer cancelled');
     }
     _ackCompleters.clear();
     _fileSaver?.discard();
     _fileSaver = null;
-    _progressController.addError('Transfer cancelled');
+    if (!_progressController.isClosed) {
+      _progressController.addError('Transfer cancelled');
+    }
   }
 
   @override
   void resetTransferState() {
     _isCancelled = false;
-    for (final completer in _ackCompleters.values) {
-      if (!completer.isCompleted) {
-        completer.completeError('Transfer reset');
-      }
+    _windowAckCompleter = null;
+    for (final c in _ackCompleters.values) {
+      if (!c.isCompleted) c.completeError('Transfer reset');
     }
     _ackCompleters.clear();
-    resetReceiveState();
+    _resetReceiveState();
   }
+
+  void _resetReceiveState() {
+    _receivingFileId = null;
+    _receivingFileName = null;
+    _receivingTotalSize = 0;
+    _receivedBytes = 0;
+    _receivingFileIndex = 1;
+    _receivingTotalFiles = 1;
+    _fileSaver = null;
+    _windowBytesReceived = 0;
+  }
+
+  // ── SENDER ────────────────────────────────────────────────────────────────
 
   @override
   Future<void> sendFiles(List<ShareFile> files) async {
     _isCancelled = false;
-    
-    // Safety check: Wait for the data channel to be fully OPEN before streaming
+
+    // Wait for data channel to open (max 10 s)
     int waitCounter = 0;
     while (_webrtcClient.dataChannelState != RTCDataChannelState.RTCDataChannelOpen) {
       if (_isCancelled) return;
-      if (waitCounter > 100) { // 10 seconds timeout
-         _progressController.addError('Timeout waiting for peer DataChannel to open');
-         return;
+      if (waitCounter > 100) {
+        _progressController.addError('Timeout waiting for peer DataChannel to open');
+        return;
       }
-      debugPrint('⏳ [P2P] Waiting for data channel to open... (${_webrtcClient.dataChannelState})');
       await Future.delayed(const Duration(milliseconds: 100));
       waitCounter++;
     }
-    
-    // Give the receiver 300ms to attach onMessage listeners after opening
+
+    // Give receiver 300 ms to attach listeners
     await Future.delayed(const Duration(milliseconds: 300));
 
     for (int i = 0; i < files.length; i++) {
       if (_isCancelled) break;
+
       final file = files[i];
       final String fileId = const Uuid().v4();
       final String fileName = file.name;
       final int totalSize = file.size;
-      DateTime lastUpdate = DateTime.now();
 
-      // 1. Send metadata block first
-      final Map<String, dynamic> metadata = {
+      // ── 1. Send metadata ─────────────────────────────────────────────────
+      _webrtcClient.sendDataMessage(RTCDataChannelMessage(jsonEncode({
         'type': 'metadata',
         'fileId': fileId,
         'fileName': fileName,
         'totalSize': totalSize,
         'fileIndex': i + 1,
         'totalFiles': files.length,
-      };
-      _webrtcClient.sendDataMessage(RTCDataChannelMessage(jsonEncode(metadata)));
+        'windowSize': _windowSize, // tell receiver how large each window is
+      })));
 
-      // 2. Send in chunks
+      // ── 2. Send data in ACK-gated windows ────────────────────────────────
       int bytesSent = 0;
-      debugPrint('🚀 [P2P] Starting high-speed transfer: $fileName ($totalSize bytes) [${i+1}/${files.length}]');
+      int windowBytesSent = 0; // bytes sent in the current window
 
-      if (file.readStream != null) {
-        // Safe Stream iteration using low RAM footprint
-        await for (final chunk in file.readStream!) {
-          if (_isCancelled) {
-             debugPrint('🛑 [P2P] Transfer cancelled during streaming chunk.');
-             break;
-          }
-          final uint8Chunk = Uint8List.fromList(chunk);
-          int offset = 0;
-          
-          // Slice the potentially massive readStream chunk into strictly 16KB pieces
-          while (offset < uint8Chunk.length) {
-            if (_isCancelled) break;
-            
-            final end = (offset + _chunkSize < uint8Chunk.length) ? offset + _chunkSize : uint8Chunk.length;
-            final slice = uint8Chunk.sublist(offset, end);
+      debugPrint('🚀 [P2P-ACK] Sending $fileName ($totalSize bytes) with ${_windowSize ~/ 1024}KB windows');
 
-            _currentDartBuffer += slice.length;
-            if (_currentDartBuffer > _maxBufferSize) {
-              await _waitForBuffer();
-            }
+      Future<void> _sendChunks(Uint8List bytes, int start, int end) async {
+        int offset = start;
+        while (offset < end) {
+          if (_isCancelled) return;
 
-            _webrtcClient.sendDataMessageBinary(slice);
-            bytesSent += slice.length;
-            offset += slice.length;
+          final sliceEnd = (offset + _chunkSize < end) ? offset + _chunkSize : end;
+          final slice = bytes.sublist(offset, sliceEnd);
 
-            _emitProgress(
-              controller: _progressController,
-              fileId: fileId,
-              fileName: fileName,
-              totalSize: totalSize,
-              bytesTransferred: bytesSent,
-              fileIndex: i + 1,
-              totalFiles: files.length,
-              lastUpdate: lastUpdate,
-              setLastUpdate: (time) => lastUpdate = time,
-            );
-          }
-        }
-      } else if (file.bytes != null) {
-        // Fallback for smaller files / platforms lacking chunk streams
-        final Uint8List bytes = file.bytes!;
-        while (bytesSent < totalSize) {
-          if (_isCancelled) {
-             debugPrint('🛑 [P2P] Transfer cancelled during byte chunks.');
-             break;
-          }
-          final int remaining = totalSize - bytesSent;
-          final int currentChunkSize = remaining < _chunkSize ? remaining : _chunkSize;
-          final chunk = bytes.sublist(bytesSent, bytesSent + currentChunkSize);
+          _webrtcClient.sendDataMessageBinary(slice);
+          bytesSent += slice.length;
+          windowBytesSent += slice.length;
+          offset = sliceEnd;
 
-          _currentDartBuffer += chunk.length;
-          if (_currentDartBuffer > _maxBufferSize) {
-            await _waitForBuffer();
-          }
-
-          _webrtcClient.sendDataMessageBinary(chunk);
-          bytesSent += chunk.length;
-
+          // Emit sender progress
           _emitProgress(
             controller: _progressController,
             fileId: fileId,
@@ -255,30 +197,69 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
             bytesTransferred: bytesSent,
             fileIndex: i + 1,
             totalFiles: files.length,
-            lastUpdate: lastUpdate,
-            setLastUpdate: (time) => lastUpdate = time,
           );
+
+          // When we've sent a full window, pause and wait for receiver ACK
+          if (windowBytesSent >= _windowSize || bytesSent == totalSize) {
+            if (_isCancelled) return;
+
+            final bool isLast = bytesSent == totalSize;
+            // Send window boundary marker to receiver
+            _webrtcClient.sendDataMessage(RTCDataChannelMessage(jsonEncode({
+              'type': 'window_end',
+              'fileId': fileId,
+              'bytesSent': bytesSent,
+              'isLast': isLast,
+            })));
+
+            if (!isLast) {
+              // Wait for receiver to ACK this window (max 30 s)
+              _windowAckCompleter = Completer<void>();
+              debugPrint('⏸ [P2P-ACK] Window sent ($bytesSent/$totalSize bytes). Waiting for receiver ACK...');
+              try {
+                await _windowAckCompleter!.future
+                    .timeout(const Duration(seconds: 30));
+              } on TimeoutException {
+                debugPrint('⚠️ [P2P-ACK] Window ACK timeout — continuing.');
+              } catch (_) {
+                if (_isCancelled) return;
+              }
+              _windowAckCompleter = null;
+              windowBytesSent = 0;
+              debugPrint('▶ [P2P-ACK] Receiver ACKed window. Sending next window...');
+            } else {
+              windowBytesSent = 0;
+            }
+          }
         }
       }
-      
+
+      if (file.readStream != null) {
+        await for (final rawChunk in file.readStream!) {
+          if (_isCancelled) break;
+          await _sendChunks(Uint8List.fromList(rawChunk), 0, rawChunk.length);
+        }
+      } else if (file.bytes != null) {
+        await _sendChunks(file.bytes!, 0, file.bytes!.length);
+      }
+
       if (_isCancelled) break;
 
-      // 3. Send End of File
-      final Map<String, dynamic> eof = {
-        'type': 'eof',
-        'fileId': fileId,
-      };
-      
-      final Completer<void> ackCompleter = Completer<void>();
+      // ── 3. Send EOF and wait for receiver to save the file ───────────────
+      final ackCompleter = Completer<void>();
       _ackCompleters[fileId] = ackCompleter;
 
-      _webrtcClient.sendDataMessage(RTCDataChannelMessage(jsonEncode(eof)));
-      
+      _webrtcClient.sendDataMessage(RTCDataChannelMessage(jsonEncode({
+        'type': 'eof',
+        'fileId': fileId,
+      })));
+
       try {
         await ackCompleter.future;
+        debugPrint('✅ [P2P-ACK] Receiver saved $fileName');
       } catch (e) {
         if (!_isCancelled) {
-          throw Exception('Failed to wait for receiver to acknowledge file save: $e');
+          throw Exception('Receiver did not acknowledge save: $e');
         }
       }
       _ackCompleters.remove(fileId);
@@ -289,14 +270,18 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
     }
   }
 
-  DateTime _lastReceiveUpdate = DateTime.now();
+  // ── RECEIVER ──────────────────────────────────────────────────────────────
 
   Future<void> _handleDataMessage(RTCDataChannelMessage message) async {
     if (_isCancelled) return;
+
     if (message.isBinary) {
+      // Binary chunk — write to file saver
       _fileSaver?.addChunk(message.binary);
       _receivedBytes += message.binary.length;
+      _windowBytesReceived += message.binary.length;
 
+      // Emit receiver progress
       _emitProgress(
         controller: _progressController,
         fileId: _receivingFileId ?? '',
@@ -305,50 +290,87 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
         bytesTransferred: _receivedBytes,
         fileIndex: _receivingFileIndex,
         totalFiles: _receivingTotalFiles,
-        lastUpdate: _lastReceiveUpdate,
-        setLastUpdate: (time) => _lastReceiveUpdate = time,
       );
     } else {
       try {
-        final decoded = jsonDecode(message.text);
-        if (decoded['type'] == 'metadata') {
-          _receivingFileId = decoded['fileId'];
-          _receivingFileName = decoded['fileName'];
-          _receivingTotalSize = decoded['totalSize'];
-          _receivingFileIndex = decoded['fileIndex'] ?? 1;
-          _receivingTotalFiles = decoded['totalFiles'] ?? 1;
-          _receivedBytes = 0;
-          
-          _fileSaver = getFileSaver();
-          await _fileSaver!.init(_receivingFileName ?? 'file');
-        } else if (decoded['type'] == 'eof') {
-          // Save the file using platform-specific stream saver
-          if (_fileSaver != null) {
-            final savedPath = await _fileSaver!.closeAndSave();
-            _fileReceivedController.add(savedPath);
-            _fileSaver = null;
+        final decoded = jsonDecode(message.text) as Map<String, dynamic>;
+        final type = decoded['type'] as String? ?? '';
 
-            _webrtcClient.sendDataMessage(RTCDataChannelMessage(jsonEncode({
-              'type': 'ack',
-              'fileId': decoded['fileId'],
-            })));
-          }
-        } else if (decoded['type'] == 'ack') {
-          final String fileId = decoded['fileId'];
-          _ackCompleters[fileId]?.complete();
-        } else if (decoded['type'] == 'cancel') {
-          _isCancelled = true;
-          if (_bufferCompleter != null && !_bufferCompleter!.isCompleted) {
-            _bufferCompleter!.complete();
-          }
-          await _fileSaver?.discard();
-          _fileSaver = null;
-          _progressController.addError('Transfer cancelled by peer');
-          debugPrint('🛑 [P2P] Received cancel signal. Discarding file.');
+        switch (type) {
+          case 'metadata':
+            _resetReceiveState();
+            _receivingFileId = decoded['fileId'];
+            _receivingFileName = decoded['fileName'];
+            _receivingTotalSize = decoded['totalSize'];
+            _receivingFileIndex = decoded['fileIndex'] ?? 1;
+            _receivingTotalFiles = decoded['totalFiles'] ?? 1;
+            _remoteWindowSize = decoded['windowSize'] ?? _windowSize;
+            _fileSaver = getFileSaver();
+            await _fileSaver!.init(_receivingFileName ?? 'file');
+            debugPrint('📥 [P2P-ACK] Receiving ${_receivingFileName} (${_receivingTotalSize} bytes), window=${_remoteWindowSize ~/ 1024}KB');
+            break;
+
+          case 'window_end':
+            // Sender finished sending one window. ACK so sender can continue.
+            final bool isLast = decoded['isLast'] == true;
+            if (!isLast) {
+              _windowBytesReceived = 0;
+              _webrtcClient.sendDataMessage(RTCDataChannelMessage(jsonEncode({
+                'type': 'window_ack',
+                'fileId': decoded['fileId'],
+                'bytesReceived': _receivedBytes,
+              })));
+              debugPrint('✔ [P2P-ACK] Window ACK sent. Total received: $_receivedBytes/${_receivingTotalSize}');
+            }
+            break;
+
+          case 'window_ack':
+            // Receiver ACKed a window — unblock the sender
+            if (_windowAckCompleter != null && !_windowAckCompleter!.isCompleted) {
+              _windowAckCompleter!.complete();
+            }
+            break;
+
+          case 'eof':
+            // All data received — save file and notify sender
+            if (_fileSaver != null) {
+              final savedPath = await _fileSaver!.closeAndSave();
+              _fileReceivedController.add(savedPath);
+              _fileSaver = null;
+              _webrtcClient.sendDataMessage(RTCDataChannelMessage(jsonEncode({
+                'type': 'ack',
+                'fileId': decoded['fileId'],
+              })));
+              debugPrint('💾 [P2P-ACK] File saved. Sent final ACK.');
+            }
+            break;
+
+          case 'ack':
+            // Final save ACK — unblock sender's post-EOF wait
+            final fileId = decoded['fileId'] as String?;
+            if (fileId != null) _ackCompleters[fileId]?.complete();
+            break;
+
+          case 'cancel':
+            _isCancelled = true;
+            _windowAckCompleter?.complete();
+            _windowAckCompleter = null;
+            await _fileSaver?.discard();
+            _fileSaver = null;
+            if (!_progressController.isClosed) {
+              _progressController.addError('Transfer cancelled by peer');
+            }
+            debugPrint('🛑 [P2P-ACK] Cancelled by peer.');
+            break;
+
+          default:
+            debugPrint('⚠️ [P2P-ACK] Unknown message type: $type');
         }
       } catch (e) {
-        debugPrint('Error parsing text message: $e');
-        _progressController.addError('System Error: $e');
+        debugPrint('❌ [P2P-ACK] Error handling message: $e');
+        if (!_progressController.isClosed) {
+          _progressController.addError('System Error: $e');
+        }
       }
     }
   }
