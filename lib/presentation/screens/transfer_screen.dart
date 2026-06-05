@@ -1,4 +1,3 @@
-import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_background/flutter_background.dart';
@@ -12,7 +11,6 @@ import '../../core/services/settings_service.dart';
 import '../../core/theme/app_sizes.dart';
 import '../../core/theme/spacing.dart';
 import '../../domain/entities/peer_session.dart';
-import '../../domain/entities/share_file.dart';
 import '../blocs/connection/connection_bloc.dart';
 import '../blocs/connection/connection_event.dart';
 import '../blocs/connection/connection_state.dart';

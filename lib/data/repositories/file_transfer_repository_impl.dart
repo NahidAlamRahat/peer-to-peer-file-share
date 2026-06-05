@@ -79,9 +79,6 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
   int _receivingTotalFiles = 1;
   P2PFileSaver? _fileSaver;
 
-  /// Bytes received in the current window (reset after each window_ack).
-  int _windowBytesReceived = 0;
-
   /// The window size we expect per window (sent in metadata).
   int _remoteWindowSize = _windowSize;
 
@@ -163,7 +160,6 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
     _receivingFileIndex = 1;
     _receivingTotalFiles = 1;
     _fileSaver = null;
-    _windowBytesReceived = 0;
   }
 
   // ── SENDER ────────────────────────────────────────────────────────────────
@@ -222,7 +218,7 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
         '🚀 [P2P-ACK] Sending $fileName ($totalSize bytes) with ${_windowSize ~/ 1024}KB windows',
       );
 
-      Future<void> _sendChunks(Uint8List bytes, int start, int end) async {
+      Future<void> sendChunks(Uint8List bytes, int start, int end) async {
         int offset = start;
         while (offset < end) {
           if (_isCancelled) return;
@@ -301,10 +297,10 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
       if (file.readStream != null) {
         await for (final rawChunk in file.readStream!) {
           if (_isCancelled) break;
-          await _sendChunks(Uint8List.fromList(rawChunk), 0, rawChunk.length);
+          await sendChunks(Uint8List.fromList(rawChunk), 0, rawChunk.length);
         }
       } else if (file.bytes != null) {
-        await _sendChunks(file.bytes!, 0, file.bytes!.length);
+        await sendChunks(file.bytes!, 0, file.bytes!.length);
       }
 
       if (_isCancelled) break;
@@ -347,7 +343,6 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
       // Binary chunk — write to file saver
       _fileSaver?.addChunk(message.binary);
       _receivedBytes += message.binary.length;
-      _windowBytesReceived += message.binary.length;
 
       // Emit receiver progress
       _emitProgress(
@@ -376,7 +371,7 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
             _fileSaver = getFileSaver();
             await _fileSaver!.init(_receivingFileName ?? 'file');
             debugPrint(
-              '📥 [P2P-ACK] Receiving ${_receivingFileName} (${_receivingTotalSize} bytes), window=${_remoteWindowSize ~/ 1024}KB',
+              '📥 [P2P-ACK] Receiving $_receivingFileName ($_receivingTotalSize bytes), window=${_remoteWindowSize ~/ 1024}KB',
             );
             break;
 
@@ -384,7 +379,6 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
             // Sender finished sending one window. ACK so sender can continue.
             final bool isLast = decoded['isLast'] == true;
             if (!isLast) {
-              _windowBytesReceived = 0;
               _webrtcClient.sendDataMessage(
                 RTCDataChannelMessage(
                   jsonEncode({
@@ -395,7 +389,7 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
                 ),
               );
               debugPrint(
-                '✔ [P2P-ACK] Window ACK sent. Total received: $_receivedBytes/${_receivingTotalSize}',
+                '✔ [P2P-ACK] Window ACK sent. Total received: $_receivedBytes/$_receivingTotalSize',
               );
             }
             break;

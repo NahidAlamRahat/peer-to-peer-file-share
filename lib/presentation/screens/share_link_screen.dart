@@ -68,20 +68,22 @@ class _ShareLinkScreenState extends State<ShareLinkScreen> {
     setState(() => _isPicking = true);
 
     try {
-      FilePickerResult? result = await FilePicker.platform.pickFiles(
-        allowMultiple: true,
-        withReadStream: true, // Crucial for 1GB+ files to prevent RAM crashes
-      );
+      // file_picker 12.x: pickFiles() is already for multiple files — no allowMultiple needed
+      // withReadStream deprecated — use readAsByteStream() per file directly
+      FilePickerResult? result = await FilePicker.pickFiles();
       if (result != null && result.files.isNotEmpty) {
-        final validFiles = result.files.where((f) => f.readStream != null || f.bytes != null).toList();
-        if (validFiles.isNotEmpty) {
-          final shareFiles = validFiles.map((pf) => ShareFile(
+        final List<ShareFile> shareFiles = [];
+        for (final pf in result.files) {
+          // readAsByteStream() streams the file without loading all bytes to RAM
+          final Stream<List<int>> stream = pf.readAsByteStream();
+          shareFiles.add(ShareFile(
             name: pf.name,
             size: pf.size,
-            readStream: pf.readStream,
-            bytes: pf.bytes,
-          )).toList();
+            readStream: stream,
+          ));
+        }
 
+        if (shareFiles.isNotEmpty) {
           final totalSize = shareFiles.fold<int>(0, (sum, f) => sum + f.size);
           final sizeMB = (totalSize / (1024 * 1024)).toStringAsFixed(2);
           debugPrint('📂 [UI] Selected ${shareFiles.length} files ($sizeMB MB total)');
