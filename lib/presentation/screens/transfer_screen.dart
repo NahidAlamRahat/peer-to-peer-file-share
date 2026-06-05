@@ -220,35 +220,27 @@ class _TransferScreenState extends State<TransferScreen> {
         body: BlocListener<ConnectionBloc, ConnectionStateBloc>(
           listener: (context, connectionState) {
             final transferState = context.read<TransferBloc>().state;
-            // Only treat connection drop as an error when actively transferring.
-            // If the peer already sent us a cancel signal (TransferCancelledByPeer),
-            // ignore connection drops — they are a normal consequence of cancel.
             final peerAlreadyCancelled = transferState is TransferCancelledByPeer;
-            if (!peerAlreadyCancelled) {
-              if (connectionState is ConnectionFailed ||
-                  connectionState is ConnectionOffline ||
-                  connectionState is ConnectionInitial) {
-                // Wait briefly to allow any incoming cancel messages to be processed.
-                Future.delayed(const Duration(milliseconds: 1500), () {
-                  if (context.mounted) {
-                    final currentState = context.read<TransferBloc>().state;
-                    if (currentState is! TransferCancelledByPeer && currentState is! TransferSuccess) {
-                      if (currentState is TransferInitial) {
-                        // If connection drops before transfer starts, treat it as peer cancel
-                        final peerRole = widget.role == SessionRole.sender ? 'receiver' : 'sender';
-                        context.read<TransferBloc>().add(PeerCancelledEvent(peerRole));
-                      } else {
-                        // If actively transferring and it drops without a cancel message
-                        context.read<TransferBloc>().add(
-                          const TransferErrorEvent(
-                            'Connection to peer was lost. Please check your network and try again.',
-                          ),
-                        );
-                      }
-                    }
+            // Only react to actual connection drops — NOT ConnectionInitial (fires on setup/reset)
+            if (!peerAlreadyCancelled &&
+                (connectionState is ConnectionFailed ||
+                    connectionState is ConnectionOffline)) {
+              // Wait 1.5s first — give time for any incoming peer cancel message to arrive
+              Future.delayed(const Duration(milliseconds: 1500), () {
+                if (context.mounted) {
+                  final currentState = context.read<TransferBloc>().state;
+                  // Only show error if we are still in an active/loading state
+                  if (currentState is! TransferCancelledByPeer &&
+                      currentState is! TransferSuccess &&
+                      currentState is! TransferFailure) {
+                    context.read<TransferBloc>().add(
+                      const TransferErrorEvent(
+                        'Connection to peer was lost. Please check your network and try again.',
+                      ),
+                    );
                   }
-                });
-              }
+                }
+              });
             }
           },
           child: BlocConsumer<TransferBloc, TransferState>(
