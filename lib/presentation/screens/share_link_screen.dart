@@ -49,6 +49,16 @@ class _ShareLinkScreenState extends State<ShareLinkScreen> {
           context,
           MaterialPageRoute(builder: (_) => TransferScreen(role: role)),
         );
+        return;
+      }
+
+      // If a previous session left us in a dirty state, reset it cleanly
+      // so the next send attempt starts fresh.
+      if (transferBloc.state is TransferFailure ||
+          transferBloc.state is TransferSuccess ||
+          transferBloc.state is TransferCancelledByPeer ||
+          sl<FileTransferRepository>().isCancelled) {
+        transferBloc.add(ResetTransferEvent());
       }
     });
   }

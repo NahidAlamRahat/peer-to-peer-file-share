@@ -169,15 +169,22 @@ class _TransferScreenState extends State<TransferScreen> {
       final myRole = widget.role == SessionRole.sender ? 'sender' : 'receiver';
       final tBloc = context.read<TransferBloc>();
       final cBloc = context.read<ConnectionBloc>();
-      // Canceller: go home silently — NO notification, NO error screen
+
+      // Step 1: Send cancel message to peer IMMEDIATELY so they get it before connection drops
+      tBloc.add(CancelTransferEvent(myRole: myRole));
+
+      // Step 2: Wait a moment so the cancel signal has time to reach the peer
+      await Future.delayed(const Duration(milliseconds: 600));
+      if (!context.mounted) return;
+
+      // Step 3: Navigate home silently — canceller sees nothing
       Navigator.of(context).pushAndRemoveUntil(
         MaterialPageRoute(builder: (_) => const HomeScreen()),
         (route) => false,
       );
-      Future.delayed(const Duration(milliseconds: 400), () {
-        tBloc.add(CancelTransferEvent(myRole: myRole));
-      });
-      Future.delayed(const Duration(milliseconds: 1500), () {
+
+      // Step 4: Reset the connection after navigation
+      Future.delayed(const Duration(milliseconds: 500), () {
         cBloc.add(ResetConnectionEvent());
       });
     }
@@ -213,7 +220,12 @@ class _TransferScreenState extends State<TransferScreen> {
         body: BlocListener<ConnectionBloc, ConnectionStateBloc>(
           listener: (context, connectionState) {
             final transferState = context.read<TransferBloc>().state;
-            if (transferState is TransferInProgress) {
+            // Only treat connection drop as an error when actively transferring.
+            // If the peer already sent us a cancel signal (TransferCancelledByPeer),
+            // ignore connection drops — they are a normal consequence of cancel.
+            final isActivelyTransferring = transferState is TransferInProgress;
+            final peerAlreadyCancelled = transferState is TransferCancelledByPeer;
+            if (isActivelyTransferring && !peerAlreadyCancelled) {
               if (connectionState is ConnectionFailed ||
                   connectionState is ConnectionOffline ||
                   connectionState is ConnectionInitial) {

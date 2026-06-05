@@ -69,10 +69,12 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
         return;
       }
 
-      // If a previous session left us in a failed/cancelled state, reset it
+      // If a previous session left us in a failed/cancelled/dirty state, reset it
       // so the next receive attempt works cleanly.
       if (transferBloc.state is TransferFailure ||
-          transferBloc.state is TransferSuccess) {
+          transferBloc.state is TransferSuccess ||
+          transferBloc.state is TransferCancelledByPeer ||
+          sl<FileTransferRepository>().isCancelled) {
         transferBloc.add(ResetTransferEvent());
       }
 

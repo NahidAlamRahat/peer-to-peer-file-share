@@ -62,8 +62,8 @@ class TransferBloc extends Bloc<TransferEvent, TransferState> {
         emit(const TransferSuccess('__SENT__'));
       }
     } catch (e) {
-      // Only emit failure if not already handled by cancel/peer-cancel
-      if (state is! TransferCancelledByPeer) {
+      // Skip failure if cancelled by us OR by peer — both are intentional stops
+      if (!fileTransferRepository.isCancelled && state is! TransferCancelledByPeer) {
         emit(TransferFailure(e.toString()));
       }
     }
@@ -115,6 +115,7 @@ class TransferBloc extends Bloc<TransferEvent, TransferState> {
   }
 
   void _onTransferError(TransferErrorEvent event, Emitter<TransferState> emit) {
+    if (fileTransferRepository.isCancelled) return; // cancelled by us — silent
     if (state is TransferSuccess || state is TransferCancelledByPeer) return;
     emit(TransferFailure(event.error));
   }
