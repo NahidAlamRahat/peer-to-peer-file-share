@@ -73,11 +73,9 @@ class TransferBloc extends Bloc<TransferEvent, TransferState> {
     TransferProgressEvent event,
     Emitter<TransferState> emit,
   ) {
-    if (fileTransferRepository.isCancelled) {
-      emit(TransferInitial());
-      return;
-    }
-    // Don't overwrite a terminal state with progress
+    // If cancelled or any terminal state already set, silently drop progress — do NOT emit TransferInitial.
+    // Emitting TransferInitial here was causing the false 'Verifying Connection...' screen flash.
+    if (fileTransferRepository.isCancelled) return;
     if (state is TransferSuccess || state is TransferCancelledByPeer || state is TransferFailure) return;
 
     final now = DateTime.now();
@@ -118,9 +116,11 @@ class TransferBloc extends Bloc<TransferEvent, TransferState> {
     if (fileTransferRepository.isCancelled) return; // cancelled by us — silent
     if (state is TransferSuccess || state is TransferCancelledByPeer || state is TransferFailure) return;
     
-    // Stop any ongoing file operations in the background so it doesn't keep emitting progress
+    // Use haltTransfer() (NOT cancelTransfer) to stop background loops.
+    // cancelTransfer() sends a cancel message to peer — causing a false 'Receiver cancelled' screen!
+    // haltTransfer() only stops the local operation silently.
     try {
-      fileTransferRepository.cancelTransfer(myRole: 'system_error');
+      fileTransferRepository.haltTransfer();
     } catch (_) {}
 
     emit(TransferFailure(event.error));
@@ -141,8 +141,8 @@ class TransferBloc extends Bloc<TransferEvent, TransferState> {
     _lastUpdate = null;
     _lastBytes = 0;
     _currentSpeed = 0;
-    // Emit TransferInitial so if user comes back to transfer screen it's fresh
-    emit(TransferInitial());
+    // DO NOT emit TransferInitial here — it causes a visible 'Verifying Connection...' flash
+    // for 600ms before navigation. Navigation handles the screen transition.
   }
 
   void _onPeerCancelled(PeerCancelledEvent event, Emitter<TransferState> emit) {

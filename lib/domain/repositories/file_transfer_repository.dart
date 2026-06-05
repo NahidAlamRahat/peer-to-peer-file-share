@@ -18,6 +18,10 @@ abstract class FileTransferRepository {
   /// [myRole] = 'sender' or 'receiver' — sent to peer so they see the right message.
   void cancelTransfer({String myRole = 'sender'});
 
+  /// Halt the transfer locally due to a system error (e.g. network drop).
+  /// Does NOT send any cancel message to the peer — avoids false "Receiver cancelled" messages.
+  void haltTransfer();
+
   /// Resets the internal transfer state (like cancel flags) between sessions.
   void resetTransferState();
 

@@ -128,6 +128,23 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
   }
 
   @override
+  void haltTransfer() {
+    // Stop locally WITHOUT sending any cancel message to peer.
+    // Used when a network error occurs so we don't show a false cancel on peer's screen.
+    _isCancelled = true;
+    if (_windowAckCompleter != null && !_windowAckCompleter!.isCompleted) {
+      _windowAckCompleter!.completeError(Exception('Transfer halted'));
+    }
+    _windowAckCompleter = null;
+    for (final c in _ackCompleters.values) {
+      if (!c.isCompleted) c.completeError('Transfer halted');
+    }
+    _ackCompleters.clear();
+    _fileSaver?.discard();
+    _fileSaver = null;
+  }
+
+  @override
   void resetTransferState() {
     _isCancelled = false;
     _windowAckCompleter = null;
