@@ -229,11 +229,23 @@ class _TransferScreenState extends State<TransferScreen> {
               if (connectionState is ConnectionFailed ||
                   connectionState is ConnectionOffline ||
                   connectionState is ConnectionInitial) {
-                context.read<TransferBloc>().add(
-                  const TransferErrorEvent(
-                    'Connection to peer was lost. Please check your network and try again.',
-                  ),
-                );
+                // Wait briefly to allow any incoming cancel messages to be processed.
+                // On real networks, the connection drop might be detected slightly before
+                // the data channel message is fully processed by the browser.
+                Future.delayed(const Duration(milliseconds: 1500), () {
+                  if (context.mounted) {
+                    final currentState = context.read<TransferBloc>().state;
+                    // If we are still in progress, then it's a real connection loss.
+                    // If it changed to TransferCancelledByPeer (or Success), ignore the drop.
+                    if (currentState is TransferInProgress) {
+                      context.read<TransferBloc>().add(
+                        const TransferErrorEvent(
+                          'Connection to peer was lost. Please check your network and try again.',
+                        ),
+                      );
+                    }
+                  }
+                });
               }
             }
           },
