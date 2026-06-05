@@ -78,7 +78,7 @@ class TransferBloc extends Bloc<TransferEvent, TransferState> {
       return;
     }
     // Don't overwrite a terminal state with progress
-    if (state is TransferSuccess || state is TransferCancelledByPeer) return;
+    if (state is TransferSuccess || state is TransferCancelledByPeer || state is TransferFailure) return;
 
     final now = DateTime.now();
     if (_lastUpdate != null) {
@@ -116,7 +116,13 @@ class TransferBloc extends Bloc<TransferEvent, TransferState> {
 
   void _onTransferError(TransferErrorEvent event, Emitter<TransferState> emit) {
     if (fileTransferRepository.isCancelled) return; // cancelled by us — silent
-    if (state is TransferSuccess || state is TransferCancelledByPeer) return;
+    if (state is TransferSuccess || state is TransferCancelledByPeer || state is TransferFailure) return;
+    
+    // Stop any ongoing file operations in the background so it doesn't keep emitting progress
+    try {
+      fileTransferRepository.cancelTransfer(myRole: 'system_error');
+    } catch (_) {}
+
     emit(TransferFailure(event.error));
   }
 
