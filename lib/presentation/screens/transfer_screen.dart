@@ -223,26 +223,28 @@ class _TransferScreenState extends State<TransferScreen> {
             // Only treat connection drop as an error when actively transferring.
             // If the peer already sent us a cancel signal (TransferCancelledByPeer),
             // ignore connection drops — they are a normal consequence of cancel.
-            final isActivelyTransferring = transferState is TransferInProgress;
             final peerAlreadyCancelled = transferState is TransferCancelledByPeer;
-            if (isActivelyTransferring && !peerAlreadyCancelled) {
+            if (!peerAlreadyCancelled) {
               if (connectionState is ConnectionFailed ||
                   connectionState is ConnectionOffline ||
                   connectionState is ConnectionInitial) {
                 // Wait briefly to allow any incoming cancel messages to be processed.
-                // On real networks, the connection drop might be detected slightly before
-                // the data channel message is fully processed by the browser.
                 Future.delayed(const Duration(milliseconds: 1500), () {
                   if (context.mounted) {
                     final currentState = context.read<TransferBloc>().state;
-                    // If we are still in progress, then it's a real connection loss.
-                    // If it changed to TransferCancelledByPeer (or Success), ignore the drop.
-                    if (currentState is TransferInProgress) {
-                      context.read<TransferBloc>().add(
-                        const TransferErrorEvent(
-                          'Connection to peer was lost. Please check your network and try again.',
-                        ),
-                      );
+                    if (currentState is! TransferCancelledByPeer && currentState is! TransferSuccess) {
+                      if (currentState is TransferInitial) {
+                        // If connection drops before transfer starts, treat it as peer cancel
+                        final peerRole = widget.role == SessionRole.sender ? 'receiver' : 'sender';
+                        context.read<TransferBloc>().add(PeerCancelledEvent(peerRole));
+                      } else {
+                        // If actively transferring and it drops without a cancel message
+                        context.read<TransferBloc>().add(
+                          const TransferErrorEvent(
+                            'Connection to peer was lost. Please check your network and try again.',
+                          ),
+                        );
+                      }
                     }
                   }
                 });
