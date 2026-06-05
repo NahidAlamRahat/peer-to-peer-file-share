@@ -106,7 +106,6 @@ class TransferBloc extends Bloc<TransferEvent, TransferState> {
     if (state is TransferSuccess) {
       return;
     }
-    fileTransferRepository.cancelTransfer();
     emit(TransferFailure(event.error));
   }
 

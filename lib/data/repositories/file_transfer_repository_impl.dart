@@ -91,20 +91,25 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
 
   @override
   void cancelTransfer() {
+    if (_isCancelled) return; // idempotent — safe to call multiple times
     _isCancelled = true;
     _webrtcClient.sendDataMessage(
         RTCDataChannelMessage(jsonEncode({'type': 'cancel'})));
-    _windowAckCompleter?.complete();
+    // Unblock sender if it is waiting for a window ACK
+    if (_windowAckCompleter != null && !_windowAckCompleter!.isCompleted) {
+      _windowAckCompleter!.complete();
+    }
     _windowAckCompleter = null;
+    // Unblock sender if it is waiting for final file ACK
     for (final c in _ackCompleters.values) {
       if (!c.isCompleted) c.completeError('Transfer cancelled');
     }
     _ackCompleters.clear();
     _fileSaver?.discard();
     _fileSaver = null;
-    if (!_progressController.isClosed) {
-      _progressController.addError('Transfer cancelled');
-    }
+    // NOTE: Do NOT call _progressController.addError() here.
+    // The bloc already handles UI state via CancelTransferEvent.
+    // Calling addError here causes a double-cancel loop (stream error → TransferErrorEvent → cancelTransfer again).
   }
 
   @override
@@ -265,9 +270,8 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
       _ackCompleters.remove(fileId);
     }
 
-    if (_isCancelled) {
-      throw Exception('Transfer cancelled.');
-    }
+    // Cancelled — return quietly. Bloc's CancelTransferEvent already handles UI.
+    if (_isCancelled) return;
   }
 
   // ── RECEIVER ──────────────────────────────────────────────────────────────
