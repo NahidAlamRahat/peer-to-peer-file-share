@@ -12,7 +12,8 @@ import '../datasources/webrtc_client.dart';
 import 'file_saver.dart';
 
 // Web-only download trigger
-import 'file_transfer_web.dart' if (dart.library.io) 'file_transfer_mobile.dart';
+import 'file_transfer_web.dart'
+    if (dart.library.io) 'file_transfer_mobile.dart';
 
 /// How many bytes sender sends per "window" before waiting for receiver ACK.
 /// 5MB window → sender is at most 5MB ahead of receiver.
@@ -32,14 +33,16 @@ void _emitProgress({
   required int totalFiles,
 }) {
   if (controller.isClosed) return;
-  controller.add(FileChunkInfo(
-    fileId: fileId,
-    fileName: fileName,
-    totalSize: totalSize,
-    bytesTransferred: bytesTransferred,
-    fileIndex: fileIndex,
-    totalFiles: totalFiles,
-  ));
+  controller.add(
+    FileChunkInfo(
+      fileId: fileId,
+      fileName: fileName,
+      totalSize: totalSize,
+      bytesTransferred: bytesTransferred,
+      fileIndex: fileIndex,
+      totalFiles: totalFiles,
+    ),
+  );
 }
 
 class FileTransferRepositoryImpl implements FileTransferRepository {
@@ -86,7 +89,8 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
   // ── Public API ────────────────────────────────────────────────────────────
 
   @override
-  Stream<FileChunkInfo> get transferProgressStream => _progressController.stream;
+  Stream<FileChunkInfo> get transferProgressStream =>
+      _progressController.stream;
 
   @override
   Stream<String> get onFileReceivedStream => _fileReceivedController.stream;
@@ -102,10 +106,14 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
     if (_isCancelled) return; // idempotent
     _isCancelled = true;
     // Tell peer who cancelled so they can show the right message
-    _webrtcClient.sendDataMessage(
-        RTCDataChannelMessage(jsonEncode({'type': 'cancel', 'who': myRole})));
+    try {
+      _webrtcClient.sendDataMessage(
+          RTCDataChannelMessage(jsonEncode({'type': 'cancel', 'who': myRole})));
+    } catch (e) {
+      debugPrint('Failed to send cancel message to peer: $e');
+    }
     if (_windowAckCompleter != null && !_windowAckCompleter!.isCompleted) {
-      _windowAckCompleter!.complete();
+      _windowAckCompleter!.completeError(Exception('Transfer cancelled'));
     }
     _windowAckCompleter = null;
     for (final c in _ackCompleters.values) {
@@ -146,10 +154,13 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
 
     // Wait for data channel to open (max 10 s)
     int waitCounter = 0;
-    while (_webrtcClient.dataChannelState != RTCDataChannelState.RTCDataChannelOpen) {
+    while (_webrtcClient.dataChannelState !=
+        RTCDataChannelState.RTCDataChannelOpen) {
       if (_isCancelled) return;
       if (waitCounter > 100) {
-        _progressController.addError('Timeout waiting for peer DataChannel to open');
+        _progressController.addError(
+          'Timeout waiting for peer DataChannel to open',
+        );
         return;
       }
       await Future.delayed(const Duration(milliseconds: 100));
@@ -168,28 +179,36 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
       final int totalSize = file.size;
 
       // ── 1. Send metadata ─────────────────────────────────────────────────
-      _webrtcClient.sendDataMessage(RTCDataChannelMessage(jsonEncode({
-        'type': 'metadata',
-        'fileId': fileId,
-        'fileName': fileName,
-        'totalSize': totalSize,
-        'fileIndex': i + 1,
-        'totalFiles': files.length,
-        'windowSize': _windowSize, // tell receiver how large each window is
-      })));
+      _webrtcClient.sendDataMessage(
+        RTCDataChannelMessage(
+          jsonEncode({
+            'type': 'metadata',
+            'fileId': fileId,
+            'fileName': fileName,
+            'totalSize': totalSize,
+            'fileIndex': i + 1,
+            'totalFiles': files.length,
+            'windowSize': _windowSize, // tell receiver how large each window is
+          }),
+        ),
+      );
 
       // ── 2. Send data in ACK-gated windows ────────────────────────────────
       int bytesSent = 0;
       int windowBytesSent = 0; // bytes sent in the current window
 
-      debugPrint('🚀 [P2P-ACK] Sending $fileName ($totalSize bytes) with ${_windowSize ~/ 1024}KB windows');
+      debugPrint(
+        '🚀 [P2P-ACK] Sending $fileName ($totalSize bytes) with ${_windowSize ~/ 1024}KB windows',
+      );
 
       Future<void> _sendChunks(Uint8List bytes, int start, int end) async {
         int offset = start;
         while (offset < end) {
           if (_isCancelled) return;
 
-          final sliceEnd = (offset + _chunkSize < end) ? offset + _chunkSize : end;
+          final sliceEnd = (offset + _chunkSize < end)
+              ? offset + _chunkSize
+              : end;
           final slice = bytes.sublist(offset, sliceEnd);
 
           _webrtcClient.sendDataMessageBinary(slice);
@@ -214,20 +233,27 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
 
             final bool isLast = bytesSent == totalSize;
             // Send window boundary marker to receiver
-            _webrtcClient.sendDataMessage(RTCDataChannelMessage(jsonEncode({
-              'type': 'window_end',
-              'fileId': fileId,
-              'bytesSent': bytesSent,
-              'isLast': isLast,
-            })));
+            _webrtcClient.sendDataMessage(
+              RTCDataChannelMessage(
+                jsonEncode({
+                  'type': 'window_end',
+                  'fileId': fileId,
+                  'bytesSent': bytesSent,
+                  'isLast': isLast,
+                }),
+              ),
+            );
 
             if (!isLast) {
               // Wait for receiver to ACK this window (max 30 s)
               _windowAckCompleter = Completer<void>();
-              debugPrint('⏸ [P2P-ACK] Window sent ($bytesSent/$totalSize bytes). Waiting for receiver ACK...');
+              debugPrint(
+                '⏸ [P2P-ACK] Window sent ($bytesSent/$totalSize bytes). Waiting for receiver ACK...',
+              );
               try {
-                await _windowAckCompleter!.future
-                    .timeout(const Duration(seconds: 30));
+                await _windowAckCompleter!.future.timeout(
+                  const Duration(seconds: 30),
+                );
               } on TimeoutException {
                 debugPrint('⚠️ [P2P-ACK] Window ACK timeout — continuing.');
               } catch (_) {
@@ -235,7 +261,9 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
               }
               _windowAckCompleter = null;
               windowBytesSent = 0;
-              debugPrint('▶ [P2P-ACK] Receiver ACKed window. Sending next window...');
+              debugPrint(
+                '▶ [P2P-ACK] Receiver ACKed window. Sending next window...',
+              );
             } else {
               windowBytesSent = 0;
             }
@@ -258,10 +286,9 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
       final ackCompleter = Completer<void>();
       _ackCompleters[fileId] = ackCompleter;
 
-      _webrtcClient.sendDataMessage(RTCDataChannelMessage(jsonEncode({
-        'type': 'eof',
-        'fileId': fileId,
-      })));
+      _webrtcClient.sendDataMessage(
+        RTCDataChannelMessage(jsonEncode({'type': 'eof', 'fileId': fileId})),
+      );
 
       try {
         await ackCompleter.future;
@@ -274,9 +301,8 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
       _ackCompleters.remove(fileId);
     }
 
-    if (_isCancelled) {
-      throw Exception('Transfer cancelled.');
-    }
+    // Cancelled — return quietly. Bloc's CancelTransferEvent already handles UI.
+    if (_isCancelled) return;
   }
 
   // ── RECEIVER ──────────────────────────────────────────────────────────────
@@ -316,7 +342,9 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
             _remoteWindowSize = decoded['windowSize'] ?? _windowSize;
             _fileSaver = getFileSaver();
             await _fileSaver!.init(_receivingFileName ?? 'file');
-            debugPrint('📥 [P2P-ACK] Receiving ${_receivingFileName} (${_receivingTotalSize} bytes), window=${_remoteWindowSize ~/ 1024}KB');
+            debugPrint(
+              '📥 [P2P-ACK] Receiving ${_receivingFileName} (${_receivingTotalSize} bytes), window=${_remoteWindowSize ~/ 1024}KB',
+            );
             break;
 
           case 'window_end':
@@ -324,18 +352,25 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
             final bool isLast = decoded['isLast'] == true;
             if (!isLast) {
               _windowBytesReceived = 0;
-              _webrtcClient.sendDataMessage(RTCDataChannelMessage(jsonEncode({
-                'type': 'window_ack',
-                'fileId': decoded['fileId'],
-                'bytesReceived': _receivedBytes,
-              })));
-              debugPrint('✔ [P2P-ACK] Window ACK sent. Total received: $_receivedBytes/${_receivingTotalSize}');
+              _webrtcClient.sendDataMessage(
+                RTCDataChannelMessage(
+                  jsonEncode({
+                    'type': 'window_ack',
+                    'fileId': decoded['fileId'],
+                    'bytesReceived': _receivedBytes,
+                  }),
+                ),
+              );
+              debugPrint(
+                '✔ [P2P-ACK] Window ACK sent. Total received: $_receivedBytes/${_receivingTotalSize}',
+              );
             }
             break;
 
           case 'window_ack':
             // Receiver ACKed a window — unblock the sender
-            if (_windowAckCompleter != null && !_windowAckCompleter!.isCompleted) {
+            if (_windowAckCompleter != null &&
+                !_windowAckCompleter!.isCompleted) {
               _windowAckCompleter!.complete();
             }
             break;
@@ -346,10 +381,11 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
               final savedPath = await _fileSaver!.closeAndSave();
               _fileReceivedController.add(savedPath);
               _fileSaver = null;
-              _webrtcClient.sendDataMessage(RTCDataChannelMessage(jsonEncode({
-                'type': 'ack',
-                'fileId': decoded['fileId'],
-              })));
+              _webrtcClient.sendDataMessage(
+                RTCDataChannelMessage(
+                  jsonEncode({'type': 'ack', 'fileId': decoded['fileId']}),
+                ),
+              );
               debugPrint('💾 [P2P-ACK] File saved. Sent final ACK.');
             }
             break;

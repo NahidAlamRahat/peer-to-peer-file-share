@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../../domain/repositories/file_transfer_repository.dart';
 import 'transfer_event.dart';
@@ -13,7 +14,8 @@ class TransferBloc extends Bloc<TransferEvent, TransferState> {
   int _lastBytes = 0;
   double _currentSpeed = 0;
 
-  TransferBloc({required this.fileTransferRepository}) : super(TransferInitial()) {
+  TransferBloc({required this.fileTransferRepository})
+    : super(TransferInitial()) {
     on<SendFilesEvent>(_onSendFiles);
     on<TransferProgressEvent>(_onTransferProgress);
     on<TransferCompletedEvent>(_onTransferCompleted);
@@ -23,26 +25,24 @@ class TransferBloc extends Bloc<TransferEvent, TransferState> {
     on<SaveFileManuallyEvent>(_onSaveFileManually);
     on<ResetTransferEvent>(_onResetTransfer);
 
-    _progressSubscription = fileTransferRepository.transferProgressStream.listen(
-      (info) {
-        add(TransferProgressEvent(
-          fileId: info.fileId,
-          fileName: info.fileName,
-          totalSize: info.totalSize,
-          bytesTransferred: info.bytesTransferred,
-          fileIndex: info.fileIndex,
-          totalFiles: info.totalFiles,
-        ));
-      },
-      onError: (e) => add(TransferErrorEvent(e.toString())),
-    );
+    _progressSubscription = fileTransferRepository.transferProgressStream
+        .listen((info) {
+          add(
+            TransferProgressEvent(
+              fileId: info.fileId,
+              fileName: info.fileName,
+              totalSize: info.totalSize,
+              bytesTransferred: info.bytesTransferred,
+              fileIndex: info.fileIndex,
+              totalFiles: info.totalFiles,
+            ),
+          );
+        }, onError: (e) => add(TransferErrorEvent(e.toString())));
 
-    _fileReceivedSubscription = fileTransferRepository.onFileReceivedStream.listen(
-      (path) {
-        add(TransferCompletedEvent(path));
-      },
-      onError: (e) => add(TransferErrorEvent(e.toString())),
-    );
+    _fileReceivedSubscription = fileTransferRepository.onFileReceivedStream
+        .listen((path) {
+          add(TransferCompletedEvent(path));
+        }, onError: (e) => add(TransferErrorEvent(e.toString())));
 
     // Wire up peer-cancel callback so repository can inform us when remote cancels
     fileTransferRepository.onPeerCancelled = (cancellerRole) {
@@ -54,19 +54,12 @@ class TransferBloc extends Bloc<TransferEvent, TransferState> {
     SendFilesEvent event,
     Emitter<TransferState> emit,
   ) async {
-    // Reset speed tracking for fresh transfer
-    _lastUpdate = null;
-    _lastBytes = 0;
-    _currentSpeed = 0;
-
     try {
       await fileTransferRepository.sendFiles(event.files);
-      // Only emit success if transfer was NOT cancelled
-      if (!fileTransferRepository.isCancelled) {
-        emit(const TransferSuccess('__SENT__'));
-      }
+      emit(const TransferSuccess('__SENT__'));
     } catch (e) {
-      if (state is! TransferCancelledByPeer && state is! TransferInitial) {
+      // Only emit failure if not already handled by cancel/peer-cancel
+      if (state is! TransferCancelledByPeer) {
         emit(TransferFailure(e.toString()));
       }
     }
@@ -93,15 +86,17 @@ class TransferBloc extends Bloc<TransferEvent, TransferState> {
       _lastBytes = event.bytesTransferred;
     }
 
-    emit(TransferInProgress(
-      fileId: event.fileId,
-      fileName: event.fileName,
-      totalSize: event.totalSize,
-      bytesTransferred: event.bytesTransferred,
-      transferSpeed: _currentSpeed,
-      fileIndex: event.fileIndex,
-      totalFiles: event.totalFiles,
-    ));
+    emit(
+      TransferInProgress(
+        fileId: event.fileId,
+        fileName: event.fileName,
+        totalSize: event.totalSize,
+        bytesTransferred: event.bytesTransferred,
+        transferSpeed: _currentSpeed,
+        fileIndex: event.fileIndex,
+        totalFiles: event.totalFiles,
+      ),
+    );
   }
 
   void _onTransferCompleted(
@@ -111,10 +106,7 @@ class TransferBloc extends Bloc<TransferEvent, TransferState> {
     emit(TransferSuccess(event.filePath));
   }
 
-  void _onTransferError(
-    TransferErrorEvent event,
-    Emitter<TransferState> emit,
-  ) {
+  void _onTransferError(TransferErrorEvent event, Emitter<TransferState> emit) {
     if (state is TransferSuccess || state is TransferCancelledByPeer) return;
     emit(TransferFailure(event.error));
   }
@@ -123,9 +115,12 @@ class TransferBloc extends Bloc<TransferEvent, TransferState> {
     CancelTransferEvent event,
     Emitter<TransferState> emit,
   ) {
-    // Cancel repository (sends 'who' to peer) and fully reset state
-    fileTransferRepository.cancelTransfer(myRole: event.myRole);
-    fileTransferRepository.resetTransferState();
+    try {
+      fileTransferRepository.cancelTransfer(myRole: event.myRole);
+      fileTransferRepository.resetTransferState();
+    } catch (e) {
+      debugPrint('Error during cancel: $e');
+    }
     // Reset speed counters
     _lastUpdate = null;
     _lastBytes = 0;
@@ -134,10 +129,7 @@ class TransferBloc extends Bloc<TransferEvent, TransferState> {
     emit(TransferInitial());
   }
 
-  void _onPeerCancelled(
-    PeerCancelledEvent event,
-    Emitter<TransferState> emit,
-  ) {
+  void _onPeerCancelled(PeerCancelledEvent event, Emitter<TransferState> emit) {
     if (state is TransferSuccess) return; // already done, ignore
     // Build a human-readable message for the PEER's screen
     final msg = event.cancellerRole == 'sender'
@@ -157,7 +149,11 @@ class TransferBloc extends Bloc<TransferEvent, TransferState> {
     ResetTransferEvent event,
     Emitter<TransferState> emit,
   ) {
-    fileTransferRepository.resetTransferState();
+    try {
+      fileTransferRepository.resetTransferState();
+    } catch (e) {
+      debugPrint('Error during reset: $e');
+    }
     _lastUpdate = null;
     _lastBytes = 0;
     _currentSpeed = 0;

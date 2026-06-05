@@ -9,6 +9,7 @@ import '../../core/theme/app_sizes.dart';
 import '../../core/theme/spacing.dart';
 import '../../domain/entities/peer_session.dart';
 import '../../domain/entities/share_file.dart';
+import '../../domain/repositories/file_transfer_repository.dart';
 import '../blocs/connection/connection_bloc.dart';
 import '../blocs/connection/connection_event.dart';
 import '../blocs/connection/connection_state.dart';
@@ -37,8 +38,8 @@ class _ShareLinkScreenState extends State<ShareLinkScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final transferBloc = sl<TransferBloc>();
       // ONLY redirect if transfer is actively InProgress. 
-      // Do NOT redirect if it's already Success (finished).
-      if (transferBloc.state is TransferInProgress) {
+      // Do NOT redirect if it's already Success (finished) or Cancelled.
+      if (transferBloc.state is TransferInProgress && !sl<FileTransferRepository>().isCancelled) {
         final connectionBloc = context.read<ConnectionBloc>();
         SessionRole role = SessionRole.sender;
         if (connectionBloc.state is ConnectionConnected) {

@@ -8,6 +8,7 @@ import '../../core/services/settings_service.dart';
 import '../../core/theme/app_sizes.dart';
 import '../../core/theme/spacing.dart';
 import '../../domain/entities/peer_session.dart';
+import '../../domain/repositories/file_transfer_repository.dart';
 import '../blocs/connection/connection_bloc.dart';
 import '../blocs/connection/connection_state.dart';
 import '../blocs/transfer/transfer_bloc.dart';
@@ -178,8 +179,8 @@ class HomeScreen extends StatelessWidget {
               const Spacer(flex: 2),
               _buildHeroSection(context, isDesktop: false),
               const Spacer(flex: 2),
-              if (transferState is TransferInProgress ||
-                  transferState is TransferSuccess) ...[
+              if ((transferState is TransferInProgress ||
+                  transferState is TransferSuccess) && !sl<FileTransferRepository>().isCancelled) ...[
                 _buildActiveTransferBanner(context, transferState),
                 AppSpacing.gapH24,
               ],

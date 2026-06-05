@@ -57,12 +57,18 @@ class _TransferScreenState extends State<TransferScreen> {
   Future<void> _startBackgroundExecution() async {
     const androidConfig = FlutterBackgroundAndroidConfig(
       notificationTitle: 'P2P File Transfer',
-      notificationText: 'Running in the background to ensure transfer completes.',
-      notificationIcon: AndroidResource(name: 'ic_notification', defType: 'drawable'),
+      notificationText:
+          'Running in the background to ensure transfer completes.',
+      notificationIcon: AndroidResource(
+        name: 'ic_notification',
+        defType: 'drawable',
+      ),
       notificationImportance: AndroidNotificationImportance.high,
       enableWifiLock: true,
     );
-    final hasPermissions = await FlutterBackground.initialize(androidConfig: androidConfig);
+    final hasPermissions = await FlutterBackground.initialize(
+      androidConfig: androidConfig,
+    );
     if (hasPermissions) {
       await FlutterBackground.enableBackgroundExecution();
     }
@@ -84,93 +90,96 @@ class _TransferScreenState extends State<TransferScreen> {
 
   Future<void> _confirmAndCancelTransfer(BuildContext context) async {
     final primaryColor = Theme.of(context).colorScheme.primary;
-    
-    final shouldCancel = await showDialog<bool>(
-      context: context,
-      barrierDismissible: false,
-      builder: (dialogContext) => AlertDialog(
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(AppSizes.radiusLarge),
-        ),
-        title: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: Colors.red.withValues(alpha: 0.1),
-                shape: BoxShape.circle,
-              ),
-              child: const Icon(
-                Icons.warning_amber_rounded,
-                color: Colors.redAccent,
-                size: 24,
-              ),
+
+    final shouldCancel =
+        await showDialog<bool>(
+          context: context,
+          barrierDismissible: false,
+          builder: (dialogContext) => AlertDialog(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(AppSizes.radiusLarge),
             ),
-            AppSpacing.gapW12,
-            const Text(
-              'Cancel Transfer?',
-              style: TextStyle(
-                fontWeight: FontWeight.bold,
-                fontSize: 20,
-              ),
+            title: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: Colors.red.withValues(alpha: 0.1),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(
+                    Icons.warning_amber_rounded,
+                    color: Colors.redAccent,
+                    size: 24,
+                  ),
+                ),
+                AppSpacing.gapW12,
+                const Text(
+                  'Cancel Transfer?',
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 20),
+                ),
+              ],
             ),
-          ],
-        ),
-        content: const Text(
-          'Are you sure you want to stop the file transfer? This will disconnect the peer connection and cancel the current sharing session. Any unfinished files will need to be sent again.',
-          style: TextStyle(
-            fontSize: 15,
-            height: 1.4,
+            content: const Text(
+              'Are you sure you want to stop the file transfer? This will disconnect the peer connection and cancel the current sharing session. Any unfinished files will need to be sent again.',
+              style: TextStyle(fontSize: 15, height: 1.4),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(dialogContext).pop(false),
+                style: TextButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 10,
+                  ),
+                ),
+                child: Text(
+                  'Keep Sharing',
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: primaryColor,
+                  ),
+                ),
+              ),
+              ElevatedButton(
+                onPressed: () => Navigator.of(dialogContext).pop(true),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.redAccent,
+                  foregroundColor: Colors.white,
+                  elevation: 0,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 18,
+                    vertical: 10,
+                  ),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(AppSizes.radiusMedium),
+                  ),
+                ),
+                child: const Text(
+                  'Yes, Cancel',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+              ),
+            ],
           ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(false),
-            style: TextButton.styleFrom(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-            ),
-            child: Text(
-              'Keep Sharing',
-              style: TextStyle(
-                fontWeight: FontWeight.bold,
-                color: primaryColor,
-              ),
-            ),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.of(dialogContext).pop(true),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.redAccent,
-              foregroundColor: Colors.white,
-              elevation: 0,
-              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(AppSizes.radiusMedium),
-              ),
-            ),
-            child: const Text(
-              'Yes, Cancel',
-              style: TextStyle(
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-          ),
-        ],
-      ),
-    ) ?? false;
+        ) ??
+        false;
 
     if (shouldCancel && context.mounted) {
       final myRole = widget.role == SessionRole.sender ? 'sender' : 'receiver';
       final tBloc = context.read<TransferBloc>();
       final cBloc = context.read<ConnectionBloc>();
-      // Cancel state immediately so HomeScreen doesn't show old banner
-      tBloc.add(CancelTransferEvent(myRole: myRole));
-      cBloc.add(ResetConnectionEvent());
       // Canceller: go home silently — NO notification, NO error screen
       Navigator.of(context).pushAndRemoveUntil(
         MaterialPageRoute(builder: (_) => const HomeScreen()),
         (route) => false,
       );
+      Future.delayed(const Duration(milliseconds: 400), () {
+        tBloc.add(CancelTransferEvent(myRole: myRole));
+      });
+      Future.delayed(const Duration(milliseconds: 1500), () {
+        cBloc.add(ResetConnectionEvent());
+      });
     }
   }
 
@@ -180,7 +189,7 @@ class _TransferScreenState extends State<TransferScreen> {
       canPop: false,
       onPopInvokedWithResult: (didPop, result) async {
         if (didPop) return;
-        
+
         final state = context.read<TransferBloc>().state;
         if (state is TransferInProgress || state is TransferInitial) {
           _confirmAndCancelTransfer(context);
@@ -188,74 +197,81 @@ class _TransferScreenState extends State<TransferScreen> {
           if (context.mounted) {
             final tBloc = context.read<TransferBloc>();
             final cBloc = context.read<ConnectionBloc>();
-            tBloc.add(ResetTransferEvent());
-            cBloc.add(ResetConnectionEvent());
             Navigator.of(context).pushAndRemoveUntil(
               MaterialPageRoute(builder: (_) => const HomeScreen()),
               (route) => false,
             );
+            Future.delayed(const Duration(milliseconds: 400), () {
+              tBloc.add(ResetTransferEvent());
+              cBloc.add(ResetConnectionEvent());
+            });
           }
         }
       },
       child: Scaffold(
-        appBar: AppBar(
-          title: const Text('Live Transfer'),
-          elevation: 0,
-        ),
+        appBar: AppBar(title: const Text('Live Transfer'), elevation: 0),
         body: BlocListener<ConnectionBloc, ConnectionStateBloc>(
           listener: (context, connectionState) {
             final transferState = context.read<TransferBloc>().state;
             if (transferState is TransferInProgress) {
-              if (connectionState is ConnectionFailed || connectionState is ConnectionOffline || connectionState is ConnectionInitial) {
-                context.read<TransferBloc>().add(const TransferErrorEvent('Connection to peer was lost. Please check your network and try again.'));
+              if (connectionState is ConnectionFailed ||
+                  connectionState is ConnectionOffline ||
+                  connectionState is ConnectionInitial) {
+                context.read<TransferBloc>().add(
+                  const TransferErrorEvent(
+                    'Connection to peer was lost. Please check your network and try again.',
+                  ),
+                );
               }
             }
           },
           child: BlocConsumer<TransferBloc, TransferState>(
-          listener: (context, state) {
-            if (state is TransferInProgress) {
-              final now = DateTime.now();
-              if (now.difference(_lastNotificationUpdate).inMilliseconds > 500 || state.progress >= 1.0) {
-                _lastNotificationUpdate = now;
-                _notifications.showProgressNotification(
-                  progress: (state.progress * 100).toInt(),
-                  fileName: state.fileName,
+            listener: (context, state) {
+              if (state is TransferInProgress) {
+                final now = DateTime.now();
+                if (now.difference(_lastNotificationUpdate).inMilliseconds >
+                        500 ||
+                    state.progress >= 1.0) {
+                  _lastNotificationUpdate = now;
+                  _notifications.showProgressNotification(
+                    progress: (state.progress * 100).toInt(),
+                    fileName: state.fileName,
+                  );
+                }
+              } else if (state is TransferSuccess) {
+                WakelockPlus.disable();
+                _stopBackgroundExecution();
+                _notifications.showTransferComplete(
+                  isSender: widget.role == SessionRole.sender,
+                  fileName: state.filePath.split('/').last.split('\\').last,
                 );
+                if (!kIsWeb && AdService.instance.adsEnabled) {
+                  Future.delayed(const Duration(seconds: 1), () {
+                    InterstitialAdService.instance.show();
+                  });
+                }
+              } else if (state is TransferFailure) {
+                // Connection lost or system error — show notification to both sides
+                WakelockPlus.disable();
+                _stopBackgroundExecution();
+                _notifications.showTransferFailed(reason: state.error);
+              } else if (state is TransferCancelledByPeer) {
+                // Peer cancelled — show notification only to the one who did NOT cancel
+                WakelockPlus.disable();
+                _stopBackgroundExecution();
+                _notifications.showTransferFailed(reason: state.message);
               }
-            } else if (state is TransferSuccess) {
-              WakelockPlus.disable();
-              _stopBackgroundExecution();
-              _notifications.showTransferComplete(
-                isSender: widget.role == SessionRole.sender,
-                fileName: state.filePath.split('/').last.split('\\').last,
+              // NOTE: CancelTransferEvent → canceller goes home silently (handled in _confirmAndCancelTransfer)
+              // so we intentionally do NOT show any notification/UI for the canceller here.
+            },
+            builder: (context, state) {
+              final content = _buildTransferBody(state);
+              return ResponsiveLayout(
+                mobileBody: _buildMobileLayout(content),
+                desktopBody: _buildDesktopLayout(content),
               );
-              if (!kIsWeb && AdService.instance.adsEnabled) {
-                Future.delayed(const Duration(seconds: 1), () {
-                  InterstitialAdService.instance.show();
-                });
-              }
-            } else if (state is TransferFailure) {
-              // Connection lost or system error — show notification to both sides
-              WakelockPlus.disable();
-              _stopBackgroundExecution();
-              _notifications.showTransferFailed(reason: state.error);
-            } else if (state is TransferCancelledByPeer) {
-              // Peer cancelled — show notification only to the one who did NOT cancel
-              WakelockPlus.disable();
-              _stopBackgroundExecution();
-              _notifications.showTransferFailed(reason: state.message);
-            }
-            // NOTE: CancelTransferEvent → canceller goes home silently (handled in _confirmAndCancelTransfer)
-            // so we intentionally do NOT show any notification/UI for the canceller here.
-          },
-          builder: (context, state) {
-             final content = _buildTransferBody(state);
-             return ResponsiveLayout(
-               mobileBody: _buildMobileLayout(content),
-               desktopBody: _buildDesktopLayout(content),
-             );
-          },
-        ),
+            },
+          ),
         ), // Close BlocListener
       ),
     );
@@ -267,9 +283,19 @@ class _TransferScreenState extends State<TransferScreen> {
         return Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.check_circle_outline, size: AppSizes.iconHuge, color: Colors.green),
+            Icon(
+              Icons.check_circle_outline,
+              size: AppSizes.iconHuge,
+              color: Colors.green,
+            ),
             AppSpacing.gapH16,
-            Text('Peer connected!', style: TextStyle(fontSize: AppSizes.textHeadline, fontWeight: FontWeight.bold)),
+            Text(
+              'Peer connected!',
+              style: TextStyle(
+                fontSize: AppSizes.textHeadline,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
             AppSpacing.gapH32,
             CustomButton(
               text: 'Select File to Send',
@@ -277,21 +303,28 @@ class _TransferScreenState extends State<TransferScreen> {
               onPressed: () async {
                 FilePickerResult? result = await FilePicker.platform.pickFiles(
                   allowMultiple: true,
-                  withReadStream: true, // Stream-based: safe for 1GB+ files, no RAM crash
+                  withReadStream:
+                      true, // Stream-based: safe for 1GB+ files, no RAM crash
                 );
                 if (result != null && result.files.isNotEmpty) {
                   final validFiles = result.files
                       .where((f) => f.readStream != null || f.bytes != null)
                       .toList();
                   if (validFiles.isNotEmpty) {
-                    final shareFiles = validFiles.map((pf) => ShareFile(
-                      name: pf.name,
-                      size: pf.size,
-                      readStream: pf.readStream,
-                      bytes: pf.bytes,
-                    )).toList();
+                    final shareFiles = validFiles
+                        .map(
+                          (pf) => ShareFile(
+                            name: pf.name,
+                            size: pf.size,
+                            readStream: pf.readStream,
+                            bytes: pf.bytes,
+                          ),
+                        )
+                        .toList();
                     // ignore: use_build_context_synchronously
-                    context.read<TransferBloc>().add(SendFilesEvent(shareFiles));
+                    context.read<TransferBloc>().add(
+                      SendFilesEvent(shareFiles),
+                    );
                   }
                 }
               },
@@ -302,23 +335,36 @@ class _TransferScreenState extends State<TransferScreen> {
         return Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.wifi_tethering, size: AppSizes.iconHuge, color: Colors.blueAccent),
+            Icon(
+              Icons.wifi_tethering,
+              size: AppSizes.iconHuge,
+              color: Colors.blueAccent,
+            ),
             AppSpacing.gapH16,
-            Text('Connecting to peer...', style: TextStyle(fontSize: AppSizes.textHeadline, fontWeight: FontWeight.bold)),
+            Text(
+              'Connecting to peer...',
+              style: TextStyle(
+                fontSize: AppSizes.textHeadline,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
             AppSpacing.gapH16,
             const Text('Starting your download now.'),
             AppSpacing.gapH32,
             const Text(
               '⚠️ Please keep this app open during the transfer',
-              style: TextStyle(color: Colors.orange, fontWeight: FontWeight.bold),
-            )
+              style: TextStyle(
+                color: Colors.orange,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
           ],
         );
       }
     } else if (state is TransferInProgress) {
       final speedKB = state.transferSpeed / 1024;
-      final speedText = speedKB > 1024 
-          ? '${(speedKB / 1024).toStringAsFixed(2)} MB/s' 
+      final speedText = speedKB > 1024
+          ? '${(speedKB / 1024).toStringAsFixed(2)} MB/s'
           : '${speedKB.toStringAsFixed(1)} KB/s';
 
       return Column(
@@ -327,32 +373,52 @@ class _TransferScreenState extends State<TransferScreen> {
           Container(
             padding: EdgeInsets.all(AppSizes.p20),
             decoration: BoxDecoration(
-              color: Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.2),
+              color: Theme.of(
+                context,
+              ).colorScheme.surfaceContainerHighest.withValues(alpha: 0.2),
               borderRadius: BorderRadius.circular(AppSizes.radiusLarge),
-              border: Border.all(color: Theme.of(context).colorScheme.outlineVariant.withValues(alpha: 0.3)),
+              border: Border.all(
+                color: Theme.of(
+                  context,
+                ).colorScheme.outlineVariant.withValues(alpha: 0.3),
+              ),
             ),
             child: Column(
               children: [
                 Icon(
-                  widget.role == SessionRole.sender ? Icons.upload_outlined : Icons.download_outlined,
+                  widget.role == SessionRole.sender
+                      ? Icons.upload_outlined
+                      : Icons.download_outlined,
                   size: AppSizes.iconLarge,
                   color: Theme.of(context).colorScheme.primary,
                 ),
                 AppSpacing.gapH12,
                 Text(
                   state.fileName,
-                  style: TextStyle(fontSize: AppSizes.textBody, fontWeight: FontWeight.bold),
+                  style: TextStyle(
+                    fontSize: AppSizes.textBody,
+                    fontWeight: FontWeight.bold,
+                  ),
                   textAlign: TextAlign.center,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
                 AppSpacing.gapH8,
-                if (state.totalFiles > 1) 
-                  Text('File ${state.fileIndex} of ${state.totalFiles}', style: TextStyle(color: Theme.of(context).colorScheme.primary, fontWeight: FontWeight.bold)),
+                if (state.totalFiles > 1)
+                  Text(
+                    'File ${state.fileIndex} of ${state.totalFiles}',
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.primary,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
                 if (state.totalFiles > 1) AppSpacing.gapH4,
                 Text(
                   '${(state.bytesTransferred / (1024 * 1024)).toStringAsFixed(2)} MB / ${(state.totalSize / (1024 * 1024)).toStringAsFixed(2)} MB',
-                  style: TextStyle(fontSize: AppSizes.textSmall, color: Colors.grey),
+                  style: TextStyle(
+                    fontSize: AppSizes.textSmall,
+                    color: Colors.grey,
+                  ),
                 ),
               ],
             ),
@@ -367,7 +433,9 @@ class _TransferScreenState extends State<TransferScreen> {
                 child: CircularProgressIndicator(
                   value: state.progress,
                   strokeWidth: 10,
-                  backgroundColor: Theme.of(context).colorScheme.surfaceContainerHighest,
+                  backgroundColor: Theme.of(
+                    context,
+                  ).colorScheme.surfaceContainerHighest,
                   strokeCap: StrokeCap.round,
                 ),
               ),
@@ -376,7 +444,10 @@ class _TransferScreenState extends State<TransferScreen> {
                 children: [
                   Text(
                     '${(state.progress * 100).toInt()}%',
-                    style: TextStyle(fontSize: AppSizes.textDisplay, fontWeight: FontWeight.bold),
+                    style: TextStyle(
+                      fontSize: AppSizes.textDisplay,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                   Text(
                     speedText,
@@ -392,7 +463,10 @@ class _TransferScreenState extends State<TransferScreen> {
           ),
           AppSpacing.gapH48,
           Container(
-            padding: EdgeInsets.symmetric(horizontal: AppSizes.p16, vertical: AppSizes.p12),
+            padding: EdgeInsets.symmetric(
+              horizontal: AppSizes.p16,
+              vertical: AppSizes.p12,
+            ),
             decoration: BoxDecoration(
               color: Colors.orange.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(AppSizes.radiusMedium),
@@ -401,11 +475,19 @@ class _TransferScreenState extends State<TransferScreen> {
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Icon(Icons.warning_amber_rounded, color: Colors.orange, size: 20),
+                const Icon(
+                  Icons.warning_amber_rounded,
+                  color: Colors.orange,
+                  size: 20,
+                ),
                 AppSpacing.gapW8,
                 Text(
                   'Keep app open for live P2P transfer',
-                  style: TextStyle(color: Colors.orange.shade800, fontWeight: FontWeight.w600, fontSize: AppSizes.textSmall),
+                  style: TextStyle(
+                    color: Colors.orange.shade800,
+                    fontWeight: FontWeight.w600,
+                    fontSize: AppSizes.textSmall,
+                  ),
                 ),
               ],
             ),
@@ -415,12 +497,25 @@ class _TransferScreenState extends State<TransferScreen> {
             TextButton.icon(
               onPressed: () => _confirmAndCancelTransfer(context),
               icon: const Icon(Icons.cancel, color: Colors.red),
-              label: const Text('Cancel Transfer', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
+              label: const Text(
+                'Cancel Transfer',
+                style: TextStyle(
+                  color: Colors.red,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
             ),
           if (state.progress >= 1.0 && widget.role == SessionRole.sender)
-             Padding(
+            Padding(
               padding: EdgeInsets.only(top: AppSizes.p32),
-              child: Text('✅ Sent Successfully!', style: TextStyle(color: Colors.green, fontSize: AppSizes.textSubtitle, fontWeight: FontWeight.bold)),
+              child: Text(
+                '✅ Sent Successfully!',
+                style: TextStyle(
+                  color: Colors.green,
+                  fontSize: AppSizes.textSubtitle,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
             ),
         ],
       );
@@ -428,16 +523,26 @@ class _TransferScreenState extends State<TransferScreen> {
       return Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(Icons.check_circle, size: AppSizes.iconHuge, color: Colors.green),
+          Icon(
+            Icons.check_circle,
+            size: AppSizes.iconHuge,
+            color: Colors.green,
+          ),
           AppSpacing.gapH24,
-          Text('Transfer Complete!', style: TextStyle(fontSize: AppSizes.textHeadline, fontWeight: FontWeight.bold)),
+          Text(
+            'Transfer Complete!',
+            style: TextStyle(
+              fontSize: AppSizes.textHeadline,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
           AppSpacing.gapH16,
           Text(
-            state.filePath.startsWith('blob:') 
-               ? 'File received successfully.' 
-               : 'Saved at: \n${state.filePath}', 
-            textAlign: TextAlign.center, 
-            style: const TextStyle(color: Colors.grey)
+            state.filePath.startsWith('blob:')
+                ? 'File received successfully.'
+                : 'Saved at: \n${state.filePath}',
+            textAlign: TextAlign.center,
+            style: const TextStyle(color: Colors.grey),
           ),
 
           AppSpacing.gapH16,
@@ -466,23 +571,35 @@ class _TransferScreenState extends State<TransferScreen> {
         children: [
           Icon(Icons.error_outline, size: AppSizes.iconHuge, color: Colors.red),
           AppSpacing.gapH24,
-          Text('Transfer Failed', style: TextStyle(fontSize: AppSizes.textHeadline, fontWeight: FontWeight.bold)),
+          Text(
+            'Transfer Failed',
+            style: TextStyle(
+              fontSize: AppSizes.textHeadline,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
           AppSpacing.gapH16,
-          Text(state.error, style: const TextStyle(color: Colors.red), textAlign: TextAlign.center),
+          Text(
+            state.error,
+            style: const TextStyle(color: Colors.red),
+            textAlign: TextAlign.center,
+          ),
           AppSpacing.gapH32,
           CustomButton(
             text: 'Retry Connection',
             onPressed: () {
-               final tBloc = context.read<TransferBloc>();
-               final cBloc = context.read<ConnectionBloc>();
-               tBloc.add(ResetTransferEvent());
-               cBloc.add(ResetConnectionEvent());
-               Navigator.of(context).pushAndRemoveUntil(
-                 MaterialPageRoute(builder: (_) => const HomeScreen()),
-                 (route) => false,
-               );
+              final tBloc = context.read<TransferBloc>();
+              final cBloc = context.read<ConnectionBloc>();
+              Navigator.of(context).pushAndRemoveUntil(
+                MaterialPageRoute(builder: (_) => const HomeScreen()),
+                (route) => false,
+              );
+              Future.delayed(const Duration(milliseconds: 400), () {
+                tBloc.add(ResetTransferEvent());
+                cBloc.add(ResetConnectionEvent());
+              });
             },
-          )
+          ),
         ],
       );
     } else if (state is TransferCancelledByPeer) {
@@ -490,9 +607,19 @@ class _TransferScreenState extends State<TransferScreen> {
       return Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(Icons.cancel_outlined, size: AppSizes.iconHuge, color: Colors.orange),
+          Icon(
+            Icons.cancel_outlined,
+            size: AppSizes.iconHuge,
+            color: Colors.orange,
+          ),
           AppSpacing.gapH24,
-          Text('Transfer Cancelled', style: TextStyle(fontSize: AppSizes.textHeadline, fontWeight: FontWeight.bold)),
+          Text(
+            'Transfer Cancelled',
+            style: TextStyle(
+              fontSize: AppSizes.textHeadline,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
           AppSpacing.gapH16,
           Text(
             state.message,
@@ -507,12 +634,14 @@ class _TransferScreenState extends State<TransferScreen> {
             onPressed: () {
               final tBloc = context.read<TransferBloc>();
               final cBloc = context.read<ConnectionBloc>();
-              tBloc.add(ResetTransferEvent());
-              cBloc.add(ResetConnectionEvent());
               Navigator.of(context).pushAndRemoveUntil(
                 MaterialPageRoute(builder: (_) => const HomeScreen()),
                 (route) => false,
               );
+              Future.delayed(const Duration(milliseconds: 400), () {
+                tBloc.add(ResetTransferEvent());
+                cBloc.add(ResetConnectionEvent());
+              });
             },
           ),
         ],
@@ -522,14 +651,11 @@ class _TransferScreenState extends State<TransferScreen> {
   }
 
   Widget _buildMobileLayout(Widget content) {
-     return Center(
-       child: SingleChildScrollView(
-         child: Padding(
-           padding: EdgeInsets.all(AppSizes.p24),
-           child: content,
-         ),
-       ),
-     );
+    return Center(
+      child: SingleChildScrollView(
+        child: Padding(padding: EdgeInsets.all(AppSizes.p24), child: content),
+      ),
+    );
   }
 
   Widget _buildDesktopLayout(Widget content) {
@@ -538,41 +664,45 @@ class _TransferScreenState extends State<TransferScreen> {
         Expanded(
           flex: 5,
           child: Container(
-             color: Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.1),
-             child: Center(
-               child: SingleChildScrollView(
-                 padding: EdgeInsets.all(AppSizes.p64),
-                 child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                       Icon(
-                         Icons.import_export_rounded,
-                         size: 150,
-                         color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.8),
-                       ),
-                       AppSpacing.gapH32,
-                       const Text(
-                         'Live Peer-to-Peer\nTransfer',
-                         style: TextStyle(
-                           fontSize: 48, 
-                           fontWeight: FontWeight.bold,
-                           height: 1.2,
-                         ),
-                         textAlign: TextAlign.center,
-                       ),
-                       AppSpacing.gapH16,
-                       Text(
-                         'Your files are traveling securely directly between your devices. Our signaling servers do not store or see your data.',
-                         style: TextStyle(
-                           fontSize: AppSizes.textSubtitle, 
-                           color: Colors.grey,
-                         ),
-                         textAlign: TextAlign.center,
-                       ),
-                    ],
-                 ),
-               ),
-             ),
+            color: Theme.of(
+              context,
+            ).colorScheme.surfaceContainerHighest.withValues(alpha: 0.1),
+            child: Center(
+              child: SingleChildScrollView(
+                padding: EdgeInsets.all(AppSizes.p64),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      Icons.import_export_rounded,
+                      size: 150,
+                      color: Theme.of(
+                        context,
+                      ).colorScheme.primary.withValues(alpha: 0.8),
+                    ),
+                    AppSpacing.gapH32,
+                    const Text(
+                      'Live Peer-to-Peer\nTransfer',
+                      style: TextStyle(
+                        fontSize: 48,
+                        fontWeight: FontWeight.bold,
+                        height: 1.2,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                    AppSpacing.gapH16,
+                    Text(
+                      'Your files are traveling securely directly between your devices. Our signaling servers do not store or see your data.',
+                      style: TextStyle(
+                        fontSize: AppSizes.textSubtitle,
+                        color: Colors.grey,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                  ],
+                ),
+              ),
+            ),
           ),
         ),
         Expanded(
@@ -581,24 +711,24 @@ class _TransferScreenState extends State<TransferScreen> {
             child: SingleChildScrollView(
               padding: EdgeInsets.all(AppSizes.p64),
               child: Container(
-                 padding: EdgeInsets.all(AppSizes.p48),
-                 constraints: const BoxConstraints(maxWidth: 500),
-                 decoration: BoxDecoration(
-                   color: Theme.of(context).colorScheme.surface,
-                   borderRadius: BorderRadius.circular(AppSizes.radiusLarge),
-                   boxShadow: [
-                     BoxShadow(
-                       color: Colors.black.withValues(alpha: 0.3),
-                       blurRadius: 40,
-                       offset: const Offset(0, 10),
-                     ),
-                   ],
-                 ),
-                 child: content,
+                padding: EdgeInsets.all(AppSizes.p48),
+                constraints: const BoxConstraints(maxWidth: 500),
+                decoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.surface,
+                  borderRadius: BorderRadius.circular(AppSizes.radiusLarge),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.3),
+                      blurRadius: 40,
+                      offset: const Offset(0, 10),
+                    ),
+                  ],
+                ),
+                child: content,
               ),
             ),
           ),
-        )
+        ),
       ],
     );
   }
