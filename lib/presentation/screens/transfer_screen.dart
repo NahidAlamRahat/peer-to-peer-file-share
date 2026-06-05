@@ -305,88 +305,36 @@ class _TransferScreenState extends State<TransferScreen> {
 
   Widget _buildTransferBody(TransferState state) {
     if (state is TransferInitial) {
-      if (widget.role == SessionRole.sender) {
-        return Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              Icons.check_circle_outline,
-              size: AppSizes.iconHuge,
-              color: Colors.green,
+      return Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(
+            Icons.wifi_tethering,
+            size: AppSizes.iconHuge,
+            color: Colors.blueAccent,
+          ),
+          AppSpacing.gapH16,
+          Text(
+            widget.role == SessionRole.sender 
+                ? 'Preparing transfer...' 
+                : 'Connecting to peer...',
+            style: TextStyle(
+              fontSize: AppSizes.textHeadline,
+              fontWeight: FontWeight.bold,
             ),
-            AppSpacing.gapH16,
-            Text(
-              'Peer connected!',
-              style: TextStyle(
-                fontSize: AppSizes.textHeadline,
-                fontWeight: FontWeight.bold,
-              ),
+          ),
+          AppSpacing.gapH8,
+          Text(
+            widget.role == SessionRole.sender 
+                ? 'Reading files and initializing chunks...'
+                : 'Waiting for sender to start...',
+            style: TextStyle(
+              color: Colors.orange,
+              fontWeight: FontWeight.bold,
             ),
-            AppSpacing.gapH32,
-            CustomButton(
-              text: 'Select File to Send',
-              icon: Icons.upload_file,
-              onPressed: () async {
-                FilePickerResult? result = await FilePicker.platform.pickFiles(
-                  allowMultiple: true,
-                  withReadStream:
-                      true, // Stream-based: safe for 1GB+ files, no RAM crash
-                );
-                if (result != null && result.files.isNotEmpty) {
-                  final validFiles = result.files
-                      .where((f) => f.readStream != null || f.bytes != null)
-                      .toList();
-                  if (validFiles.isNotEmpty) {
-                    final shareFiles = validFiles
-                        .map(
-                          (pf) => ShareFile(
-                            name: pf.name,
-                            size: pf.size,
-                            readStream: pf.readStream,
-                            bytes: pf.bytes,
-                          ),
-                        )
-                        .toList();
-                    // ignore: use_build_context_synchronously
-                    context.read<TransferBloc>().add(
-                      SendFilesEvent(shareFiles),
-                    );
-                  }
-                }
-              },
-            ),
-          ],
-        );
-      } else {
-        return Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              Icons.wifi_tethering,
-              size: AppSizes.iconHuge,
-              color: Colors.blueAccent,
-            ),
-            AppSpacing.gapH16,
-            Text(
-              'Connecting to peer...',
-              style: TextStyle(
-                fontSize: AppSizes.textHeadline,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            AppSpacing.gapH16,
-            const Text('Starting your download now.'),
-            AppSpacing.gapH32,
-            const Text(
-              '⚠️ Please keep this app open during the transfer',
-              style: TextStyle(
-                color: Colors.orange,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-          ],
-        );
-      }
+          ),
+        ],
+      );
     } else if (state is TransferInProgress) {
       final speedKB = state.transferSpeed / 1024;
       final speedText = speedKB > 1024
