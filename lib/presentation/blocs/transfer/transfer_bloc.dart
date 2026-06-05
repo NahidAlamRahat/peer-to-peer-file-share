@@ -56,7 +56,11 @@ class TransferBloc extends Bloc<TransferEvent, TransferState> {
   ) async {
     try {
       await fileTransferRepository.sendFiles(event.files);
-      emit(const TransferSuccess('__SENT__'));
+      if (fileTransferRepository.isCancelled) {
+        emit(TransferInitial());
+      } else {
+        emit(const TransferSuccess('__SENT__'));
+      }
     } catch (e) {
       // Only emit failure if not already handled by cancel/peer-cancel
       if (state is! TransferCancelledByPeer) {
@@ -69,6 +73,10 @@ class TransferBloc extends Bloc<TransferEvent, TransferState> {
     TransferProgressEvent event,
     Emitter<TransferState> emit,
   ) {
+    if (fileTransferRepository.isCancelled) {
+      emit(TransferInitial());
+      return;
+    }
     // Don't overwrite a terminal state with progress
     if (state is TransferSuccess || state is TransferCancelledByPeer) return;
 
@@ -117,7 +125,8 @@ class TransferBloc extends Bloc<TransferEvent, TransferState> {
   ) {
     try {
       fileTransferRepository.cancelTransfer(myRole: event.myRole);
-      fileTransferRepository.resetTransferState();
+      // DO NOT call resetTransferState() here! It will synchronously clear the isCancelled flag 
+      // and allow suspended async tasks to resume and emit progress.
     } catch (e) {
       debugPrint('Error during cancel: $e');
     }
