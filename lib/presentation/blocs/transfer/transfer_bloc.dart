@@ -57,7 +57,10 @@ class TransferBloc extends Bloc<TransferEvent, TransferState> {
     try {
       await fileTransferRepository.sendFiles(event.files);
       if (fileTransferRepository.isCancelled) {
-        emit(TransferInitial());
+        // Transfer was halted (network error) or cancelled by peer.
+        // Do NOT emit TransferInitial — the error/cancel state is already set correctly.
+        // Emitting TransferInitial here caused the false 'Verifying Connection...' screen.
+        return;
       } else {
         emit(const TransferSuccess('__SENT__'));
       }

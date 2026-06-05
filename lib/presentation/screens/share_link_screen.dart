@@ -211,7 +211,9 @@ class _ShareLinkScreenState extends State<ShareLinkScreen> {
           } else if (state is ConnectionConnected || (state is ConnectionMessageReceived && state.payload['action'] != 'accept_download')) {
              content = _buildReceiverConnectedState();
           } else if (state is ConnectionServerError) {
-             content = _buildErrorState(state);
+             content = _buildErrorState(state.message, isServerError: true);
+          } else if (state is ConnectionFailed) {
+             content = _buildErrorState(state.message, isServerError: false);
           } else {
              content = const SizedBox();
           }
@@ -469,15 +471,15 @@ class _ShareLinkScreenState extends State<ShareLinkScreen> {
      );
   }
 
-  Widget _buildErrorState(ConnectionServerError state) {
+  Widget _buildErrorState(String message, {bool isServerError = false}) {
       return Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-           Icon(Icons.cloud_off, size: AppSizes.iconHuge, color: Colors.redAccent),
+           Icon(isServerError ? Icons.cloud_off : Icons.wifi_off, size: AppSizes.iconHuge, color: Colors.redAccent),
            AppSpacing.gapH24,
-           const Text('Server Unreachable', style: TextStyle(fontWeight: FontWeight.bold)),
+           Text(isServerError ? 'Server Unreachable' : 'Connection Lost', style: const TextStyle(fontWeight: FontWeight.bold)),
            AppSpacing.gapH16,
-           Text(state.message, textAlign: TextAlign.center, style: const TextStyle(color: Colors.grey)),
+           Text(message, textAlign: TextAlign.center, style: const TextStyle(color: Colors.grey)),
            AppSpacing.gapH32,
            CustomButton(
              text: 'Retry Connection',
