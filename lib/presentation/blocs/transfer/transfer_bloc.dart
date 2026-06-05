@@ -19,6 +19,7 @@ class TransferBloc extends Bloc<TransferEvent, TransferState> {
     on<TransferCompletedEvent>(_onTransferCompleted);
     on<TransferErrorEvent>(_onTransferError);
     on<CancelTransferEvent>(_onCancelTransfer);
+    on<PeerCancelledEvent>(_onPeerCancelled);
     on<SaveFileManuallyEvent>(_onSaveFileManually);
     on<ResetTransferEvent>(_onResetTransfer);
 
@@ -42,6 +43,11 @@ class TransferBloc extends Bloc<TransferEvent, TransferState> {
       },
       onError: (e) => add(TransferErrorEvent(e.toString())),
     );
+
+    // Wire up peer-cancel callback so repository can inform us when remote cancels
+    fileTransferRepository.onPeerCancelled = (cancellerRole) {
+      add(PeerCancelledEvent(cancellerRole));
+    };
   }
 
   Future<void> _onSendFiles(
@@ -50,10 +56,12 @@ class TransferBloc extends Bloc<TransferEvent, TransferState> {
   ) async {
     try {
       await fileTransferRepository.sendFiles(event.files);
-      // For sender, successful finish now emits a success state with a special marker.
       emit(const TransferSuccess('__SENT__'));
     } catch (e) {
-      emit(TransferFailure(e.toString()));
+      // Only emit failure if not already handled by cancel/peer-cancel
+      if (state is! TransferCancelledByPeer) {
+        emit(TransferFailure(e.toString()));
+      }
     }
   }
 
@@ -61,12 +69,15 @@ class TransferBloc extends Bloc<TransferEvent, TransferState> {
     TransferProgressEvent event,
     Emitter<TransferState> emit,
   ) {
+    // Don't overwrite a terminal state with progress
+    if (state is TransferSuccess || state is TransferCancelledByPeer) return;
+
     final now = DateTime.now();
     if (_lastUpdate != null) {
       final elapsed = now.difference(_lastUpdate!).inMilliseconds;
-      if (elapsed > 200) { // Update speed every 200ms
+      if (elapsed > 200) {
         final bytesDiff = event.bytesTransferred - _lastBytes;
-        _currentSpeed = (bytesDiff / elapsed) * 1000; // bytes/sec
+        _currentSpeed = (bytesDiff / elapsed) * 1000;
         _lastUpdate = now;
         _lastBytes = event.bytesTransferred;
       }
@@ -84,12 +95,6 @@ class TransferBloc extends Bloc<TransferEvent, TransferState> {
       fileIndex: event.fileIndex,
       totalFiles: event.totalFiles,
     ));
-
-    // Optional: if sender reached 100% just emit success for sender screen
-    if (event.bytesTransferred >= event.totalSize && event.totalSize > 0) {
-      // sender sees "sent successfully", we just emit a success with sender marker.
-      // But let's leave success for actual file path completion (receiver)
-    }
   }
 
   void _onTransferCompleted(
@@ -98,14 +103,12 @@ class TransferBloc extends Bloc<TransferEvent, TransferState> {
   ) {
     emit(TransferSuccess(event.filePath));
   }
-  
+
   void _onTransferError(
     TransferErrorEvent event,
     Emitter<TransferState> emit,
   ) {
-    if (state is TransferSuccess) {
-      return;
-    }
+    if (state is TransferSuccess || state is TransferCancelledByPeer) return;
     emit(TransferFailure(event.error));
   }
 
@@ -113,8 +116,21 @@ class TransferBloc extends Bloc<TransferEvent, TransferState> {
     CancelTransferEvent event,
     Emitter<TransferState> emit,
   ) {
-    fileTransferRepository.cancelTransfer();
-    emit(const TransferFailure('Transfer was cancelled by user.'));
+    // Canceller: go home silently — UI is handled by transfer_screen directly.
+    // Just clean up repository state. No state emit here so screen doesn't show error.
+    fileTransferRepository.cancelTransfer(myRole: event.myRole);
+  }
+
+  void _onPeerCancelled(
+    PeerCancelledEvent event,
+    Emitter<TransferState> emit,
+  ) {
+    if (state is TransferSuccess) return; // already done, ignore
+    // Build a human-readable message for the PEER's screen
+    final msg = event.cancellerRole == 'sender'
+        ? 'Sender cancelled the transfer.'
+        : 'Receiver cancelled the transfer.';
+    emit(TransferCancelledByPeer(msg));
   }
 
   void _onSaveFileManually(
@@ -134,6 +150,7 @@ class TransferBloc extends Bloc<TransferEvent, TransferState> {
 
   @override
   Future<void> close() {
+    fileTransferRepository.onPeerCancelled = null;
     _progressSubscription?.cancel();
     _fileReceivedSubscription?.cancel();
     return super.close();

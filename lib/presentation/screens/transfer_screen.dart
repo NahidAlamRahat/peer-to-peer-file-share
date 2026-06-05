@@ -160,14 +160,16 @@ class _TransferScreenState extends State<TransferScreen> {
     ) ?? false;
 
     if (shouldCancel && context.mounted) {
+      final myRole = widget.role == SessionRole.sender ? 'sender' : 'receiver';
       final tBloc = context.read<TransferBloc>();
       final cBloc = context.read<ConnectionBloc>();
+      // Canceller: go home silently — NO notification, NO error screen
       Navigator.of(context).pushAndRemoveUntil(
         MaterialPageRoute(builder: (_) => const HomeScreen()),
         (route) => false,
       );
       Future.delayed(const Duration(milliseconds: 400), () {
-        tBloc.add(CancelTransferEvent());
+        tBloc.add(CancelTransferEvent(myRole: myRole));
       });
       Future.delayed(const Duration(milliseconds: 1500), () {
         cBloc.add(ResetConnectionEvent());
@@ -210,7 +212,7 @@ class _TransferScreenState extends State<TransferScreen> {
             final transferState = context.read<TransferBloc>().state;
             if (transferState is TransferInProgress) {
               if (connectionState is ConnectionFailed || connectionState is ConnectionOffline || connectionState is ConnectionInitial) {
-                 context.read<TransferBloc>().add(const TransferErrorEvent('Connection to peer was lost.'));
+                context.read<TransferBloc>().add(const TransferErrorEvent('Connection to peer was lost. Please check your network and try again.'));
               }
             }
           },
@@ -218,7 +220,6 @@ class _TransferScreenState extends State<TransferScreen> {
           listener: (context, state) {
             if (state is TransferInProgress) {
               final now = DateTime.now();
-              // Throttle notification updates to once per 500ms
               if (now.difference(_lastNotificationUpdate).inMilliseconds > 500 || state.progress >= 1.0) {
                 _lastNotificationUpdate = now;
                 _notifications.showProgressNotification(
@@ -233,18 +234,24 @@ class _TransferScreenState extends State<TransferScreen> {
                 isSender: widget.role == SessionRole.sender,
                 fileName: state.filePath.split('/').last.split('\\').last,
               );
-              // ── Show interstitial ad after transfer completes ────────────────
               if (!kIsWeb && AdService.instance.adsEnabled) {
-                // Small delay so the success UI renders first
                 Future.delayed(const Duration(seconds: 1), () {
                   InterstitialAdService.instance.show();
                 });
               }
             } else if (state is TransferFailure) {
+              // Connection lost or system error — show notification to both sides
               WakelockPlus.disable();
               _stopBackgroundExecution();
               _notifications.showTransferFailed(reason: state.error);
+            } else if (state is TransferCancelledByPeer) {
+              // Peer cancelled — show notification only to the one who did NOT cancel
+              WakelockPlus.disable();
+              _stopBackgroundExecution();
+              _notifications.showTransferFailed(reason: state.message);
             }
+            // NOTE: CancelTransferEvent → canceller goes home silently (handled in _confirmAndCancelTransfer)
+            // so we intentionally do NOT show any notification/UI for the canceller here.
           },
           builder: (context, state) {
              final content = _buildTransferBody(state);
@@ -483,6 +490,40 @@ class _TransferScreenState extends State<TransferScreen> {
                });
             },
           )
+        ],
+      );
+    } else if (state is TransferCancelledByPeer) {
+      // Peer cancelled — show message. No notification button needed (notification already shown).
+      return Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.cancel_outlined, size: AppSizes.iconHuge, color: Colors.orange),
+          AppSpacing.gapH24,
+          Text('Transfer Cancelled', style: TextStyle(fontSize: AppSizes.textHeadline, fontWeight: FontWeight.bold)),
+          AppSpacing.gapH16,
+          Text(
+            state.message,
+            style: const TextStyle(color: Colors.orange, fontSize: 16),
+            textAlign: TextAlign.center,
+          ),
+          AppSpacing.gapH32,
+          CustomButton(
+            text: 'Go Home',
+            icon: Icons.home_outlined,
+            isPrimary: false,
+            onPressed: () {
+              final tBloc = context.read<TransferBloc>();
+              final cBloc = context.read<ConnectionBloc>();
+              Navigator.of(context).pushAndRemoveUntil(
+                MaterialPageRoute(builder: (_) => const HomeScreen()),
+                (route) => false,
+              );
+              Future.delayed(const Duration(milliseconds: 400), () {
+                tBloc.add(ResetTransferEvent());
+                cBloc.add(ResetConnectionEvent());
+              });
+            },
+          ),
         ],
       );
     }

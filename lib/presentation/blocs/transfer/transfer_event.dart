@@ -61,7 +61,26 @@ class TransferErrorEvent extends TransferEvent {
   List<Object?> get props => [error];
 }
 
-class CancelTransferEvent extends TransferEvent {}
+class CancelTransferEvent extends TransferEvent {
+  /// 'sender' or 'receiver' — tells peer who cancelled.
+  final String myRole;
+  const CancelTransferEvent({this.myRole = 'sender'});
+
+  @override
+  List<Object?> get props => [myRole];
+}
+
+
+/// Fired when the REMOTE peer sends a cancel signal.
+/// [cancellerRole] is 'sender' or 'receiver' — used to build the UI message.
+class PeerCancelledEvent extends TransferEvent {
+  final String cancellerRole;
+  const PeerCancelledEvent(this.cancellerRole);
+
+  @override
+  List<Object?> get props => [cancellerRole];
+}
+
 
 class ResetTransferEvent extends TransferEvent {}
 

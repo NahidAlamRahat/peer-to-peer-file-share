@@ -49,3 +49,14 @@ class TransferFailure extends TransferState {
   @override
   List<Object?> get props => [error];
 }
+
+/// Shown only on the PEER's screen when the other side cancels.
+/// The canceller themselves goes home silently — no message shown to them.
+class TransferCancelledByPeer extends TransferState {
+  /// e.g. "Sender cancelled the transfer."
+  final String message;
+  const TransferCancelledByPeer(this.message);
+
+  @override
+  List<Object?> get props => [message];
+}

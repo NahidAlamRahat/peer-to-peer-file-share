@@ -51,6 +51,10 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
   // ── Sender state ──────────────────────────────────────────────────────────
   bool _isCancelled = false;
 
+  /// Called when the remote peer sends a cancel signal.
+  /// [cancellerRole] is 'sender' or 'receiver'.
+  Function(String cancellerRole)? onPeerCancelled;
+
   /// Completer that unblocks the sender when receiver ACKs a window.
   Completer<void>? _windowAckCompleter;
 
@@ -90,26 +94,23 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
   }
 
   @override
-  void cancelTransfer() {
-    if (_isCancelled) return; // idempotent — safe to call multiple times
+  /// [myRole] must be 'sender' or 'receiver' so the peer knows who cancelled.
+  void cancelTransfer({String myRole = 'sender'}) {
+    if (_isCancelled) return; // idempotent
     _isCancelled = true;
+    // Tell peer who cancelled so they can show the right message
     _webrtcClient.sendDataMessage(
-        RTCDataChannelMessage(jsonEncode({'type': 'cancel'})));
-    // Unblock sender if it is waiting for a window ACK
+        RTCDataChannelMessage(jsonEncode({'type': 'cancel', 'who': myRole})));
     if (_windowAckCompleter != null && !_windowAckCompleter!.isCompleted) {
       _windowAckCompleter!.complete();
     }
     _windowAckCompleter = null;
-    // Unblock sender if it is waiting for final file ACK
     for (final c in _ackCompleters.values) {
       if (!c.isCompleted) c.completeError('Transfer cancelled');
     }
     _ackCompleters.clear();
     _fileSaver?.discard();
     _fileSaver = null;
-    // NOTE: Do NOT call _progressController.addError() here.
-    // The bloc already handles UI state via CancelTransferEvent.
-    // Calling addError here causes a double-cancel loop (stream error → TransferErrorEvent → cancelTransfer again).
   }
 
   @override
@@ -361,10 +362,10 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
             _windowAckCompleter = null;
             await _fileSaver?.discard();
             _fileSaver = null;
-            if (!_progressController.isClosed) {
-              _progressController.addError('Transfer cancelled by peer');
-            }
-            debugPrint('🛑 [P2P-ACK] Cancelled by peer.');
+            // Notify bloc so the PEER (not canceller) sees a message
+            final who = decoded['who'] as String? ?? 'peer';
+            onPeerCancelled?.call(who);
+            debugPrint('🛑 [P2P-ACK] Cancelled by $who.');
             break;
 
           default:
