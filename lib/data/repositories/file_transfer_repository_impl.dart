@@ -265,24 +265,29 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
             );
 
             if (!isLast) {
-              // Wait for receiver to ACK this window (max 30 s)
+              // Wait for receiver to ACK this window (max 8s).
+              // Previously 30s — this caused the sender to be stuck on 'Verifying Connection...'
+              // for up to 30 seconds when receiver cancels or drops connection.
               _windowAckCompleter = Completer<void>();
               debugPrint(
-                '⏸ [P2P-ACK] Window sent ($bytesSent/$totalSize bytes). Waiting for receiver ACK...',
+                '⏸ [P2P-ACK] Window sent ($bytesSent/$totalSize bytes). Waiting for receiver ACK...'
               );
               try {
                 await _windowAckCompleter!.future.timeout(
-                  const Duration(seconds: 30),
+                  const Duration(seconds: 8),
                 );
               } on TimeoutException {
-                debugPrint('⚠️ [P2P-ACK] Window ACK timeout — continuing.');
+                // ACK not received in 8s — receiver likely disconnected or cancelled.
+                debugPrint('⚠️ [P2P-ACK] Window ACK timeout (8s) — peer likely gone, aborting.');
+                _progressController.addError('Connection to peer was lost. Please check your network and try again.');
+                return; // abort the send loop
               } catch (_) {
                 if (_isCancelled) return;
               }
               _windowAckCompleter = null;
               windowBytesSent = 0;
               debugPrint(
-                '▶ [P2P-ACK] Receiver ACKed window. Sending next window...',
+                '▶ [P2P-ACK] Receiver ACKed window. Sending next window...'
               );
             } else {
               windowBytesSent = 0;
