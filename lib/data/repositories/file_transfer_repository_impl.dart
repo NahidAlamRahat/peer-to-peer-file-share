@@ -178,10 +178,10 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
         RTCDataChannelState.RTCDataChannelOpen) {
       if (_isCancelled) return;
       if (waitCounter > 100) {
-        haltTransfer();
         _progressController.addError(
           'Timeout waiting for peer DataChannel to open',
         );
+        haltTransfer();
         return;
       }
       await Future.delayed(const Duration(milliseconds: 100));
@@ -280,8 +280,8 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
               } on TimeoutException {
                 // ACK not received in 8s — receiver likely disconnected or cancelled.
                 debugPrint('⚠️ [P2P-ACK] Window ACK timeout (8s) — peer likely gone, aborting.');
-                haltTransfer(); // STOP the loop immediately
                 _progressController.addError('Connection to peer was lost. Please check your network and try again.');
+                haltTransfer(); // STOP the loop immediately
                 return; // abort the send loop
               } catch (_) {
                 if (_isCancelled) return;
@@ -323,8 +323,8 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
         debugPrint('✅ [P2P-ACK] Receiver saved $fileName');
       } on TimeoutException {
         debugPrint('⚠️ [P2P-ACK] EOF ACK timeout (60s) — peer likely gone.');
-        haltTransfer();
         _progressController.addError('Connection to peer was lost while saving the file.');
+        haltTransfer();
         return;
       } catch (e) {
         if (!_isCancelled) {
