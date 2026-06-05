@@ -16,9 +16,10 @@ import 'file_transfer_web.dart'
     if (dart.library.io) 'file_transfer_mobile.dart';
 
 /// How many bytes sender sends per "window" before waiting for receiver ACK.
-/// 5MB window → sender is at most 5MB ahead of receiver.
-/// For a 50MB file this means ~10% ahead. Fewer ACK round-trips = faster feel.
-const int _windowSize = 5242880; // 5 MB per window
+/// 10MB window → sender is at most 10MB ahead of receiver.
+/// We keep this at 10MB because the absolute safe maximum for WebRTC (SCTP buffer limit)
+/// on Mobile (especially iOS/Safari) is 16MB. Above that, the connection might drop.
+const int _windowSize = 10485760; // 10 MB per window
 
 /// Max single WebRTC chunk size (64 KB).
 /// Modern browsers and native WebRTC implementations handle 64KB-256KB perfectly well.
