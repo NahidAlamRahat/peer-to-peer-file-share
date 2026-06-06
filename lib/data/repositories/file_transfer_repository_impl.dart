@@ -223,6 +223,14 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
         while (offset < end) {
           if (_isCancelled) return;
 
+          // ── BACKPRESSURE: Wait if WebRTC buffer is too full (> 1MB) ──
+          // This ensures we only feed data at the speed the network can send it,
+          // which makes the UI progress bar update smoothly instead of jumping.
+          while (_webrtcClient.bufferedAmount > 1024 * 1024) {
+            if (_isCancelled) return;
+            await Future.delayed(const Duration(milliseconds: 5));
+          }
+
           final sliceEnd = (offset + _chunkSize < end)
               ? offset + _chunkSize
               : end;
