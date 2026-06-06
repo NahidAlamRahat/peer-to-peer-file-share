@@ -503,12 +503,24 @@ class _TransferScreenState extends State<TransferScreen> {
           AppSpacing.gapH16,
           Text(
             state.filePath.startsWith('blob:')
-                ? 'File received successfully.'
+                ? 'File received successfully. If the download did not start automatically, please click the button below.'
                 : 'Saved at: \n${state.filePath}',
             textAlign: TextAlign.center,
             style: const TextStyle(color: Colors.grey),
           ),
 
+          if (kIsWeb && state.filePath.startsWith('blob:')) ...[
+            AppSpacing.gapH24,
+            CustomButton(
+              text: 'Save/Download File',
+              icon: Icons.download_rounded,
+              onPressed: () {
+                context.read<TransferBloc>().add(
+                  SaveFileManuallyEvent(state.filePath)
+                );
+              },
+            ),
+          ],
           AppSpacing.gapH16,
           CustomButton(
             text: 'Finish',

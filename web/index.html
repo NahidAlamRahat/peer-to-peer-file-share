@@ -192,12 +192,14 @@
     });
   </script>
   <script>
-    // Force unregister old service workers to bust stale cache (including favicon)
+    // Register the StreamSaver Service Worker for handling large P2P file downloads
     if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.getRegistrations().then(function(registrations) {
-        for (let registration of registrations) {
-          registration.unregister();
-        }
+      window.addEventListener('load', function() {
+        navigator.serviceWorker.register('sw.js').then(function(registration) {
+          console.log('ServiceWorker for P2P streams registered with scope: ', registration.scope);
+        }, function(err) {
+          console.error('ServiceWorker registration failed: ', err);
+        });
       });
     }
   </script>

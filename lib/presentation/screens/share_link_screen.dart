@@ -1,8 +1,10 @@
+import 'dart:io';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import '../../core/di/injection_container.dart';
 import '../../core/theme/app_sizes.dart';
@@ -65,6 +67,20 @@ class _ShareLinkScreenState extends State<ShareLinkScreen> {
 
   void _pickFile() async {
     if (_isPicking) return;
+
+    if (!kIsWeb && Platform.isAndroid) {
+      // Request gallery and storage permissions before picking
+      final statuses = await [
+        Permission.storage,
+        Permission.photos,
+        Permission.videos,
+      ].request();
+      
+      // We don't strictly block if denied here, because SAF (FilePicker) 
+      // often bypasses strict permission requirements anyway, 
+      // but asking ensures we cover all bases for older devices.
+    }
+
     setState(() => _isPicking = true);
 
     try {

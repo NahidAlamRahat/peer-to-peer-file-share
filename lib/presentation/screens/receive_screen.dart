@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -97,7 +98,17 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
   }
 
   /// Called when user manually enters a code and taps Join.
-  void _joinSession() {
+  Future<void> _joinSession() async {
+    if (!kIsWeb && Platform.isAndroid) {
+      // Request storage permission to save received files
+      if (await Permission.manageExternalStorage.isDenied) {
+        await Permission.manageExternalStorage.request();
+      }
+      if (await Permission.storage.isDenied) {
+        await Permission.storage.request();
+      }
+    }
+
     final code = _codeController.text.trim();
     if (code.isNotEmpty) {
       setState(() {
@@ -112,7 +123,17 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
 
   /// Called when receiver taps Download on the link-preview screen.
   /// Connects to sender and auto-accepts the download without extra confirmation.
-  void _joinSessionFromLink() {
+  Future<void> _joinSessionFromLink() async {
+    if (!kIsWeb && Platform.isAndroid) {
+      // Request storage permission to save received files
+      if (await Permission.manageExternalStorage.isDenied) {
+        await Permission.manageExternalStorage.request();
+      }
+      if (await Permission.storage.isDenied) {
+        await Permission.storage.request();
+      }
+    }
+
     // Reset any old transfer state so _isCancelled flag is cleared
     context.read<TransferBloc>().add(ResetTransferEvent());
     setState(() {
