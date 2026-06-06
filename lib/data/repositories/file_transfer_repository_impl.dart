@@ -210,6 +210,17 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
         ),
       );
 
+      // Emit 0% progress immediately to switch UI to progress screen
+      _emitProgress(
+        controller: _progressController,
+        fileId: fileId,
+        fileName: fileName,
+        totalSize: totalSize,
+        bytesTransferred: 0,
+        fileIndex: i + 1,
+        totalFiles: files.length,
+      );
+
       // ── 2. Send data in ACK-gated windows ────────────────────────────────
       int bytesSent = 0;
       int windowBytesSent = 0; // bytes sent in the current window
@@ -223,12 +234,13 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
         while (offset < end) {
           if (_isCancelled) return;
 
-          // ── BACKPRESSURE: Wait if WebRTC buffer is too full (> 1MB) ──
+          // ── BACKPRESSURE: Wait if WebRTC buffer is too full (> 3MB) ──
           // This ensures we only feed data at the speed the network can send it,
           // which makes the UI progress bar update smoothly instead of jumping.
-          while (_webrtcClient.bufferedAmount > 1024 * 1024) {
+          // Increased from 1MB to 3MB to allow SCTP congestion window to ramp up.
+          while (_webrtcClient.bufferedAmount > 3 * 1024 * 1024) {
             if (_isCancelled) return;
-            await Future.delayed(const Duration(milliseconds: 5));
+            await Future.delayed(const Duration(milliseconds: 10));
           }
 
           final sliceEnd = (offset + _chunkSize < end)
@@ -378,6 +390,18 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
             _remoteWindowSize = decoded['windowSize'] ?? _windowSize;
             _fileSaver = getFileSaver();
             await _fileSaver!.init(_receivingFileName ?? 'file');
+            
+            // Emit 0% progress immediately so receiver UI switches to progress screen
+            _emitProgress(
+              controller: _progressController,
+              fileId: _receivingFileId ?? '',
+              fileName: _receivingFileName ?? '',
+              totalSize: _receivingTotalSize,
+              bytesTransferred: 0,
+              fileIndex: _receivingFileIndex,
+              totalFiles: _receivingTotalFiles,
+            );
+            
             debugPrint(
               '📥 [P2P-ACK] Receiving $_receivingFileName ($_receivingTotalSize bytes), window=${_remoteWindowSize ~/ 1024}KB',
             );
