@@ -1,6 +1,8 @@
+import 'dart:async';
 import 'dart:typed_data';
 // ignore: avoid_web_libraries_in_flutter, deprecated_member_use
 import 'dart:html' as html;
+import 'package:flutter/foundation.dart';
 import 'package:uuid/uuid.dart';
 import 'file_saver.dart';
 
@@ -18,7 +20,7 @@ class WebFileSaver implements P2PFileSaver {
   void Function()? _onCancel;
   
   // Pause/Resume state
-  async.Completer<void>? _pauseCompleter;
+  Completer<void>? _pauseCompleter;
 
   String _getMimeType(String fileName) {
     final ext = fileName.split('.').last.toLowerCase();
@@ -73,9 +75,9 @@ class WebFileSaver implements P2PFileSaver {
            final type = data['type'];
            if (type == 'cancelled') {
              _onCancel?.call();
-           } else if (type == 'pause') {
+             } else if (type == 'pause') {
              if (_pauseCompleter == null || _pauseCompleter!.isCompleted) {
-               _pauseCompleter = async.Completer<void>();
+               _pauseCompleter = Completer<void>();
                debugPrint('⏸ [P2P-ACK] Received pause signal from browser download manager');
              }
            } else if (type == 'resume') {
@@ -92,7 +94,7 @@ class WebFileSaver implements P2PFileSaver {
                _onCancel?.call();
              } else if (str.contains('pause')) {
                if (_pauseCompleter == null || _pauseCompleter!.isCompleted) {
-                 _pauseCompleter = async.Completer<void>();
+                 _pauseCompleter = Completer<void>();
                }
              } else if (str.contains('resume')) {
                if (_pauseCompleter != null && !_pauseCompleter!.isCompleted) {
