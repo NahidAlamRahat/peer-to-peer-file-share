@@ -25,7 +25,7 @@ self.addEventListener('message', event => {
         if (meta && meta.isPaused) {
           meta.isPaused = false;
           if (clientPort) {
-            clientPort.postMessage({ type: 'resume', id: data.id });
+            clientPort.postMessage(JSON.stringify({ type: 'resume', id: data.id }));
           }
         }
       },
@@ -33,7 +33,7 @@ self.addEventListener('message', event => {
         // Triggered when user cancels download from browser UI
         console.log('Stream cancelled by user:', reason);
         if (clientPort) {
-          clientPort.postMessage({ type: 'cancelled', id: data.id });
+          clientPort.postMessage(JSON.stringify({ type: 'cancelled', id: data.id }));
         }
         map.delete(data.id);
       }
@@ -60,7 +60,7 @@ self.addEventListener('message', event => {
       // If the buffer is full, it means the browser stopped reading (Paused)
       if (meta.controller.desiredSize <= 0 && !meta.isPaused) {
         meta.isPaused = true;
-        if (meta.clientPort) meta.clientPort.postMessage({ type: 'pause', id: data.id });
+        if (meta.clientPort) meta.clientPort.postMessage(JSON.stringify({ type: 'pause', id: data.id }));
       }
     }
   } else if (data.type === 'end') {

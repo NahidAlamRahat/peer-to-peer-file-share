@@ -67,41 +67,28 @@ class WebFileSaver implements P2PFileSaver {
       
       // Listen for cancel and pause/resume events from the Service Worker
       _channel!.port1.onMessage.listen((event) {
-        // dart:js_interop handles JS Objects. For simplicity, check string or parse map
         final dynamic data = event.data;
-        if (data is String && data == 'started') {
-           // ack received
-        } else if (data is Map) {
-           final type = data['type'];
-           if (type == 'cancelled') {
-             _onCancel?.call();
-             } else if (type == 'pause') {
-             if (_pauseCompleter == null || _pauseCompleter!.isCompleted) {
-               _pauseCompleter = Completer<void>();
-               debugPrint('⏸ [P2P-ACK] Received pause signal from browser download manager');
-             }
-           } else if (type == 'resume') {
-             if (_pauseCompleter != null && !_pauseCompleter!.isCompleted) {
-               _pauseCompleter!.complete();
-               debugPrint('▶ [P2P-ACK] Received resume signal from browser download manager');
-             }
-           }
-        } else {
-           // Fallback for some browsers that return js objects differently
-           try {
-             final str = data.toString();
-             if (str.contains('cancelled')) {
-               _onCancel?.call();
-             } else if (str.contains('pause')) {
-               if (_pauseCompleter == null || _pauseCompleter!.isCompleted) {
-                 _pauseCompleter = Completer<void>();
+        if (data is String) {
+          if (data == 'started') {
+             // ack received
+          } else {
+             try {
+               // We send JSON string from sw.js to avoid Dart JS interop object wrapping issues
+               if (data.contains('"type":"cancelled"') || data.contains('"type": "cancelled"')) {
+                 _onCancel?.call();
+               } else if (data.contains('"type":"pause"') || data.contains('"type": "pause"')) {
+                 if (_pauseCompleter == null || _pauseCompleter!.isCompleted) {
+                   _pauseCompleter = Completer<void>();
+                   debugPrint('⏸ [P2P-ACK] Received pause signal from browser download manager');
+                 }
+               } else if (data.contains('"type":"resume"') || data.contains('"type": "resume"')) {
+                 if (_pauseCompleter != null && !_pauseCompleter!.isCompleted) {
+                   _pauseCompleter!.complete();
+                   debugPrint('▶ [P2P-ACK] Received resume signal from browser download manager');
+                 }
                }
-             } else if (str.contains('resume')) {
-               if (_pauseCompleter != null && !_pauseCompleter!.isCompleted) {
-                 _pauseCompleter!.complete();
-               }
-             }
-           } catch (_) {}
+             } catch (_) {}
+          }
         }
       });
 
