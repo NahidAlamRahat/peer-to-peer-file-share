@@ -26,6 +26,8 @@ const int _windowSize = 10485760; // 10 MB per window
 /// 64KB reduces event loop overhead and JS interop crossings by 4x compared to 16KB.
 const int _chunkSize = 65536; // 64 KB
 
+int _lastEmitTime = 0;
+
 void _emitProgress({
   required StreamController<FileChunkInfo> controller,
   required String fileId,
@@ -36,16 +38,25 @@ void _emitProgress({
   required int totalFiles,
 }) {
   if (controller.isClosed) return;
-  controller.add(
-    FileChunkInfo(
-      fileId: fileId,
-      fileName: fileName,
-      totalSize: totalSize,
-      bytesTransferred: bytesTransferred,
-      fileIndex: fileIndex,
-      totalFiles: totalFiles,
-    ),
-  );
+
+  final now = DateTime.now().millisecondsSinceEpoch;
+  // Always emit if it's 0% or 100%, otherwise limit to 10 FPS (100ms) to prevent UI thread starvation!
+  // Emitting 800 times a second (every 64KB chunk on 50MB/s connection) destroys WebRTC performance.
+  if (bytesTransferred == 0 ||
+      bytesTransferred == totalSize ||
+      now - _lastEmitTime > 100) {
+    _lastEmitTime = now;
+    controller.add(
+      FileChunkInfo(
+        fileId: fileId,
+        fileName: fileName,
+        totalSize: totalSize,
+        bytesTransferred: bytesTransferred,
+        fileIndex: fileIndex,
+        totalFiles: totalFiles,
+      ),
+    );
+  }
 }
 
 class FileTransferRepositoryImpl implements FileTransferRepository {
@@ -232,6 +243,8 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
         '🚀 [P2P-ACK] Sending $fileName ($totalSize bytes) with ${_windowSize ~/ 1024}KB windows',
       );
 
+      int loopCount = 0;
+
       Future<void> sendChunks(Uint8List bytes, int start, int end) async {
         int offset = start;
         while (offset < end) {
@@ -252,6 +265,14 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
           _webrtcClient.sendDataMessageBinary(slice);
           bytesSent += slice.length;
           offset = sliceEnd;
+          loopCount++;
+
+          // Yield to event loop every ~1MB (16 * 64KB) to prevent thread starvation
+          // on mobile browsers. If the JS main thread is totally blocked, WebRTC
+          // cannot flush UDP sockets and throughput drops to a crawl!
+          if (loopCount % 16 == 0) {
+            await Future.delayed(Duration.zero);
+          }
 
           // Emit sender progress
           _emitProgress(
