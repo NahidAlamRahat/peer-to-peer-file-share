@@ -276,6 +276,22 @@ class _TransferScreenState extends State<TransferScreen> {
                 WakelockPlus.disable();
                 _stopBackgroundExecution();
                 _notifications.showTransferFailed(reason: state.message);
+              } else if (state is TransferCancelledBySelf) {
+                // Receiver cancelled from browser's native download bar — go home silently
+                WakelockPlus.disable();
+                _stopBackgroundExecution();
+                if (context.mounted) {
+                  final tBloc = context.read<TransferBloc>();
+                  final cBloc = context.read<ConnectionBloc>();
+                  Navigator.of(context).pushAndRemoveUntil(
+                    MaterialPageRoute(builder: (_) => const HomeScreen()),
+                    (route) => false,
+                  );
+                  Future.delayed(const Duration(milliseconds: 400), () {
+                    tBloc.add(ResetTransferEvent());
+                    cBloc.add(ResetConnectionEvent());
+                  });
+                }
               }
               // NOTE: CancelTransferEvent → canceller goes home silently (handled in _confirmAndCancelTransfer)
               // so we intentionally do NOT show any notification/UI for the canceller here.

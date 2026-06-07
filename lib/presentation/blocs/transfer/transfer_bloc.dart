@@ -22,6 +22,7 @@ class TransferBloc extends Bloc<TransferEvent, TransferState> {
     on<TransferErrorEvent>(_onTransferError);
     on<CancelTransferEvent>(_onCancelTransfer);
     on<PeerCancelledEvent>(_onPeerCancelled);
+    on<SelfCancelledFromBrowserEvent>(_onSelfCancelledFromBrowser);
     on<SaveFileManuallyEvent>(_onSaveFileManually);
     on<ResetTransferEvent>(_onResetTransfer);
 
@@ -47,6 +48,11 @@ class TransferBloc extends Bloc<TransferEvent, TransferState> {
     // Wire up peer-cancel callback so repository can inform us when remote cancels
     fileTransferRepository.onPeerCancelled = (cancellerRole) {
       add(PeerCancelledEvent(cancellerRole));
+    };
+
+    // Wire up self-cancel callback so repository can inform us when local browser cancels
+    fileTransferRepository.onSelfCancelled = () {
+      add(SelfCancelledFromBrowserEvent());
     };
   }
 
@@ -179,9 +185,20 @@ class TransferBloc extends Bloc<TransferEvent, TransferState> {
     emit(TransferInitial());
   }
 
+  void _onSelfCancelledFromBrowser(
+    SelfCancelledFromBrowserEvent event,
+    Emitter<TransferState> emit,
+  ) {
+    _lastUpdate = null;
+    _lastBytes = 0;
+    _currentSpeed = 0;
+    emit(TransferCancelledBySelf());
+  }
+
   @override
   Future<void> close() {
     fileTransferRepository.onPeerCancelled = null;
+    fileTransferRepository.onSelfCancelled = null;
     _progressSubscription?.cancel();
     _fileReceivedSubscription?.cancel();
     return super.close();

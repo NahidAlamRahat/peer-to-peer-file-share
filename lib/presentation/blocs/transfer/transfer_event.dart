@@ -91,3 +91,7 @@ class SaveFileManuallyEvent extends TransferEvent {
   @override
   List<Object?> get props => [filePath];
 }
+
+/// Fired when the LOCAL receiver cancels via the browser's native download bar.
+/// Triggers silent home navigation for the receiver.
+class SelfCancelledFromBrowserEvent extends TransferEvent {}

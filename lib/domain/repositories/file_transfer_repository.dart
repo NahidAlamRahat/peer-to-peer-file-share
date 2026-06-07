@@ -30,4 +30,8 @@ abstract class FileTransferRepository {
 
   /// Callback fired when the REMOTE peer cancels. Set this from the bloc.
   set onPeerCancelled(Function(String cancellerRole)? callback);
+
+  /// Callback fired when the LOCAL receiver cancels from the browser's native download bar.
+  /// Used to trigger silent home navigation without showing an error.
+  set onSelfCancelled(Function()? callback);
 }

@@ -64,6 +64,9 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
   /// [cancellerRole] is 'sender' or 'receiver'.
   Function(String cancellerRole)? onPeerCancelled;
 
+  /// Called when the LOCAL receiver cancels from the browser's native download bar.
+  Function()? onSelfCancelled;
+
   /// Completer that unblocks the sender when receiver ACKs a window.
   Completer<void>? _windowAckCompleter;
 
@@ -396,6 +399,8 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
               // Triggered when user cancels download from browser's native UI
               debugPrint('🛑 [P2P-ACK] Cancelled from Browser UI.');
               cancelTransfer(myRole: 'receiver');
+              // Notify bloc to navigate receiver silently to home
+              onSelfCancelled?.call();
             });
             await _fileSaver!.init(_receivingFileName ?? 'file');
             
@@ -419,11 +424,9 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
             // Sender finished sending one window. ACK so sender can continue.
             final bool isLast = decoded['isLast'] == true;
             if (!isLast) {
-              // Apply backpressure if the browser's download manager is paused
-              if (_fileSaver != null) {
-                await _fileSaver!.waitForReady();
-              }
-              
+              // NOTE: waitForReady() removed — data now streams directly to disk via
+              // Service Worker, so browser backpressure is handled natively.
+              // No need to hold the ACK anymore.
               if (_isCancelled) return;
 
               _webrtcClient.sendDataMessage(

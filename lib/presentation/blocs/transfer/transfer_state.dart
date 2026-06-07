@@ -60,3 +60,7 @@ class TransferCancelledByPeer extends TransferState {
   @override
   List<Object?> get props => [message];
 }
+
+/// Fired when the local user (receiver) cancels from the browser's download bar.
+/// Triggers silent navigation to home — no error shown.
+class TransferCancelledBySelf extends TransferState {}
