@@ -59,6 +59,7 @@ class _ShareLinkScreenState extends State<ShareLinkScreen> {
       if (transferBloc.state is TransferFailure ||
           transferBloc.state is TransferSuccess ||
           transferBloc.state is TransferCancelledByPeer ||
+          transferBloc.state is TransferCancelledBySelf ||
           sl<FileTransferRepository>().isCancelled) {
         transferBloc.add(ResetTransferEvent());
       }
@@ -232,8 +233,18 @@ class _ShareLinkScreenState extends State<ShareLinkScreen> {
              content = _buildErrorState(state.message, isServerError: true);
           } else if (state is ConnectionFailed) {
              content = _buildErrorState(state.message, isServerError: false);
+          } else if (state is ConnectionOffline) {
+             // Internet dropped or timed out — show reconnect UI instead of blank black screen
+             content = _buildErrorState(
+               'You appear to be offline. Please check your connection and try again.',
+               isServerError: false,
+             );
+          } else if (state is ConnectionStatusUpdate) {
+             // Status update during session — keep showing current session UI if we have one
+             content = _buildGeneratingSessionState(state);
           } else {
-             content = const SizedBox();
+             // Fallback — should never happen, but show a safe empty state
+             content = _buildFileSelectionState();
           }
 
           return ResponsiveLayout(
