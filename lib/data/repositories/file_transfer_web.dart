@@ -98,14 +98,12 @@ class WebFileSaver implements P2PFileSaver {
       // Give SW a split second to set up the stream map
       await Future.delayed(const Duration(milliseconds: 100));
 
-      // Trigger the browser's download manager IMMEDIATELY using an Anchor tag.
-      // IFrame triggers are flaky on Android Chrome and can cause premature stream cancellation.
-      final anchor = html.AnchorElement(href: '/pt-download-stream/$_streamId')
-        ..setAttribute('download', _fileName)
-        ..style.display = 'none';
-      html.document.body?.append(anchor);
-      anchor.click();
-      anchor.remove();
+      // Trigger the browser's download manager using window.open.
+      // We do not use AnchorElement.click() because Flutter Web's router intercepts DOM clicks.
+      // We do not use IFrame because Android Chrome often prematurely cancels stream inside IFrames.
+      // The ServiceWorker will respond with 'Content-Disposition: attachment', so the
+      // browser will download the file and NOT navigate away from the current page.
+      html.window.open('/pt-download-stream/$_streamId', '_top');
     }
   }
 
