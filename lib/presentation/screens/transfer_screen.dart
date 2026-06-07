@@ -456,7 +456,45 @@ class _TransferScreenState extends State<TransferScreen> {
               ],
             ),
           ),
+          // Web-only warning: Chrome's pause breaks the P2P stream
+          if (kIsWeb && widget.role == SessionRole.receiver) ...[
+            AppSpacing.gapH12,
+            Container(
+              padding: EdgeInsets.symmetric(
+                horizontal: AppSizes.p16,
+                vertical: AppSizes.p12,
+              ),
+              decoration: BoxDecoration(
+                color: Colors.red.withValues(alpha: 0.08),
+                borderRadius: BorderRadius.circular(AppSizes.radiusMedium),
+                border: Border.all(color: Colors.red.withValues(alpha: 0.3)),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Icon(
+                    Icons.block,
+                    color: Colors.red,
+                    size: 20,
+                  ),
+                  AppSpacing.gapW8,
+                  Flexible(
+                    child: Text(
+                      'Do NOT pause from the browser\'s download bar — it will break the transfer. Use the Cancel button below instead.',
+                      style: TextStyle(
+                        color: Colors.red.shade700,
+                        fontWeight: FontWeight.w600,
+                        fontSize: AppSizes.textSmall,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
           AppSpacing.gapH32,
+
           if (state.progress < 1.0)
             TextButton.icon(
               onPressed: () => _confirmAndCancelTransfer(context),
