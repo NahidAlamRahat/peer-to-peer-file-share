@@ -98,12 +98,14 @@ class WebFileSaver implements P2PFileSaver {
       // Give SW a split second to set up the stream map
       await Future.delayed(const Duration(milliseconds: 100));
 
-      // Trigger the browser's download manager IMMEDIATELY using a hidden iframe
-      final iframe = html.IFrameElement()
-        ..id = 'pt-download-$_streamId'
-        ..style.display = 'none'
-        ..src = '/pt-download-stream/$_streamId';
-      html.document.body?.append(iframe);
+      // Trigger the browser's download manager IMMEDIATELY using an Anchor tag.
+      // IFrame triggers are flaky on Android Chrome and can cause premature stream cancellation.
+      final anchor = html.AnchorElement(href: '/pt-download-stream/$_streamId')
+        ..setAttribute('download', _fileName)
+        ..style.display = 'none';
+      html.document.body?.append(anchor);
+      anchor.click();
+      anchor.remove();
     }
   }
 
@@ -134,10 +136,7 @@ class WebFileSaver implements P2PFileSaver {
           'id': _streamId,
         });
       }
-      // Remove the hidden iframe
-      final iframe = html.document.getElementById('pt-download-$_streamId');
-      if (iframe != null) iframe.remove();
-
+      // Anchor was already removed during init, nothing to clean up here
       return 'streamed'; // Special token so UI knows it's already on disk
     } else {
       // Fallback: use memory blob
