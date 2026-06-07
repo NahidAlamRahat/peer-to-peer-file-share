@@ -20,12 +20,19 @@ self.addEventListener('message', event => {
         controller = c;
       },
       pull(c) {
-        // Browser is reading data (resumed)
+        // Browser is reading data again (resumed or just draining buffer)
         const meta = map.get(data.id);
-        if (meta && meta.isPaused) {
-          meta.isPaused = false;
-          if (clientPort) {
-            clientPort.postMessage(JSON.stringify({ type: 'resume', id: data.id }));
+        if (meta) {
+          // Clear any pending debounce timer — browser is clearly reading, not paused
+          if (meta.pauseTimer) {
+            clearTimeout(meta.pauseTimer);
+            meta.pauseTimer = null;
+          }
+          if (meta.isPaused) {
+            meta.isPaused = false;
+            if (clientPort) {
+              clientPort.postMessage(JSON.stringify({ type: 'resume', id: data.id }));
+            }
           }
         }
       },
@@ -44,6 +51,7 @@ self.addEventListener('message', event => {
       filename: data.filename,
       mimeType: data.mimeType || 'application/octet-stream',
       isPaused: false,
+      pauseTimer: null,
       clientPort: clientPort
     });
     
@@ -57,10 +65,18 @@ self.addEventListener('message', event => {
       // data.data is an ArrayBuffer or Uint8Array
       meta.controller.enqueue(new Uint8Array(data.data));
       
-      // If the buffer is full, it means the browser stopped reading (Paused)
-      if (meta.controller.desiredSize <= 0 && !meta.isPaused) {
-        meta.isPaused = true;
-        if (meta.clientPort) meta.clientPort.postMessage(JSON.stringify({ type: 'pause', id: data.id }));
+      // If the buffer is full, it means the browser MAY have paused.
+      // We use a 500ms debounce to avoid false positives when the browser
+      // is simply a little slow to read — which happens during normal fast downloads.
+      if (meta.controller.desiredSize <= 0 && !meta.isPaused && !meta.pauseTimer) {
+        meta.pauseTimer = setTimeout(() => {
+          meta.pauseTimer = null;
+          // Re-check: is it still full after 500ms? Then it's a real pause.
+          if (meta.controller.desiredSize <= 0 && !meta.isPaused) {
+            meta.isPaused = true;
+            if (meta.clientPort) meta.clientPort.postMessage(JSON.stringify({ type: 'pause', id: data.id }));
+          }
+        }, 500);
       }
     }
   } else if (data.type === 'end') {
