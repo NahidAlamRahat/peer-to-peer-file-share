@@ -8,4 +8,6 @@ abstract class P2PFileSaver {
   Future<String> closeAndSave();
   Future<void> discard();
   void triggerManualDownload(String path);
+  void setOnCancel(void Function() onCancel);
+  Future<void> waitForReady();
 }

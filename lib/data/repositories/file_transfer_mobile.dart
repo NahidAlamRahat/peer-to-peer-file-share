@@ -59,4 +59,14 @@ class MobileFileSaver implements P2PFileSaver {
   void triggerManualDownload(String path) {
     // No-op for mobile. The file is already safely on disk.
   }
+
+  @override
+  void setOnCancel(void Function() onCancel) {
+    // Mobile doesn't need external cancel triggers since it doesn't use the browser download manager
+  }
+
+  @override
+  Future<void> waitForReady() async {
+    // Mobile writes directly to disk, no backpressure waiting needed
+  }
 }

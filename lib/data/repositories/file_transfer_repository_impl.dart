@@ -290,12 +290,15 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
                 '⏸ [P2P-ACK] Window sent ($bytesSent/$totalSize bytes). Waiting for receiver ACK...'
               );
               try {
+                // Changed from 8s to 1 day to allow indefinite pausing from receiver.
+                // If the connection drops completely, WebRTC's onDataChannelState
+                // will fire and handle the abort separately.
                 await _windowAckCompleter!.future.timeout(
-                  const Duration(seconds: 8),
+                  const Duration(days: 1),
                 );
               } on TimeoutException {
-                // ACK not received in 8s — receiver likely disconnected or cancelled.
-                debugPrint('⚠️ [P2P-ACK] Window ACK timeout (8s) — peer likely gone, aborting.');
+                // ACK not received in 1 day.
+                debugPrint('⚠️ [P2P-ACK] Window ACK timeout (1 day) — peer likely gone, aborting.');
                 _progressController.addError('Connection to peer was lost. Please check your network and try again.');
                 haltTransfer(); // STOP the loop immediately
                 return; // abort the send loop
@@ -389,6 +392,11 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
             _receivingTotalFiles = decoded['totalFiles'] ?? 1;
             _remoteWindowSize = decoded['windowSize'] ?? _windowSize;
             _fileSaver = getFileSaver();
+            _fileSaver!.setOnCancel(() {
+              // Triggered when user cancels download from browser's native UI
+              debugPrint('🛑 [P2P-ACK] Cancelled from Browser UI.');
+              cancelTransfer(myRole: 'receiver');
+            });
             await _fileSaver!.init(_receivingFileName ?? 'file');
             
             // Emit 0% progress immediately so receiver UI switches to progress screen
@@ -411,6 +419,13 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
             // Sender finished sending one window. ACK so sender can continue.
             final bool isLast = decoded['isLast'] == true;
             if (!isLast) {
+              // Apply backpressure if the browser's download manager is paused
+              if (_fileSaver != null) {
+                await _fileSaver!.waitForReady();
+              }
+              
+              if (_isCancelled) return;
+
               _webrtcClient.sendDataMessage(
                 RTCDataChannelMessage(
                   jsonEncode({

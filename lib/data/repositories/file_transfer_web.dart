@@ -15,6 +15,10 @@ class WebFileSaver implements P2PFileSaver {
   String? _streamId;
   html.MessageChannel? _channel;
   bool _useStream = false;
+  void Function()? _onCancel;
+  
+  // Pause/Resume state
+  async.Completer<void>? _pauseCompleter;
 
   String _getMimeType(String fileName) {
     final ext = fileName.split('.').last.toLowerCase();
@@ -59,6 +63,46 @@ class WebFileSaver implements P2PFileSaver {
         'mimeType': _getMimeType(_fileName),
       };
       
+      // Listen for cancel and pause/resume events from the Service Worker
+      _channel!.port1.onMessage.listen((event) {
+        // dart:js_interop handles JS Objects. For simplicity, check string or parse map
+        final dynamic data = event.data;
+        if (data is String && data == 'started') {
+           // ack received
+        } else if (data is Map) {
+           final type = data['type'];
+           if (type == 'cancelled') {
+             _onCancel?.call();
+           } else if (type == 'pause') {
+             if (_pauseCompleter == null || _pauseCompleter!.isCompleted) {
+               _pauseCompleter = async.Completer<void>();
+               debugPrint('⏸ [P2P-ACK] Received pause signal from browser download manager');
+             }
+           } else if (type == 'resume') {
+             if (_pauseCompleter != null && !_pauseCompleter!.isCompleted) {
+               _pauseCompleter!.complete();
+               debugPrint('▶ [P2P-ACK] Received resume signal from browser download manager');
+             }
+           }
+        } else {
+           // Fallback for some browsers that return js objects differently
+           try {
+             final str = data.toString();
+             if (str.contains('cancelled')) {
+               _onCancel?.call();
+             } else if (str.contains('pause')) {
+               if (_pauseCompleter == null || _pauseCompleter!.isCompleted) {
+                 _pauseCompleter = async.Completer<void>();
+               }
+             } else if (str.contains('resume')) {
+               if (_pauseCompleter != null && !_pauseCompleter!.isCompleted) {
+                 _pauseCompleter!.complete();
+               }
+             }
+           } catch (_) {}
+        }
+      });
+
       // Send start signal
       sw.postMessage(msg, [_channel!.port2]);
 
@@ -128,6 +172,18 @@ class WebFileSaver implements P2PFileSaver {
       html.AnchorElement(href: path)
         ..setAttribute('download', _fileName)
         ..click();
+    }
+  }
+
+  @override
+  void setOnCancel(void Function() onCancel) {
+    _onCancel = onCancel;
+  }
+
+  @override
+  Future<void> waitForReady() async {
+    if (_pauseCompleter != null && !_pauseCompleter!.isCompleted) {
+      await _pauseCompleter!.future;
     }
   }
 
