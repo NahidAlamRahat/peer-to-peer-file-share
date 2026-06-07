@@ -237,11 +237,9 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
         while (offset < end) {
           if (_isCancelled) return;
 
-          // ── BACKPRESSURE: Wait if WebRTC buffer is too full (> 3MB) ──
-          // This ensures we only feed data at the speed the network can send it,
-          // which makes the UI progress bar update smoothly instead of jumping.
-          // Increased from 1MB to 3MB to allow SCTP congestion window to ramp up.
-          while (_webrtcClient.bufferedAmount > 3 * 1024 * 1024) {
+          // Backpressure: If WebRTC's internal buffer has more than 10MB, wait.
+          // This prevents memory issues when disk read speed is faster than network speed.
+          while (_webrtcClient.bufferedAmount > 10 * 1024 * 1024) {
             if (_isCancelled) return;
             await Future.delayed(const Duration(milliseconds: 10));
           }
@@ -253,7 +251,6 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
 
           _webrtcClient.sendDataMessageBinary(slice);
           bytesSent += slice.length;
-          windowBytesSent += slice.length;
           offset = sliceEnd;
 
           // Emit sender progress
@@ -266,57 +263,6 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
             fileIndex: i + 1,
             totalFiles: files.length,
           );
-
-          // When we've sent a full window, pause and wait for receiver ACK
-          if (windowBytesSent >= _windowSize || bytesSent == totalSize) {
-            if (_isCancelled) return;
-
-            final bool isLast = bytesSent == totalSize;
-            // Send window boundary marker to receiver
-            _webrtcClient.sendDataMessage(
-              RTCDataChannelMessage(
-                jsonEncode({
-                  'type': 'window_end',
-                  'fileId': fileId,
-                  'bytesSent': bytesSent,
-                  'isLast': isLast,
-                }),
-              ),
-            );
-
-            if (!isLast) {
-              // Wait for receiver to ACK this window (max 8s).
-              // Previously 30s — this caused the sender to be stuck on 'Verifying Connection...'
-              // for up to 30 seconds when receiver cancels or drops connection.
-              _windowAckCompleter = Completer<void>();
-              debugPrint(
-                '⏸ [P2P-ACK] Window sent ($bytesSent/$totalSize bytes). Waiting for receiver ACK...'
-              );
-              try {
-                // Changed from 8s to 1 day to allow indefinite pausing from receiver.
-                // If the connection drops completely, WebRTC's onDataChannelState
-                // will fire and handle the abort separately.
-                await _windowAckCompleter!.future.timeout(
-                  const Duration(days: 1),
-                );
-              } on TimeoutException {
-                // ACK not received in 1 day.
-                debugPrint('⚠️ [P2P-ACK] Window ACK timeout (1 day) — peer likely gone, aborting.');
-                _progressController.addError('Connection to peer was lost. Please check your network and try again.');
-                haltTransfer(); // STOP the loop immediately
-                return; // abort the send loop
-              } catch (_) {
-                if (_isCancelled) return;
-              }
-              _windowAckCompleter = null;
-              windowBytesSent = 0;
-              debugPrint(
-                '▶ [P2P-ACK] Receiver ACKed window. Sending next window...'
-              );
-            } else {
-              windowBytesSent = 0;
-            }
-          }
         }
       }
 
@@ -393,7 +339,6 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
             _receivingTotalSize = decoded['totalSize'];
             _receivingFileIndex = decoded['fileIndex'] ?? 1;
             _receivingTotalFiles = decoded['totalFiles'] ?? 1;
-            _remoteWindowSize = decoded['windowSize'] ?? _windowSize;
             _fileSaver = getFileSaver();
             _fileSaver!.setOnCancel(() {
               // Triggered when user cancels download from browser's native UI
@@ -416,23 +361,6 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
             );
             
             debugPrint(
-              '📥 [P2P-ACK] Receiving $_receivingFileName ($_receivingTotalSize bytes), window=${_remoteWindowSize ~/ 1024}KB',
-            );
-            break;
-
-          case 'window_end':
-            // Sender finished sending one window. ACK so sender can continue.
-            final bool isLast = decoded['isLast'] == true;
-            if (!isLast) {
-              // NOTE: waitForReady() removed — data now streams directly to disk via
-              // Service Worker, so browser backpressure is handled natively.
-              // No need to hold the ACK anymore.
-              if (_isCancelled) return;
-
-              _webrtcClient.sendDataMessage(
-                RTCDataChannelMessage(
-                  jsonEncode({
-                    'type': 'window_ack',
                     'fileId': decoded['fileId'],
                     'bytesReceived': _receivedBytes,
                   }),
