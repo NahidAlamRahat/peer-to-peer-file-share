@@ -95,3 +95,7 @@ class SaveFileManuallyEvent extends TransferEvent {
 /// Fired when the LOCAL receiver cancels via the browser's native download bar.
 /// Triggers silent home navigation for the receiver.
 class SelfCancelledFromBrowserEvent extends TransferEvent {}
+
+/// Fired when Service Worker is unavailable (e.g., incognito mode).
+/// Used to show a warning snackbar — file will still download via blob fallback.
+class SwUnavailableWarningEvent extends TransferEvent {}

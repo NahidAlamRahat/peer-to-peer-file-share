@@ -62,7 +62,12 @@ class MobileFileSaver implements P2PFileSaver {
 
   @override
   void setOnCancel(void Function() onCancel) {
-    // Mobile doesn't need external cancel triggers since it doesn't use the browser download manager
+    // Mobile file saver doesn't have a native cancel callback
+  }
+
+  @override
+  void setOnSwUnavailable(void Function() onUnavailable) {
+    // Only used for Web
   }
 
   @override

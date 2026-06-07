@@ -64,3 +64,7 @@ class TransferCancelledByPeer extends TransferState {
 /// Fired when the local user (receiver) cancels from the browser's download bar.
 /// Triggers silent navigation to home — no error shown.
 class TransferCancelledBySelf extends TransferState {}
+
+/// Fired when Service Worker is unavailable (e.g., incognito mode).
+/// The transfer continues via blob fallback — just show a warning snackbar.
+class TransferSwUnavailableWarning extends TransferState {}

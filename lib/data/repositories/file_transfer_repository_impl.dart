@@ -71,12 +71,16 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
   @override
   bool get isCancelled => _isCancelled;
 
-  /// Called when the remote peer sends a cancel signal.
-  /// [cancellerRole] is 'sender' or 'receiver'.
+  @override
   Function(String cancellerRole)? onPeerCancelled;
 
   /// Called when the LOCAL receiver cancels from the browser's native download bar.
+  @override
   Function()? onSelfCancelled;
+
+  /// Called when Service Worker is unavailable (e.g., incognito mode).
+  @override
+  Function()? onSwUnavailableWarning;
 
   /// Completer that unblocks the sender when receiver ACKs a window.
   Completer<void>? _windowAckCompleter;
@@ -362,11 +366,15 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
             _receivingTotalFiles = decoded['totalFiles'] ?? 1;
             _fileSaver = getFileSaver();
             _fileSaver!.setOnCancel(() {
-              // Triggered when user cancels download from browser's native UI
+              // Triggered when user cancels download from browser's native UI (Option B)
               debugPrint('🛑 [P2P-ACK] Cancelled from Browser UI.');
               cancelTransfer(myRole: 'receiver');
-              // Notify bloc to navigate receiver silently to home
               onSelfCancelled?.call();
+            });
+            _fileSaver!.setOnSwUnavailable(() {
+              // Service Worker not active — likely incognito mode. Show a warning.
+              debugPrint('⚠️ [P2P-ACK] SW unavailable — incognito mode? Falling back to blob download.');
+              onSwUnavailableWarning?.call();
             });
             await _fileSaver!.init(_receivingFileName ?? 'file');
             

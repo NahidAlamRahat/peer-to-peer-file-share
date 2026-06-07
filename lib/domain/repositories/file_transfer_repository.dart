@@ -34,4 +34,8 @@ abstract class FileTransferRepository {
   /// Callback fired when the LOCAL receiver cancels from the browser's native download bar.
   /// Used to trigger silent home navigation without showing an error.
   set onSelfCancelled(Function()? callback);
+
+  /// Callback fired when the Service Worker is not active (e.g., incognito mode).
+  /// Used to show a warning snackbar to the user.
+  set onSwUnavailableWarning(Function()? callback);
 }

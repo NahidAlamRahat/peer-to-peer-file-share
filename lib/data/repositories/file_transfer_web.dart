@@ -2,8 +2,6 @@ import 'dart:async';
 import 'dart:typed_data';
 // ignore: avoid_web_libraries_in_flutter, deprecated_member_use
 import 'dart:html' as html;
-// ignore: deprecated_member_use
-import 'dart:js' as js;
 import 'package:flutter/foundation.dart';
 import 'package:uuid/uuid.dart';
 import 'file_saver.dart';
@@ -20,7 +18,9 @@ class WebFileSaver implements P2PFileSaver {
   html.MessageChannel? _channel;
   bool _useStream = false;
   void Function()? _onCancel;
-  
+  void Function()? _onSwUnavailable; // Called when SW is not working (e.g., incognito)
+  Completer<void>? _swAckCompleter;  // Waits for 'started' ACK from SW
+
   // Pause/Resume state
   Completer<void>? _pauseCompleter;
 
@@ -72,11 +72,15 @@ class WebFileSaver implements P2PFileSaver {
         final dynamic data = event.data;
         if (data is String) {
           if (data == 'started') {
-             // ack received
+            // SW acknowledged — stream entry is ready
+            if (_swAckCompleter != null && !_swAckCompleter!.isCompleted) {
+              _swAckCompleter!.complete();
+            }
           } else {
              try {
                // We send JSON string from sw.js to avoid Dart JS interop object wrapping issues
                if (data.contains('"type":"cancelled"') || data.contains('"type": "cancelled"')) {
+                 // User cancelled from Chrome's download bar → call onCancel → go home
                  _onCancel?.call();
                } else if (data.contains('"type":"pause"') || data.contains('"type": "pause"')) {
                  if (_pauseCompleter == null || _pauseCompleter!.isCompleted) {
@@ -97,17 +101,25 @@ class WebFileSaver implements P2PFileSaver {
       // Send start signal
       sw.postMessage(msg, [_channel!.port2]);
 
-      // Give SW a split second to set up the stream map
-      await Future.delayed(const Duration(milliseconds: 100));
+      // Wait for SW to acknowledge (max 2s). If timeout = incognito or SW not active.
+      _swAckCompleter = Completer<void>();
+      try {
+        await _swAckCompleter!.future.timeout(const Duration(seconds: 2));
+      } catch (_) {
+        debugPrint('⚠️ [P2P-SW] Service Worker ACK timeout — likely incognito mode.');
+        _useStream = false;
+        _swAckCompleter = null;
+        _onSwUnavailable?.call();
+        return; // Fall back to blob mode (addChunk will buffer in memory)
+      }
+      _swAckCompleter = null;
 
-      // Call the raw JS helper defined in index.html.
-      // We CANNOT use Dart's AnchorElement.click() — Flutter Web's router intercepts it.
-      // We CANNOT use window.open() — it navigates away and breaks the stream.
-      // The JS helper creates and clicks a real DOM anchor bypassing Flutter entirely.
-      js.context.callMethod(
-        'triggerP2PDownload',
-        ['/pt-download-stream/$_streamId', _fileName],
-      );
+      // Trigger the browser's download manager using a hidden IFrame.
+      final iframe = html.IFrameElement()
+        ..id = 'pt-download-$_streamId'
+        ..style.display = 'none'
+        ..src = '/pt-download-stream/$_streamId';
+      html.document.body?.append(iframe);
     }
   }
 
@@ -168,6 +180,11 @@ class WebFileSaver implements P2PFileSaver {
   @override
   void setOnCancel(void Function() onCancel) {
     _onCancel = onCancel;
+  }
+
+  @override
+  void setOnSwUnavailable(void Function() onUnavailable) {
+    _onSwUnavailable = onUnavailable;
   }
 
   @override

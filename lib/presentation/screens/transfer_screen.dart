@@ -292,6 +292,13 @@ class _TransferScreenState extends State<TransferScreen> {
                     cBloc.add(ResetConnectionEvent());
                   });
                 }
+              } else if (state is TransferSwUnavailableWarning) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Incognito mode detected. Large files may consume more memory.'),
+                    duration: Duration(seconds: 4),
+                  ),
+                );
               }
               // NOTE: CancelTransferEvent → canceller goes home silently (handled in _confirmAndCancelTransfer)
               // so we intentionally do NOT show any notification/UI for the canceller here.

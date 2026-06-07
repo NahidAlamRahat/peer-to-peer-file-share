@@ -9,5 +9,6 @@ abstract class P2PFileSaver {
   Future<void> discard();
   void triggerManualDownload(String path);
   void setOnCancel(void Function() onCancel);
+  void setOnSwUnavailable(void Function() onUnavailable) {} // no-op by default
   Future<void> waitForReady();
 }
