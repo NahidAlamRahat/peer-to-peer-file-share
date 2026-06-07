@@ -2,6 +2,8 @@ import 'dart:async';
 import 'dart:typed_data';
 // ignore: avoid_web_libraries_in_flutter, deprecated_member_use
 import 'dart:html' as html;
+// ignore: deprecated_member_use
+import 'dart:js' as js;
 import 'package:flutter/foundation.dart';
 import 'package:uuid/uuid.dart';
 import 'file_saver.dart';
@@ -98,12 +100,14 @@ class WebFileSaver implements P2PFileSaver {
       // Give SW a split second to set up the stream map
       await Future.delayed(const Duration(milliseconds: 100));
 
-      // Trigger the browser's download manager using window.open.
-      // We do not use AnchorElement.click() because Flutter Web's router intercepts DOM clicks.
-      // We do not use IFrame because Android Chrome often prematurely cancels stream inside IFrames.
-      // The ServiceWorker will respond with 'Content-Disposition: attachment', so the
-      // browser will download the file and NOT navigate away from the current page.
-      html.window.open('/pt-download-stream/$_streamId', '_top');
+      // Call the raw JS helper defined in index.html.
+      // We CANNOT use Dart's AnchorElement.click() — Flutter Web's router intercepts it.
+      // We CANNOT use window.open() — it navigates away and breaks the stream.
+      // The JS helper creates and clicks a real DOM anchor bypassing Flutter entirely.
+      js.context.callMethod(
+        'triggerP2PDownload',
+        ['/pt-download-stream/$_streamId', _fileName],
+      );
     }
   }
 

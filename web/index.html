@@ -192,6 +192,20 @@
     });
   </script>
   <script>
+    // Helper called from Dart to trigger a file download via Service Worker stream.
+    // We must use raw JS (not Dart's html.AnchorElement) because Flutter Web's router
+    // intercepts ALL Dart-generated anchor clicks and breaks the download.
+    window.triggerP2PDownload = function(url, filename) {
+      var a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      a.style.display = 'none';
+      document.body.appendChild(a);
+      a.click();
+      setTimeout(function() { document.body.removeChild(a); }, 1000);
+    };
+  </script>
+  <script>
     // Register the StreamSaver Service Worker for handling large P2P file downloads
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', function() {
