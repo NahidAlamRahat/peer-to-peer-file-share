@@ -361,23 +361,8 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
             );
             
             debugPrint(
-                    'fileId': decoded['fileId'],
-                    'bytesReceived': _receivedBytes,
-                  }),
-                ),
-              );
-              debugPrint(
-                '✔ [P2P-ACK] Window ACK sent. Total received: $_receivedBytes/$_receivingTotalSize',
-              );
-            }
-            break;
-
-          case 'window_ack':
-            // Receiver ACKed a window — unblock the sender
-            if (_windowAckCompleter != null &&
-                !_windowAckCompleter!.isCompleted) {
-              _windowAckCompleter!.complete();
-            }
+              '📥 [P2P-ACK] Receiving $_receivingFileName ($_receivingTotalSize bytes)',
+            );
             break;
 
           case 'eof':
