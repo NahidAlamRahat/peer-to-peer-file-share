@@ -122,7 +122,7 @@ class WebFileSaver implements P2PFileSaver {
         debugPrint('⚠️ [P2P-SW] Service Worker ACK timeout — likely incognito mode.');
         _useStream = false;
         _swAckCompleter = null;
-        _onSwUnavailable?.call();
+        _onIncognitoDetected?.call();
         return; // Fall back to blob mode (addChunk will buffer in memory)
       }
       _swAckCompleter = null;
