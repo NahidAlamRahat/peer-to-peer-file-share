@@ -193,15 +193,23 @@
   </script>
   <script>
     // Helper called from Dart to trigger a file download via Service Worker stream.
-    // We must use raw JS (not Dart's html.AnchorElement) because Flutter Web's router
-    // intercepts ALL Dart-generated anchor clicks and breaks the download.
+    // Flutter Web registers a click listener on the document that intercepts anchor clicks
+    // and pushes them to Flutter's router. We bypass this by dispatching a MouseEvent
+    // with bubbles:false — the browser still performs the default download action,
+    // but the event never propagates up to Flutter's document-level listener.
     window.triggerP2PDownload = function(url, filename) {
       var a = document.createElement('a');
       a.href = url;
       a.download = filename;
       a.style.display = 'none';
       document.body.appendChild(a);
-      a.click();
+      // bubbles: false prevents Flutter's document-level router from intercepting
+      var evt = new MouseEvent('click', {
+        bubbles: false,
+        cancelable: true,
+        view: window
+      });
+      a.dispatchEvent(evt);
       setTimeout(function() { document.body.removeChild(a); }, 1000);
     };
   </script>
