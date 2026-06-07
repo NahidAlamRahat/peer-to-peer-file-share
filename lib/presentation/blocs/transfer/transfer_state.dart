@@ -65,6 +65,6 @@ class TransferCancelledByPeer extends TransferState {
 /// Triggers silent navigation to home — no error shown.
 class TransferCancelledBySelf extends TransferState {}
 
-/// Fired when Service Worker is unavailable (e.g., incognito mode).
-/// The transfer continues via blob fallback — just show a warning snackbar.
-class TransferSwUnavailableWarning extends TransferState {}
+/// Fired when Chrome Incognito mode is detected.
+/// Shows a blocking popup dialog.
+class TransferIncognitoError extends TransferState {}

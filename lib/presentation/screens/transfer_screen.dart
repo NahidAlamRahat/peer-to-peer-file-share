@@ -292,11 +292,30 @@ class _TransferScreenState extends State<TransferScreen> {
                     cBloc.add(ResetConnectionEvent());
                   });
                 }
-              } else if (state is TransferSwUnavailableWarning) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Incognito mode detected. Large files may consume more memory.'),
-                    duration: Duration(seconds: 4),
+              } else if (state is TransferIncognitoError) {
+                // Incognito mode detected — show an unmissable dialog
+                WakelockPlus.disable();
+                _stopBackgroundExecution();
+                showDialog(
+                  context: context,
+                  barrierDismissible: false,
+                  builder: (context) => AlertDialog(
+                    title: const Text('Incognito Mode Not Supported'),
+                    content: const Text(
+                      'Files cannot be downloaded securely in Incognito mode.\n\n'
+                      'Please open this app in a normal tab to download files.',
+                    ),
+                    actions: [
+                      TextButton(
+                        onPressed: () {
+                          Navigator.of(context).pushAndRemoveUntil(
+                            MaterialPageRoute(builder: (_) => const HomeScreen()),
+                            (route) => false,
+                          );
+                        },
+                        child: const Text('Go Home'),
+                      ),
+                    ],
                   ),
                 );
               }

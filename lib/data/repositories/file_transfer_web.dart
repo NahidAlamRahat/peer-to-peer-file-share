@@ -2,6 +2,8 @@ import 'dart:async';
 import 'dart:typed_data';
 // ignore: avoid_web_libraries_in_flutter, deprecated_member_use
 import 'dart:html' as html;
+// ignore: deprecated_member_use
+import 'dart:js' as js;
 import 'package:flutter/foundation.dart';
 import 'package:uuid/uuid.dart';
 import 'file_saver.dart';
@@ -18,7 +20,7 @@ class WebFileSaver implements P2PFileSaver {
   html.MessageChannel? _channel;
   bool _useStream = false;
   void Function()? _onCancel;
-  void Function()? _onSwUnavailable; // Called when SW is not working (e.g., incognito)
+  void Function()? _onIncognitoDetected; // Called when SW is not working (e.g., incognito)
   Completer<void>? _swAckCompleter;  // Waits for 'started' ACK from SW
 
   // Pause/Resume state
@@ -55,7 +57,18 @@ class WebFileSaver implements P2PFileSaver {
 
     // Check if ServiceWorker is active
     final sw = html.window.navigator.serviceWorker?.controller;
-    if (sw != null) {
+    
+    // Check if Incognito mode in Chrome using our JS helper
+    bool isIncognito = false;
+    final incognitoCompleter = Completer<bool>();
+    if (js.context.hasProperty('checkIncognito')) {
+      js.context.callMethod('checkIncognito', [
+        (bool result) { incognitoCompleter.complete(result); }
+      ]);
+      isIncognito = await incognitoCompleter.future;
+    }
+
+    if (sw != null && !isIncognito) {
       _useStream = true;
       _streamId = const Uuid().v4();
       _channel = html.MessageChannel();
@@ -120,6 +133,11 @@ class WebFileSaver implements P2PFileSaver {
         ..style.display = 'none'
         ..src = '/pt-download-stream/$_streamId';
       html.document.body?.append(iframe);
+    } else {
+      if (isIncognito) {
+        debugPrint('⚠️ [P2P-SW] Incognito mode detected. Disabling Service Worker streams.');
+        _onIncognitoDetected?.call();
+      }
     }
   }
 
@@ -183,8 +201,8 @@ class WebFileSaver implements P2PFileSaver {
   }
 
   @override
-  void setOnSwUnavailable(void Function() onUnavailable) {
-    _onSwUnavailable = onUnavailable;
+  void setOnIncognitoDetected(void Function() onIncognito) {
+    _onIncognitoDetected = onIncognito;
   }
 
   @override

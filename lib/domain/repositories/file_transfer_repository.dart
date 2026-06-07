@@ -35,7 +35,7 @@ abstract class FileTransferRepository {
   /// Used to trigger silent home navigation without showing an error.
   set onSelfCancelled(Function()? callback);
 
-  /// Callback fired when the Service Worker is not active (e.g., incognito mode).
-  /// Used to show a warning snackbar to the user.
-  set onSwUnavailableWarning(Function()? callback);
+  /// Callback fired when Chrome Incognito mode is detected.
+  /// Used to block downloads and show an alert dialog.
+  set onIncognitoDetected(Function()? callback);
 }

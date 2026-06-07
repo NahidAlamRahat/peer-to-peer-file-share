@@ -96,6 +96,5 @@ class SaveFileManuallyEvent extends TransferEvent {
 /// Triggers silent home navigation for the receiver.
 class SelfCancelledFromBrowserEvent extends TransferEvent {}
 
-/// Fired when Service Worker is unavailable (e.g., incognito mode).
-/// Used to show a warning snackbar — file will still download via blob fallback.
-class SwUnavailableWarningEvent extends TransferEvent {}
+/// Fired when Chrome Incognito mode is detected.
+class IncognitoDetectedEvent extends TransferEvent {}

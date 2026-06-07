@@ -66,7 +66,7 @@ class MobileFileSaver implements P2PFileSaver {
   }
 
   @override
-  void setOnSwUnavailable(void Function() onUnavailable) {
+  void setOnIncognitoDetected(void Function() onIncognito) {
     // Only used for Web
   }
 

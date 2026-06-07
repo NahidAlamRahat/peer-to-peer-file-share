@@ -212,6 +212,21 @@
       a.dispatchEvent(evt);
       setTimeout(function() { document.body.removeChild(a); }, 1000);
     };
+
+    // Helper to detect Chrome Incognito mode.
+    // Chrome blocks ServiceWorker streaming downloads in Incognito (saves 0 B files).
+    // We use this to warn the user and fallback to memory blob.
+    window.checkIncognito = function(callback) {
+      var fs = window.RequestFileSystem || window.webkitRequestFileSystem;
+      if (!fs) {
+        callback(false); // Not Chrome or API removed
+        return;
+      }
+      fs(window.TEMPORARY, 100, 
+        function() { callback(false); }, 
+        function() { callback(true); }
+      );
+    };
   </script>
   <script>
     // Register the StreamSaver Service Worker for handling large P2P file downloads

@@ -23,7 +23,7 @@ class TransferBloc extends Bloc<TransferEvent, TransferState> {
     on<CancelTransferEvent>(_onCancelTransfer);
     on<PeerCancelledEvent>(_onPeerCancelled);
     on<SelfCancelledFromBrowserEvent>(_onSelfCancelledFromBrowser);
-    on<SwUnavailableWarningEvent>(_onSwUnavailableWarning);
+    on<IncognitoDetectedEvent>(_onIncognitoDetected);
     on<SaveFileManuallyEvent>(_onSaveFileManually);
     on<ResetTransferEvent>(_onResetTransfer);
 
@@ -56,9 +56,9 @@ class TransferBloc extends Bloc<TransferEvent, TransferState> {
       add(SelfCancelledFromBrowserEvent());
     };
 
-    // Wire up SW-unavailable callback for incognito mode warning
-    fileTransferRepository.onSwUnavailableWarning = () {
-      add(SwUnavailableWarningEvent());
+    // Wire up Incognito detected callback for showing block dialog
+    fileTransferRepository.onIncognitoDetected = () {
+      add(IncognitoDetectedEvent());
     };
   }
 
@@ -201,22 +201,21 @@ class TransferBloc extends Bloc<TransferEvent, TransferState> {
     emit(TransferCancelledBySelf());
   }
 
-  void _onSwUnavailableWarning(
-    SwUnavailableWarningEvent event,
+  void _onIncognitoDetected(
+    IncognitoDetectedEvent event,
     Emitter<TransferState> emit,
   ) {
-    // Don't change the main transfer state — just emit a side-effect state
-    // so the screen can show a snackbar. The transfer continues via blob fallback.
-    final current = state;
-    emit(TransferSwUnavailableWarning());
-    emit(current); // Restore previous state immediately
+    _lastUpdate = null;
+    _lastBytes = 0;
+    _currentSpeed = 0;
+    emit(TransferIncognitoError());
   }
 
   @override
   Future<void> close() {
     fileTransferRepository.onPeerCancelled = null;
     fileTransferRepository.onSelfCancelled = null;
-    fileTransferRepository.onSwUnavailableWarning = null;
+    fileTransferRepository.onIncognitoDetected = null;
     _progressSubscription?.cancel();
     _fileReceivedSubscription?.cancel();
     return super.close();

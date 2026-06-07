@@ -78,9 +78,9 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
   @override
   Function()? onSelfCancelled;
 
-  /// Called when Service Worker is unavailable (e.g., incognito mode).
+  /// Called when Chrome Incognito mode is detected.
   @override
-  Function()? onSwUnavailableWarning;
+  Function()? onIncognitoDetected;
 
   /// Completer that unblocks the sender when receiver ACKs a window.
   Completer<void>? _windowAckCompleter;
@@ -371,10 +371,11 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
               cancelTransfer(myRole: 'receiver');
               onSelfCancelled?.call();
             });
-            _fileSaver!.setOnSwUnavailable(() {
-              // Service Worker not active — likely incognito mode. Show a warning.
-              debugPrint('⚠️ [P2P-ACK] SW unavailable — incognito mode? Falling back to blob download.');
-              onSwUnavailableWarning?.call();
+            _fileSaver!.setOnIncognitoDetected(() {
+              // Incognito mode detected. Abort transfer and notify UI.
+              debugPrint('⚠️ [P2P-ACK] Incognito mode detected. Aborting transfer.');
+              cancelTransfer(myRole: 'receiver');
+              onIncognitoDetected?.call();
             });
             await _fileSaver!.init(_receivingFileName ?? 'file');
             
