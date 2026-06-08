@@ -178,9 +178,6 @@ class _TransferScreenState extends State<TransferScreen> {
 
       // Step 1: Send cancel message to peer IMMEDIATELY so they get it before connection drops
       tBloc.add(CancelTransferEvent(myRole: myRole));
-      
-      // Send out-of-band via signaling to guarantee delivery even if WebRTC drops
-      cBloc.add(SendMessageEvent({'type': 'cancel', 'who': myRole}));
 
       // Step 2: Wait a moment so the cancel signal has time to reach the peer
       await Future.delayed(const Duration(milliseconds: 600));
@@ -229,16 +226,8 @@ class _TransferScreenState extends State<TransferScreen> {
         body: BlocListener<ConnectionBloc, ConnectionStateBloc>(
           listener: (context, connectionState) {
             final transferState = context.read<TransferBloc>().state;
-            final peerAlreadyCancelled = transferState is TransferCancelledByPeer;
-            // Also listen for out-of-band cancel messages from signaling server
-            if (connectionState is ConnectionMessageReceived) {
-              final payload = connectionState.payload;
-              if (payload is Map && payload['type'] == 'cancel') {
-                final who = payload['who'] as String? ?? 'peer';
-                context.read<TransferBloc>().add(PeerCancelledEvent(who));
-              }
-            }
-
+            final peerAlreadyCancelled =
+                transferState is TransferCancelledByPeer;
             // Only react to actual connection drops — NOT ConnectionInitial (fires on setup/reset)
             // Also skip if WE are the one who cancelled (_isLocalCancelling = true).
             if (!peerAlreadyCancelled &&
@@ -331,7 +320,9 @@ class _TransferScreenState extends State<TransferScreen> {
                       TextButton(
                         onPressed: () {
                           Navigator.of(context).pushAndRemoveUntil(
-                            MaterialPageRoute(builder: (_) => const HomeScreen()),
+                            MaterialPageRoute(
+                              builder: (_) => const HomeScreen(),
+                            ),
                             (route) => false,
                           );
                         },
@@ -369,8 +360,8 @@ class _TransferScreenState extends State<TransferScreen> {
           ),
           AppSpacing.gapH16,
           Text(
-            widget.role == SessionRole.sender 
-                ? 'Verifying Connection...' 
+            widget.role == SessionRole.sender
+                ? 'Verifying Connection...'
                 : 'Connecting to peer...',
             style: TextStyle(
               fontSize: AppSizes.textHeadline,
@@ -379,13 +370,10 @@ class _TransferScreenState extends State<TransferScreen> {
           ),
           AppSpacing.gapH8,
           Text(
-            widget.role == SessionRole.sender 
+            widget.role == SessionRole.sender
                 ? 'Checking peer status before transfer...'
                 : 'Waiting for sender to start...',
-            style: TextStyle(
-              color: Colors.orange,
-              fontWeight: FontWeight.bold,
-            ),
+            style: TextStyle(color: Colors.orange, fontWeight: FontWeight.bold),
           ),
         ],
       );
@@ -537,11 +525,7 @@ class _TransferScreenState extends State<TransferScreen> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Icon(
-                    Icons.block,
-                    color: Colors.red,
-                    size: 20,
-                  ),
+                  const Icon(Icons.block, color: Colors.red, size: 20),
                   AppSpacing.gapW8,
                   Flexible(
                     child: Text(
@@ -618,7 +602,7 @@ class _TransferScreenState extends State<TransferScreen> {
               icon: Icons.download_rounded,
               onPressed: () {
                 context.read<TransferBloc>().add(
-                  SaveFileManuallyEvent(state.filePath)
+                  SaveFileManuallyEvent(state.filePath),
                 );
               },
             ),
