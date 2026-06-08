@@ -135,7 +135,7 @@ class ConnectionBloc extends Bloc<ConnectionEvent, ConnectionStateBloc> {
     if (state is ConnectionProgress) {
       final currentProgress = (state as ConnectionProgress).progress;
       emit(ConnectionProgress(currentProgress, event.message));
-    } else {
+    } else if (state is ConnectionInitial || state is ConnectionLoading || state is ConnectionStatusUpdate) {
       emit(ConnectionStatusUpdate(event.message));
     }
   }
