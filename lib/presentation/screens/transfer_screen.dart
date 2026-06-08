@@ -35,6 +35,10 @@ class _TransferScreenState extends State<TransferScreen> {
   final _settings = sl<SettingsService>();
   final _notifications = sl<NotificationService>();
 
+  // True while WE are in the process of cancelling — prevents the
+  // ConnectionBloc listener from showing "connection failed" on our screen.
+  bool _isLocalCancelling = false;
+
   @override
   void initState() {
     super.initState();
@@ -168,6 +172,10 @@ class _TransferScreenState extends State<TransferScreen> {
       final tBloc = context.read<TransferBloc>();
       final cBloc = context.read<ConnectionBloc>();
 
+      // Mark that WE are cancelling — blocks the ConnectionBloc listener
+      // from showing "connection failed" on our own screen.
+      _isLocalCancelling = true;
+
       // Step 1: Send cancel message to peer IMMEDIATELY so they get it before connection drops
       tBloc.add(CancelTransferEvent(myRole: myRole));
 
@@ -220,7 +228,9 @@ class _TransferScreenState extends State<TransferScreen> {
             final transferState = context.read<TransferBloc>().state;
             final peerAlreadyCancelled = transferState is TransferCancelledByPeer;
             // Only react to actual connection drops — NOT ConnectionInitial (fires on setup/reset)
+            // Also skip if WE are the one who cancelled (_isLocalCancelling = true).
             if (!peerAlreadyCancelled &&
+                !_isLocalCancelling &&
                 (connectionState is ConnectionFailed ||
                     connectionState is ConnectionOffline)) {
               // Wait 1.5s first — give time for any incoming peer cancel message to arrive
