@@ -178,6 +178,9 @@ class _TransferScreenState extends State<TransferScreen> {
 
       // Step 1: Send cancel message to peer IMMEDIATELY so they get it before connection drops
       tBloc.add(CancelTransferEvent(myRole: myRole));
+      
+      // Send out-of-band via signaling to guarantee delivery even if WebRTC drops
+      cBloc.add(SendMessageEvent({'type': 'cancel', 'who': myRole}));
 
       // Step 2: Wait a moment so the cancel signal has time to reach the peer
       await Future.delayed(const Duration(milliseconds: 600));
@@ -227,6 +230,15 @@ class _TransferScreenState extends State<TransferScreen> {
           listener: (context, connectionState) {
             final transferState = context.read<TransferBloc>().state;
             final peerAlreadyCancelled = transferState is TransferCancelledByPeer;
+            // Also listen for out-of-band cancel messages from signaling server
+            if (connectionState is ConnectionMessageReceived) {
+              final payload = connectionState.payload;
+              if (payload is Map && payload['type'] == 'cancel') {
+                final who = payload['who'] as String? ?? 'peer';
+                context.read<TransferBloc>().add(PeerCancelledEvent(who));
+              }
+            }
+
             // Only react to actual connection drops — NOT ConnectionInitial (fires on setup/reset)
             // Also skip if WE are the one who cancelled (_isLocalCancelling = true).
             if (!peerAlreadyCancelled &&
