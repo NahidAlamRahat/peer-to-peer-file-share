@@ -296,7 +296,12 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
       if (file.readStream != null) {
         await for (final rawChunk in file.readStream!) {
           if (_isCancelled) break;
-          await sendChunks(Uint8List.fromList(rawChunk), 0, rawChunk.length);
+          // Flutter file streams return Uint8List — cast avoids an unnecessary
+          // memory copy. Fallback to fromList only for non-Uint8List streams.
+          final chunkBytes = rawChunk is Uint8List
+              ? rawChunk
+              : Uint8List.fromList(rawChunk);
+          await sendChunks(chunkBytes, 0, chunkBytes.length);
         }
       } else if (file.bytes != null) {
         await sendChunks(file.bytes!, 0, file.bytes!.length);
