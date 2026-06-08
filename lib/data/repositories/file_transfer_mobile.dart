@@ -10,7 +10,7 @@ class MobileFileSaver implements P2PFileSaver {
   late File _file;
 
   @override
-  Future<void> init(String fileName) async {
+  Future<void> init(String fileName, {int fileSize = 0}) async {
     late Directory dir;
     if (Platform.isAndroid) {
       dir = Directory('/storage/emulated/0/Download');

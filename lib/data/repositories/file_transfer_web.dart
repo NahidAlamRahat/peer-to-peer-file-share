@@ -44,7 +44,7 @@ class WebFileSaver implements P2PFileSaver {
   }
 
   @override
-  Future<void> init(String fileName) async {
+  Future<void> init(String fileName, {int fileSize = 0}) async {
     // Revoke previous blob URL if any
     if (_blobUrl != null) {
       html.Url.revokeObjectUrl(_blobUrl!);
@@ -55,9 +55,22 @@ class WebFileSaver implements P2PFileSaver {
     _streamId = null;
     _useStream = false;
 
-    // Check if ServiceWorker is active
-    final sw = html.window.navigator.serviceWorker?.controller;
-    
+    // ── Wait for SW controller (handles first-load race) ─────────────────────
+    // index.html waits for controllerchange before booting Flutter, so this
+    // should almost always be instant. But as a safety net we retry up to
+    // 1 second in case of a tiny race.
+    var sw = html.window.navigator.serviceWorker?.controller;
+    if (sw == null) {
+      debugPrint('⏳ [P2P-SW] controller null — waiting up to 1s...');
+      for (var i = 0; i < 20 && sw == null; i++) {
+        await Future.delayed(const Duration(milliseconds: 50));
+        sw = html.window.navigator.serviceWorker?.controller;
+      }
+      if (sw != null) {
+        debugPrint('✅ [P2P-SW] controller ready after retry.');
+      }
+    }
+
     // Check if Incognito mode in Chrome using our JS helper
     bool isIncognito = false;
     final incognitoCompleter = Completer<bool>();
@@ -134,10 +147,25 @@ class WebFileSaver implements P2PFileSaver {
         ..src = '/pt-download-stream/$_streamId';
       html.document.body?.append(iframe);
     } else {
+      // ── No SW available ───────────────────────────────────────────────────
       if (isIncognito) {
         debugPrint('⚠️ [P2P-SW] Incognito mode detected. Disabling Service Worker streams.');
         _onIncognitoDetected?.call();
+        return;
       }
+
+      // SW unavailable (unsupported browser, failed registration, etc.).
+      // Blob fallback is only safe for small files (<= 50 MB).
+      // For large files it will exhaust browser memory and crash the tab.
+      const int blobSafeLimit = 50 * 1024 * 1024; // 50 MB
+      if (fileSize > blobSafeLimit) {
+        debugPrint('❌ [P2P-SW] SW unavailable and file is ${fileSize ~/ 1048576} MB — cannot safely buffer in RAM.');
+        throw Exception(
+          'Your browser does not support background downloads required for large files. '
+          'Please reload the page and try again, or use Chrome/Edge.',
+        );
+      }
+      debugPrint('⚠️ [P2P-SW] SW unavailable — using in-memory blob fallback (file: ${fileSize ~/ 1024} KB).');
     }
   }
 

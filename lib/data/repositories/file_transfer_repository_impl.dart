@@ -377,7 +377,7 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
               cancelTransfer(myRole: 'receiver');
               onIncognitoDetected?.call();
             });
-            await _fileSaver!.init(_receivingFileName ?? 'file');
+            await _fileSaver!.init(_receivingFileName ?? 'file', fileSize: _receivingTotalSize);
             
             // Emit 0% progress immediately so receiver UI switches to progress screen
             _emitProgress(
