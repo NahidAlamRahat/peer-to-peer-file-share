@@ -255,9 +255,9 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
         while (offset < end) {
           if (_isCancelled) return;
 
-          // Backpressure: If WebRTC's internal buffer has more than 10MB, wait.
-          // This prevents memory issues when disk read speed is faster than network speed.
-          while (_webrtcClient.bufferedAmount > 10 * 1024 * 1024) {
+          // Backpressure: WebRTC mobile connections often stall or drop if the
+          // internal buffer exceeds a few MBs. 1MB is a safe limit for mobile devices.
+          while (_webrtcClient.bufferedAmount > 1024 * 1024) {
             if (_isCancelled) return;
             await Future.delayed(const Duration(milliseconds: 10));
           }
