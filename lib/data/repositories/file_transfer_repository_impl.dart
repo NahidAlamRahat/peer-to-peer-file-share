@@ -21,10 +21,11 @@ import 'file_transfer_web.dart'
 /// on Mobile (especially iOS/Safari) is 16MB. Above that, the connection might drop.
 const int _windowSize = 10485760; // 10 MB per window
 
-/// Max single WebRTC chunk size (64 KB).
-/// Modern browsers and native WebRTC implementations handle 64KB-256KB perfectly well.
-/// 64KB reduces event loop overhead and JS interop crossings by 4x compared to 16KB.
-const int _chunkSize = 65536; // 64 KB
+/// Max single WebRTC chunk size (128 KB).
+/// Chrome, Firefox, Safari all support 256KB DataChannel messages safely.
+/// 128KB gives 2× fewer iterations vs 64KB while staying conservative for
+/// older mobile browsers that may have lower SCTP message size limits.
+const int _chunkSize = 131072; // 128 KB
 
 int _lastEmitTime = 0;
 
@@ -271,10 +272,10 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
           offset = sliceEnd;
           loopCount++;
 
-          // Yield to event loop every ~1MB (16 * 64KB) to prevent thread starvation
-          // on mobile browsers. If the JS main thread is totally blocked, WebRTC
-          // cannot flush UDP sockets and throughput drops to a crawl!
-          if (loopCount % 16 == 0) {
+          // Yield to event loop every ~4MB (32 × 128KB) to prevent thread
+          // starvation on mobile browsers. Previously 1MB — 4× less overhead
+          // means higher sustained throughput on fast WiFi connections.
+          if (loopCount % 32 == 0) {
             await Future.delayed(Duration.zero);
           }
 
