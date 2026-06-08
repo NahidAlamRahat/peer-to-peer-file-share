@@ -4,10 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-// ignore: avoid_web_libraries_in_flutter
-import 'dart:html' as html;
-// ignore: deprecated_member_use
-import 'dart:js' as js;
+import 'core/utils/web_helpers/web_helpers.dart' as web_helpers;
 
 import 'core/di/injection_container.dart' as di;
 import 'core/services/ad_service.dart';
@@ -125,36 +122,32 @@ class _P2PFileShareAppState extends State<P2PFileShareApp> {
   void _checkIncognito() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (kIsWeb) {
-        if (js.context.hasProperty('checkIncognito')) {
-          js.context.callMethod('checkIncognito', [
-            (bool isIncognito) {
-              if (isIncognito) {
-                showDialog(
-                  context: navigatorKey.currentContext!,
-                  barrierDismissible: false,
-                  builder: (context) => AlertDialog(
-                    title: const Text('Incognito Mode Not Supported'),
-                    content: const Text(
-                      'Files cannot be downloaded securely in Incognito mode.\n\n'
-                      'Please open this app in a normal tab to download files.',
-                    ),
-                    actions: [
-                      TextButton(
-                        onPressed: () {
-                          Clipboard.setData(ClipboardData(text: html.window.location.href));
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('Link copied! Open a normal tab and paste it.')),
-                          );
-                        },
-                        child: const Text('Copy Link'),
-                      ),
-                    ],
+        web_helpers.checkIncognitoStatus((bool isIncognito) {
+          if (isIncognito) {
+            showDialog(
+              context: navigatorKey.currentContext!,
+              barrierDismissible: false,
+              builder: (context) => AlertDialog(
+                title: const Text('Incognito Mode Not Supported'),
+                content: const Text(
+                  'Files cannot be downloaded securely in Incognito mode.\n\n'
+                  'Please open this app in a normal tab to download files.',
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () {
+                      Clipboard.setData(ClipboardData(text: web_helpers.getWebUrl()));
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Link copied! Open a normal tab and paste it.')),
+                      );
+                    },
+                    child: const Text('Copy Link'),
                   ),
-                );
-              }
-            }
-          ]);
-        }
+                ],
+              ),
+            );
+          }
+        });
       }
     });
   }
