@@ -61,13 +61,15 @@ class WebFileSaver implements P2PFileSaver {
     // 1 second in case of a tiny race.
     var sw = html.window.navigator.serviceWorker?.controller;
     if (sw == null) {
-      debugPrint('⏳ [P2P-SW] controller null — waiting up to 1s...');
-      for (var i = 0; i < 20 && sw == null; i++) {
-        await Future.delayed(const Duration(milliseconds: 50));
+      // SW may still be activating (first visit). Poll up to 5 s — by the time
+      // the user has scanned QR and connected, it will almost always be ready.
+      debugPrint('⏳ [P2P-SW] controller null — waiting up to 5s...');
+      for (var i = 0; i < 50 && sw == null; i++) {
+        await Future.delayed(const Duration(milliseconds: 100));
         sw = html.window.navigator.serviceWorker?.controller;
       }
       if (sw != null) {
-        debugPrint('✅ [P2P-SW] controller ready after retry.');
+        debugPrint('✅ [P2P-SW] controller ready after ${sw == null ? 5000 : 0}ms retry.');
       }
     }
 
