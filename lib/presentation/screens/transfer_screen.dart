@@ -190,7 +190,8 @@ class _TransferScreenState extends State<TransferScreen> {
       );
 
       // Step 4: Reset the connection after navigation
-      Future.delayed(const Duration(milliseconds: 500), () {
+      // Give the WebRTC buffer enough time to flush the cancel message
+      Future.delayed(const Duration(seconds: 3), () {
         cBloc.add(ResetConnectionEvent());
       });
     }
