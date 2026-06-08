@@ -272,10 +272,11 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
           offset = sliceEnd;
           loopCount++;
 
-          // Yield to event loop every ~4MB (32 × 128KB) to prevent thread
-          // starvation on mobile browsers. Previously 1MB — 4× less overhead
-          // means higher sustained throughput on fast WiFi connections.
-          if (loopCount % 32 == 0) {
+          // Yield to event loop every ~2MB (16 × 128KB) to prevent thread
+          // starvation on mobile browsers. Each sendDataMessageBinary() is a
+          // synchronous Dart→JS interop call (~0.5-1ms on mobile). 16 calls =
+          // ~8-16ms of blocking — safe. Going higher risks jank on slow phones.
+          if (loopCount % 16 == 0) {
             await Future.delayed(Duration.zero);
           }
 
