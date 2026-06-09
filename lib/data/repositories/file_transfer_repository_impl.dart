@@ -21,11 +21,11 @@ import 'file_transfer_web.dart'
 /// on Mobile (especially iOS/Safari) is 16MB. Above that, the connection might drop.
 const int _windowSize = 10485760; // 10 MB per window
 
-/// Max single WebRTC chunk size (128 KB).
-/// Chrome, Firefox, Safari all support 256KB DataChannel messages safely.
-/// 128KB gives 2× fewer iterations vs 64KB while staying conservative for
-/// older mobile browsers that may have lower SCTP message size limits.
-const int _chunkSize = 131072; // 128 KB
+/// Max single WebRTC chunk size (64 KB).
+/// 64KB is the absolute gold standard maximum for WebRTC DataChannels across all
+/// platforms. Anything larger relies on SCTP fragmentation which is buggy on mobile
+/// and can cause massive packet loss, stalling, or connection drops.
+const int _chunkSize = 65536; // 64 KB
 
 int _lastEmitTime = 0;
 
