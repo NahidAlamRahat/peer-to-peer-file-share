@@ -16,14 +16,13 @@ import 'file_transfer_web.dart'
     if (dart.library.io) 'file_transfer_mobile.dart';
 
 /// How many bytes sender sends per "window" before waiting for receiver ACK.
-/// 1MB window prevents mobile OS internal buffers from overflowing while ensuring maximum speed.
-const int _windowSize = 1048576; // 1 MB per window
+/// 256KB window is ultra-safe for all mobile OS internal buffers. It prevents
+/// the OS from silently dropping packets when WebRTC sends too fast.
+const int _windowSize = 262144; // 256 KB per window
 
-/// Max single WebRTC chunk size (64 KB).
-/// 64KB is the absolute gold standard maximum for WebRTC DataChannels across all
-/// platforms. Anything larger relies on SCTP fragmentation which is buggy on mobile
-/// and can cause massive packet loss, stalling, or connection drops.
-const int _chunkSize = 65536; // 64 KB
+/// Max single WebRTC chunk size (32 KB).
+/// 32KB ensures zero SCTP fragmentation issues on older Androids.
+const int _chunkSize = 32768; // 32 KB
 
 int _lastEmitTime = 0;
 
@@ -286,9 +285,21 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
           );
 
           if (windowBytesSent >= _windowSize) {
+            // Force emit UI before waiting for ACK so user sees progress
+            _lastEmitTime = 0; 
+            _emitProgress(
+              controller: _progressController,
+              fileId: fileId,
+              fileName: fileName,
+              totalSize: totalSize,
+              bytesTransferred: bytesSent,
+              fileIndex: i + 1,
+              totalFiles: files.length,
+            );
+
             _windowAckCompleter = Completer<void>();
             try {
-              await _windowAckCompleter!.future.timeout(const Duration(seconds: 30));
+              await _windowAckCompleter!.future.timeout(const Duration(seconds: 15));
             } catch (e) {
               if (!_isCancelled) {
                 _progressController.addError('Connection to peer was lost.');
