@@ -259,7 +259,18 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
           // internal buffer exceeds a few MBs. 1MB is a safe limit for mobile devices.
           while (_webrtcClient.bufferedAmount > 1024 * 1024) {
             if (_isCancelled) return;
-            await Future.delayed(const Duration(milliseconds: 10));
+            await Future.delayed(const Duration(milliseconds: 100));
+            // Update UI while waiting for buffer to drain
+            int actual = bytesSent - _webrtcClient.bufferedAmount;
+            _emitProgress(
+              controller: _progressController,
+              fileId: fileId,
+              fileName: fileName,
+              totalSize: totalSize,
+              bytesTransferred: actual > 0 ? actual : 0,
+              fileIndex: i + 1,
+              totalFiles: files.length,
+            );
           }
 
           final sliceEnd = (offset + _chunkSize < end)
@@ -280,13 +291,14 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
             await Future.delayed(Duration.zero);
           }
 
-          // Emit sender progress
+          // Emit sender progress (actual bytes sent over network)
+          int actual = bytesSent - _webrtcClient.bufferedAmount;
           _emitProgress(
             controller: _progressController,
             fileId: fileId,
             fileName: fileName,
             totalSize: totalSize,
-            bytesTransferred: bytesSent,
+            bytesTransferred: actual > 0 ? actual : 0,
             fileIndex: i + 1,
             totalFiles: files.length,
           );
