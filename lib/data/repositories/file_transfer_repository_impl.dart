@@ -16,10 +16,8 @@ import 'file_transfer_web.dart'
     if (dart.library.io) 'file_transfer_mobile.dart';
 
 /// How many bytes sender sends per "window" before waiting for receiver ACK.
-/// 10MB window → sender is at most 10MB ahead of receiver.
-/// We keep this at 10MB because the absolute safe maximum for WebRTC (SCTP buffer limit)
-/// on Mobile (especially iOS/Safari) is 16MB. Above that, the connection might drop.
-const int _windowSize = 10485760; // 10 MB per window
+/// 1MB window prevents mobile OS internal buffers from overflowing while ensuring maximum speed.
+const int _windowSize = 1048576; // 1 MB per window
 
 /// Max single WebRTC chunk size (64 KB).
 /// 64KB is the absolute gold standard maximum for WebRTC DataChannels across all
@@ -94,6 +92,7 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
   String? _receivingFileName;
   int _receivingTotalSize = 0;
   int _receivedBytes = 0;
+  int _lastWindowAckBytes = 0;
   int _receivingFileIndex = 1;
   int _receivingTotalFiles = 1;
   P2PFileSaver? _fileSaver;
@@ -176,6 +175,7 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
     _receivingFileName = null;
     _receivingTotalSize = 0;
     _receivedBytes = 0;
+    _lastWindowAckBytes = 0;
     _receivingFileIndex = 1;
     _receivingTotalFiles = 1;
     _fileSaver = null;
@@ -255,24 +255,6 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
         while (offset < end) {
           if (_isCancelled) return;
 
-          // Backpressure: WebRTC mobile connections often stall or drop if the
-          // internal buffer exceeds a few MBs. 1MB is a safe limit for mobile devices.
-          while (_webrtcClient.bufferedAmount > 1024 * 1024) {
-            if (_isCancelled) return;
-            await Future.delayed(const Duration(milliseconds: 100));
-            // Update UI while waiting for buffer to drain
-            int actual = bytesSent - _webrtcClient.bufferedAmount;
-            _emitProgress(
-              controller: _progressController,
-              fileId: fileId,
-              fileName: fileName,
-              totalSize: totalSize,
-              bytesTransferred: actual > 0 ? actual : 0,
-              fileIndex: i + 1,
-              totalFiles: files.length,
-            );
-          }
-
           final sliceEnd = (offset + _chunkSize < end)
               ? offset + _chunkSize
               : end;
@@ -280,6 +262,7 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
 
           _webrtcClient.sendDataMessageBinary(slice);
           bytesSent += slice.length;
+          windowBytesSent += slice.length;
           offset = sliceEnd;
           loopCount++;
 
@@ -292,16 +275,29 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
           }
 
           // Emit sender progress (actual bytes sent over network)
-          int actual = bytesSent - _webrtcClient.bufferedAmount;
           _emitProgress(
             controller: _progressController,
             fileId: fileId,
             fileName: fileName,
             totalSize: totalSize,
-            bytesTransferred: actual > 0 ? actual : 0,
+            bytesTransferred: bytesSent,
             fileIndex: i + 1,
             totalFiles: files.length,
           );
+
+          if (windowBytesSent >= _windowSize) {
+            _windowAckCompleter = Completer<void>();
+            try {
+              await _windowAckCompleter!.future.timeout(const Duration(seconds: 30));
+            } catch (e) {
+              if (!_isCancelled) {
+                _progressController.addError('Connection to peer was lost.');
+                haltTransfer();
+                return;
+              }
+            }
+            windowBytesSent = 0;
+          }
         }
       }
 
@@ -359,6 +355,14 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
       // Binary chunk — write to file saver
       _fileSaver?.addChunk(message.binary);
       _receivedBytes += message.binary.length;
+
+      // Send ACK if window is full
+      if (_receivedBytes - _lastWindowAckBytes >= _remoteWindowSize) {
+        _lastWindowAckBytes = _receivedBytes;
+        _webrtcClient.sendDataMessage(
+          RTCDataChannelMessage(jsonEncode({'type': 'ack-window'})),
+        );
+      }
 
       // Emit receiver progress
       _emitProgress(
@@ -433,6 +437,13 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
             // Final save ACK — unblock sender's post-EOF wait
             final fileId = decoded['fileId'] as String?;
             if (fileId != null) _ackCompleters[fileId]?.complete();
+            break;
+
+          case 'ack-window':
+            // Unblock sender's window wait
+            if (_windowAckCompleter != null && !_windowAckCompleter!.isCompleted) {
+              _windowAckCompleter!.complete();
+            }
             break;
 
           case 'cancel':
