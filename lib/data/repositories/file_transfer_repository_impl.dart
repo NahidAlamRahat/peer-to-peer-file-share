@@ -433,7 +433,11 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
             // All data received — save file and notify sender
             if (_fileSaver != null) {
               final savedPath = await _fileSaver!.closeAndSave();
-              _fileReceivedController.add(savedPath);
+              
+              if (_receivingFileIndex >= _receivingTotalFiles) {
+                _fileReceivedController.add(savedPath);
+              }
+              
               _fileSaver = null;
               _webrtcClient.sendDataMessage(
                 RTCDataChannelMessage(
