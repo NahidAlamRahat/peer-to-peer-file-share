@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
 import 'package:uuid/uuid.dart';
@@ -16,9 +17,8 @@ import 'file_transfer_web.dart'
     if (dart.library.io) 'file_transfer_mobile.dart';
 
 /// How many bytes sender sends per "window" before waiting for receiver ACK.
-/// 256KB window is ultra-safe for all mobile OS internal buffers. It prevents
-/// the OS from silently dropping packets when WebRTC sends too fast.
-const int _windowSize = 262144; // 256 KB per window
+const int _wifiWindowSize = 262144; // 256 KB (safe for low latency)
+const int _mobileWindowSize = 2097152; // 2 MB (for high latency TURN)
 
 /// Max single WebRTC chunk size (32 KB).
 /// 32KB ensures zero SCTP fragmentation issues on older Androids.
@@ -97,7 +97,7 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
   P2PFileSaver? _fileSaver;
 
   /// The window size we expect per window (sent in metadata).
-  int _remoteWindowSize = _windowSize;
+  int _remoteWindowSize = _wifiWindowSize;
 
   FileTransferRepositoryImpl(this._webrtcClient) {
     _webrtcClient.onDataMessage = _handleDataMessage;
@@ -186,6 +186,20 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
   Future<void> sendFiles(List<ShareFile> files) async {
     _isCancelled = false;
 
+    // Determine optimal window size based on connectivity
+    int activeWindowSize = _wifiWindowSize;
+    try {
+      final connectivityResult = await Connectivity().checkConnectivity();
+      if (connectivityResult.contains(ConnectivityResult.mobile)) {
+        activeWindowSize = _mobileWindowSize;
+        debugPrint('📱 [P2P] Mobile data detected. Using 2MB window size.');
+      } else {
+        debugPrint('📶 [P2P] WiFi/Other detected. Using 256KB window size.');
+      }
+    } catch (e) {
+      debugPrint('Error checking connectivity: $e');
+    }
+
     // Wait for data channel to open (max 10 s)
     int waitCounter = 0;
     while (_webrtcClient.dataChannelState !=
@@ -223,7 +237,7 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
             'totalSize': totalSize,
             'fileIndex': i + 1,
             'totalFiles': files.length,
-            'windowSize': _windowSize, // tell receiver how large each window is
+            'windowSize': activeWindowSize, // tell receiver how large each window is
           }),
         ),
       );
@@ -244,7 +258,7 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
       int windowBytesSent = 0; // bytes sent in the current window
 
       debugPrint(
-        '🚀 [P2P-ACK] Sending $fileName ($totalSize bytes) with ${_windowSize ~/ 1024}KB windows',
+        '🚀 [P2P-ACK] Sending $fileName ($totalSize bytes) with ${activeWindowSize ~/ 1024}KB windows',
       );
 
       int loopCount = 0;
@@ -284,7 +298,7 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
             totalFiles: files.length,
           );
 
-          if (windowBytesSent >= _windowSize) {
+          if (windowBytesSent >= activeWindowSize) {
             // Force emit UI before waiting for ACK so user sees progress
             _lastEmitTime = 0; 
             _emitProgress(
