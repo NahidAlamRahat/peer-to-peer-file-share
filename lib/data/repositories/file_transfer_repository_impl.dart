@@ -16,13 +16,18 @@ import 'file_saver.dart';
 import 'file_transfer_web.dart'
     if (dart.library.io) 'file_transfer_mobile.dart';
 
-/// How many bytes sender sends per "window" before waiting for receiver ACK.
-const int _wifiWindowSize = 262144; // 256 KB (safe for low latency)
-const int _mobileWindowSize = 2097152; // 2 MB (for high latency TURN)
-
 /// Max single WebRTC chunk size (32 KB).
 /// 32KB ensures zero SCTP fragmentation issues on older Androids.
 const int _chunkSize = 32768; // 32 KB
+
+/// WiFi: large ACK window (2 MB) for maximum throughput on low-latency links.
+const int _wifiWindowSize = 2097152; // 2 MB
+
+/// Mobile data (TURN relay): tight in-flight limit.
+/// Only this many 32KB chunks can be "in-flight" at once before we pause and
+/// wait for an ACK. At 32KB each, 8 chunks = 256 KB in flight — safe for all
+/// mobile OS buffers while still sending faster than round-trip allows.
+const int _mobileMaxInFlight = 8; // 8 × 32 KB = 256 KB max in-flight
 
 int _lastEmitTime = 0;
 
@@ -38,8 +43,7 @@ void _emitProgress({
   if (controller.isClosed) return;
 
   final now = DateTime.now().millisecondsSinceEpoch;
-  // Always emit if it's 0% or 100%, otherwise limit to 10 FPS (100ms) to prevent UI thread starvation!
-  // Emitting 800 times a second (every 64KB chunk on 50MB/s connection) destroys WebRTC performance.
+  // Always emit 0% and 100%; otherwise limit to 10 FPS (100ms) to prevent UI starvation.
   if (bytesTransferred == 0 ||
       bytesTransferred == totalSize ||
       now - _lastEmitTime > 100) {
@@ -80,8 +84,15 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
   @override
   Function()? onIncognitoDetected;
 
-  /// Completer that unblocks the sender when receiver ACKs a window.
+  // ── WiFi mode: ACK-gated window ──────────────────────────────────────────
+  /// Completer that unblocks the sender when receiver ACKs a full window (WiFi).
   Completer<void>? _windowAckCompleter;
+
+  // ── Mobile mode: in-flight pipeline ──────────────────────────────────────
+  /// How many chunks have been sent but not yet ACK'd (mobile mode).
+  int _inFlightChunks = 0;
+  /// Completer signalled each time an ack-chunk arrives (mobile mode).
+  Completer<void>? _chunkAckCompleter;
 
   /// Completer that unblocks the sender after receiver saves the full file.
   final Map<String, Completer<void>> _ackCompleters = {};
@@ -96,7 +107,9 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
   int _receivingTotalFiles = 1;
   P2PFileSaver? _fileSaver;
 
-  /// The window size we expect per window (sent in metadata).
+  /// Transfer mode sent by sender in metadata: 'wifi' or 'mobile'.
+  String _remoteTransferMode = 'wifi';
+  /// Window size used for ACK in WiFi mode.
   int _remoteWindowSize = _wifiWindowSize;
 
   FileTransferRepositoryImpl(this._webrtcClient) {
@@ -122,46 +135,46 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
   void cancelTransfer({String myRole = 'sender'}) {
     if (_isCancelled) return; // idempotent
     _isCancelled = true;
-    // Tell peer who cancelled so they can show the right message
     try {
       _webrtcClient.sendDataMessage(
           RTCDataChannelMessage(jsonEncode({'type': 'cancel', 'who': myRole})));
     } catch (e) {
       debugPrint('Failed to send cancel message to peer: $e');
     }
-    if (_windowAckCompleter != null && !_windowAckCompleter!.isCompleted) {
-      _windowAckCompleter!.completeError(Exception('Transfer cancelled'));
-    }
-    _windowAckCompleter = null;
-    for (final c in _ackCompleters.values) {
-      if (!c.isCompleted) c.completeError('Transfer cancelled');
-    }
-    _ackCompleters.clear();
+    _unblockSender();
     _fileSaver?.discard();
     _fileSaver = null;
   }
 
   @override
   void haltTransfer() {
-    // Stop locally WITHOUT sending any cancel message to peer.
-    // Used when a network error occurs so we don't show a false cancel on peer's screen.
     _isCancelled = true;
-    if (_windowAckCompleter != null && !_windowAckCompleter!.isCompleted) {
-      _windowAckCompleter!.completeError(Exception('Transfer halted'));
-    }
-    _windowAckCompleter = null;
-    for (final c in _ackCompleters.values) {
-      if (!c.isCompleted) c.completeError('Transfer halted');
-    }
-    _ackCompleters.clear();
+    _unblockSender();
     _fileSaver?.discard();
     _fileSaver = null;
+  }
+
+  void _unblockSender() {
+    if (_windowAckCompleter != null && !_windowAckCompleter!.isCompleted) {
+      _windowAckCompleter!.completeError(Exception('Transfer stopped'));
+    }
+    _windowAckCompleter = null;
+    if (_chunkAckCompleter != null && !_chunkAckCompleter!.isCompleted) {
+      _chunkAckCompleter!.completeError(Exception('Transfer stopped'));
+    }
+    _chunkAckCompleter = null;
+    for (final c in _ackCompleters.values) {
+      if (!c.isCompleted) c.completeError('Transfer stopped');
+    }
+    _ackCompleters.clear();
   }
 
   @override
   void resetTransferState() {
     _isCancelled = false;
+    _inFlightChunks = 0;
     _windowAckCompleter = null;
+    _chunkAckCompleter = null;
     for (final c in _ackCompleters.values) {
       if (!c.isCompleted) c.completeError('Transfer reset');
     }
@@ -185,19 +198,18 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
   @override
   Future<void> sendFiles(List<ShareFile> files) async {
     _isCancelled = false;
+    _inFlightChunks = 0;
 
-    // Determine optimal window size based on connectivity
-    int activeWindowSize = _wifiWindowSize;
+    // Detect network type to choose transfer mode
+    bool isMobile = false;
     try {
       final connectivityResult = await Connectivity().checkConnectivity();
-      if (connectivityResult.contains(ConnectivityResult.mobile)) {
-        activeWindowSize = _mobileWindowSize;
-        debugPrint('📱 [P2P] Mobile data detected. Using 2MB window size.');
-      } else {
-        debugPrint('📶 [P2P] WiFi/Other detected. Using 256KB window size.');
-      }
+      isMobile = connectivityResult.contains(ConnectivityResult.mobile);
+      debugPrint(isMobile
+          ? '📱 [P2P] Mobile data → Pipeline mode (max $_mobileMaxInFlight in-flight chunks)'
+          : '📶 [P2P] WiFi → Window mode (${_wifiWindowSize ~/ 1024}KB windows)');
     } catch (e) {
-      debugPrint('Error checking connectivity: $e');
+      debugPrint('Error checking connectivity, defaulting to WiFi mode: $e');
     }
 
     // Wait for data channel to open (max 10 s)
@@ -237,7 +249,10 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
             'totalSize': totalSize,
             'fileIndex': i + 1,
             'totalFiles': files.length,
-            'windowSize': activeWindowSize, // tell receiver how large each window is
+            // Tell receiver which protocol to use for ACK-ing
+            'transferMode': isMobile ? 'mobile' : 'wifi',
+            'windowSize': _wifiWindowSize,     // used in wifi mode
+            'maxInFlight': _mobileMaxInFlight, // used in mobile mode
           }),
         ),
       );
@@ -253,57 +268,82 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
         totalFiles: files.length,
       );
 
-      // ── 2. Send data in ACK-gated windows ────────────────────────────────
+      // ── 2. Send data ──────────────────────────────────────────────────────
       int bytesSent = 0;
-      int windowBytesSent = 0; // bytes sent in the current window
-
-      debugPrint(
-        '🚀 [P2P-ACK] Sending $fileName ($totalSize bytes) with ${activeWindowSize ~/ 1024}KB windows',
-      );
-
+      int windowBytesSent = 0;
       int loopCount = 0;
+      _inFlightChunks = 0;
 
       Future<void> sendChunks(Uint8List bytes, int start, int end) async {
         int offset = start;
         while (offset < end) {
           if (_isCancelled) return;
 
-          final sliceEnd = (offset + _chunkSize < end)
-              ? offset + _chunkSize
-              : end;
+          final sliceEnd = (offset + _chunkSize < end) ? offset + _chunkSize : end;
           final slice = bytes.sublist(offset, sliceEnd);
 
-          // Backpressure check: Prevent OS buffer overflow (Silent Packet Drops)
-          // If the internal WebRTC buffer has more than 1MB queued, wait for it to drain.
-          // This allows us to safely use a 2MB logical window without overwhelming the phone.
-          int waitLoops = 0;
-          while (_webrtcClient.bufferedAmount > 1048576) {
-            if (_isCancelled) return;
-            await Future.delayed(const Duration(milliseconds: 5));
-            waitLoops++;
-            // Safety escape hatch if buffer is permanently stuck (e.g. connection dropped)
-            if (waitLoops > 2000) { // 10 seconds
-               _progressController.addError('Connection stalled.');
-               haltTransfer();
-               return;
+          if (isMobile) {
+            // ── MOBILE MODE: Pipeline with in-flight limit ────────────────
+            // Wait until there's room in the pipeline before sending next chunk
+            while (_inFlightChunks >= _mobileMaxInFlight) {
+              if (_isCancelled) return;
+              _chunkAckCompleter = Completer<void>();
+              try {
+                // Wait up to 30s for any chunk ACK to arrive
+                await _chunkAckCompleter!.future.timeout(const Duration(seconds: 30));
+              } catch (e) {
+                if (!_isCancelled) {
+                  _progressController.addError('Connection to peer was lost.');
+                  haltTransfer();
+                  return;
+                }
+                return;
+              }
+            }
+
+            _inFlightChunks++;
+            _webrtcClient.sendDataMessageBinary(slice);
+          } else {
+            // ── WIFI MODE: ACK-gated window ───────────────────────────────
+            _webrtcClient.sendDataMessageBinary(slice);
+            windowBytesSent += slice.length;
+
+            if (windowBytesSent >= _wifiWindowSize) {
+              _lastEmitTime = 0;
+              _emitProgress(
+                controller: _progressController,
+                fileId: fileId,
+                fileName: fileName,
+                totalSize: totalSize,
+                bytesTransferred: bytesSent + slice.length,
+                fileIndex: i + 1,
+                totalFiles: files.length,
+              );
+
+              _windowAckCompleter = Completer<void>();
+              try {
+                await _windowAckCompleter!.future.timeout(const Duration(seconds: 60));
+              } catch (e) {
+                if (!_isCancelled) {
+                  _progressController.addError('Connection to peer was lost.');
+                  haltTransfer();
+                  return;
+                }
+                return;
+              }
+              windowBytesSent = 0;
             }
           }
 
-          _webrtcClient.sendDataMessageBinary(slice);
           bytesSent += slice.length;
-          windowBytesSent += slice.length;
           offset = sliceEnd;
           loopCount++;
 
-          // Yield to event loop every ~2MB (16 × 128KB) to prevent thread
-          // starvation on mobile browsers. Each sendDataMessageBinary() is a
-          // synchronous Dart→JS interop call (~0.5-1ms on mobile). 16 calls =
-          // ~8-16ms of blocking — safe. Going higher risks jank on slow phones.
+          // Yield every 16 chunks (~512 KB) to prevent event-loop starvation
           if (loopCount % 16 == 0) {
             await Future.delayed(Duration.zero);
           }
 
-          // Emit sender progress (actual bytes sent over network)
           _emitProgress(
             controller: _progressController,
             fileId: fileId,
@@ -313,40 +353,12 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
             fileIndex: i + 1,
             totalFiles: files.length,
           );
-
-          if (windowBytesSent >= activeWindowSize) {
-            // Force emit UI before waiting for ACK so user sees progress
-            _lastEmitTime = 0; 
-            _emitProgress(
-              controller: _progressController,
-              fileId: fileId,
-              fileName: fileName,
-              totalSize: totalSize,
-              bytesTransferred: bytesSent,
-              fileIndex: i + 1,
-              totalFiles: files.length,
-            );
-
-            _windowAckCompleter = Completer<void>();
-            try {
-              await _windowAckCompleter!.future.timeout(const Duration(seconds: 15));
-            } catch (e) {
-              if (!_isCancelled) {
-                _progressController.addError('Connection to peer was lost.');
-                haltTransfer();
-                return;
-              }
-            }
-            windowBytesSent = 0;
-          }
         }
       }
 
       if (file.readStream != null) {
         await for (final rawChunk in file.readStream!) {
           if (_isCancelled) break;
-          // Flutter file streams return Uint8List — cast avoids an unnecessary
-          // memory copy. Fallback to fromList only for non-Uint8List streams.
           final chunkBytes = rawChunk is Uint8List
               ? rawChunk
               : Uint8List.fromList(rawChunk);
@@ -367,11 +379,11 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
       );
 
       try {
-        // Wait max 60s for receiver to save the file (it can take time for large files)
-        await ackCompleter.future.timeout(const Duration(seconds: 60));
+        // Wait max 120s for receiver to save (large files can take time)
+        await ackCompleter.future.timeout(const Duration(seconds: 120));
         debugPrint('✅ [P2P-ACK] Receiver saved $fileName');
       } on TimeoutException {
-        debugPrint('⚠️ [P2P-ACK] EOF ACK timeout (60s) — peer likely gone.');
+        debugPrint('⚠️ [P2P-ACK] EOF ACK timeout (120s) — peer likely gone.');
         _progressController.addError('Connection to peer was lost while saving the file.');
         haltTransfer();
         return;
@@ -383,7 +395,6 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
       _ackCompleters.remove(fileId);
     }
 
-    // Cancelled — return quietly. Bloc's CancelTransferEvent already handles UI.
     if (_isCancelled) return;
   }
 
@@ -397,12 +408,19 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
       _fileSaver?.addChunk(message.binary);
       _receivedBytes += message.binary.length;
 
-      // Send ACK if window is full
-      if (_receivedBytes - _lastWindowAckBytes >= _remoteWindowSize) {
-        _lastWindowAckBytes = _receivedBytes;
+      if (_remoteTransferMode == 'mobile') {
+        // ── MOBILE MODE: ACK every single chunk ──────────────────────────
         _webrtcClient.sendDataMessage(
-          RTCDataChannelMessage(jsonEncode({'type': 'ack-window'})),
+          RTCDataChannelMessage(jsonEncode({'type': 'ack-chunk'})),
         );
+      } else {
+        // ── WIFI MODE: ACK only when full window received ─────────────────
+        if (_receivedBytes - _lastWindowAckBytes >= _remoteWindowSize) {
+          _lastWindowAckBytes = _receivedBytes;
+          _webrtcClient.sendDataMessage(
+            RTCDataChannelMessage(jsonEncode({'type': 'ack-window'})),
+          );
+        }
       }
 
       // Emit receiver progress
@@ -428,22 +446,21 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
             _receivingTotalSize = decoded['totalSize'];
             _receivingFileIndex = decoded['fileIndex'] ?? 1;
             _receivingTotalFiles = decoded['totalFiles'] ?? 1;
+            _remoteTransferMode = decoded['transferMode'] ?? 'wifi';
             _remoteWindowSize = decoded['windowSize'] ?? _wifiWindowSize;
             _fileSaver = getFileSaver();
             _fileSaver!.setOnCancel(() {
-              // Triggered when user cancels download from browser's native UI (Option B)
               debugPrint('🛑 [P2P-ACK] Cancelled from Browser UI.');
               cancelTransfer(myRole: 'receiver');
               onSelfCancelled?.call();
             });
             _fileSaver!.setOnIncognitoDetected(() {
-              // Incognito mode detected. Abort transfer and notify UI.
               debugPrint('⚠️ [P2P-ACK] Incognito mode detected. Aborting transfer.');
               cancelTransfer(myRole: 'receiver');
               onIncognitoDetected?.call();
             });
             await _fileSaver!.init(_receivingFileName ?? 'file', fileSize: _receivingTotalSize);
-            
+
             // Emit 0% progress immediately so receiver UI switches to progress screen
             _emitProgress(
               controller: _progressController,
@@ -454,9 +471,9 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
               fileIndex: _receivingFileIndex,
               totalFiles: _receivingTotalFiles,
             );
-            
+
             debugPrint(
-              '📥 [P2P-ACK] Receiving $_receivingFileName ($_receivingTotalSize bytes)',
+              '📥 [P2P-ACK] Receiving $_receivingFileName ($_receivingTotalSize bytes) — mode: $_remoteTransferMode',
             );
             break;
 
@@ -464,11 +481,11 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
             // All data received — save file and notify sender
             if (_fileSaver != null) {
               final savedPath = await _fileSaver!.closeAndSave();
-              
+
               if (_receivingFileIndex >= _receivingTotalFiles) {
                 _fileReceivedController.add(savedPath);
               }
-              
+
               _fileSaver = null;
               _webrtcClient.sendDataMessage(
                 RTCDataChannelMessage(
@@ -486,19 +503,25 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
             break;
 
           case 'ack-window':
-            // Unblock sender's window wait
+            // Unblock sender's WiFi window wait
             if (_windowAckCompleter != null && !_windowAckCompleter!.isCompleted) {
               _windowAckCompleter!.complete();
             }
             break;
 
+          case 'ack-chunk':
+            // Unblock sender's mobile pipeline (one slot freed)
+            _inFlightChunks = (_inFlightChunks - 1).clamp(0, _mobileMaxInFlight);
+            if (_chunkAckCompleter != null && !_chunkAckCompleter!.isCompleted) {
+              _chunkAckCompleter!.complete();
+            }
+            break;
+
           case 'cancel':
             _isCancelled = true;
-            _windowAckCompleter?.complete();
-            _windowAckCompleter = null;
+            _unblockSender();
             await _fileSaver?.discard();
             _fileSaver = null;
-            // Notify bloc so the PEER (not canceller) sees a message
             final who = decoded['who'] as String? ?? 'peer';
             onPeerCancelled?.call(who);
             debugPrint('🛑 [P2P-ACK] Cancelled by $who.');
