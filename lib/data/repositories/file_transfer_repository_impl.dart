@@ -21,8 +21,9 @@ import 'file_transfer_web.dart'
 const int _chunkSize = 32768; // 32 KB
 
 /// How many bytes sender sends per "window" before waiting for receiver ACK.
-/// Reduced to 512KB to completely prevent buffer overflow on mobile hotspots.
-const int _wifiWindowSize = 524288; // 512 KB
+/// 2MB gives maximum throughput on local WiFi (same router / hotspot).
+/// The ACK counter prevents the race-condition freeze — window size is safe.
+const int _wifiWindowSize = 2097152; // 2 MB
 
 /// Mobile data (TURN relay): tight in-flight limit.
 /// Keeps only 8 chunks (256 KB) in flight at once. This guarantees we never 
@@ -31,7 +32,6 @@ const int _wifiWindowSize = 524288; // 512 KB
 const int _mobileMaxInFlight = 8; // 8 × 32 KB = 256 KB max in-flight
 
 int _lastEmitTime = 0;
-int _windowAcksReceived = 0;
 
 void _emitProgress({
   required StreamController<FileChunkInfo> controller,
@@ -89,6 +89,9 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
   // ── WiFi mode: ACK-gated window ──────────────────────────────────────────
   /// Completer that unblocks the sender when receiver ACKs a full window (WiFi).
   Completer<void>? _windowAckCompleter;
+  /// Counts ACKs received; compared to windowAcksExpected to handle fast-ACK
+  /// race conditions where ACK arrives before the Completer is set up.
+  int _windowAcksReceived = 0;
 
   // ── Mobile mode: in-flight pipeline ──────────────────────────────────────
   /// How many chunks have been sent but not yet ACK'd (mobile mode).
