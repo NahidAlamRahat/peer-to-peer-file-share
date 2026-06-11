@@ -20,8 +20,9 @@ import 'file_transfer_web.dart'
 /// 32KB ensures zero SCTP fragmentation issues on older Androids.
 const int _chunkSize = 32768; // 32 KB
 
-/// WiFi: large ACK window (2 MB) for maximum throughput on low-latency links.
-const int _wifiWindowSize = 2097152; // 2 MB
+/// How many bytes sender sends per "window" before waiting for receiver ACK.
+/// Reduced to 512KB to completely prevent buffer overflow on mobile hotspots.
+const int _wifiWindowSize = 524288; // 512 KB
 
 /// Mobile data (TURN relay): tight in-flight limit.
 /// Keeps only 8 chunks (256 KB) in flight at once. This guarantees we never 
@@ -349,11 +350,11 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
           // FLUTTER WEBRTC FIX: 
           // Platform Channels and Native WebRTC buffers will silently drop messages 
           // or crash if we push too much data synchronously from Dart. 
-          // By adding a 5ms delay every 4 chunks (128 KB), we give the native thread 
+          // By adding a 10ms delay every 4 chunks (128 KB), we give the native thread 
           // time to transmit the data over the network. This completely prevents
-          // the "stuck after 1MB" issue while maintaining speeds up to ~25 MB/s.
+          // the "stuck after 4MB" issue while maintaining speeds up to ~12 MB/s.
           if (loopCount % 4 == 0) {
-            await Future.delayed(const Duration(milliseconds: 5));
+            await Future.delayed(const Duration(milliseconds: 10));
           }
 
           _emitProgress(
