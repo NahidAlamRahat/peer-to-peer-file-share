@@ -24,10 +24,10 @@ const int _chunkSize = 32768; // 32 KB
 const int _wifiWindowSize = 2097152; // 2 MB
 
 /// Mobile data (TURN relay): tight in-flight limit.
-/// Only this many 32KB chunks can be "in-flight" at once before we pause and
-/// wait for an ACK. At 32KB each, 8 chunks = 256 KB in flight — safe for all
-/// mobile OS buffers while still sending faster than round-trip allows.
-const int _mobileMaxInFlight = 8; // 8 × 32 KB = 256 KB max in-flight
+/// Increased from 8 to 32 to maximize throughput on high-ping mobile networks.
+/// At 32KB each, 32 chunks = 1 MB in flight. This keeps the network saturated 
+/// for maximum speed without hitting the 16MB OS buffer limit.
+const int _mobileMaxInFlight = 32; // 32 × 32 KB = 1 MB max in-flight
 
 int _lastEmitTime = 0;
 
@@ -339,9 +339,14 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
           offset = sliceEnd;
           loopCount++;
 
-          // Yield every 16 chunks (~512 KB) to prevent event-loop starvation
-          if (loopCount % 16 == 0) {
-            await Future.delayed(Duration.zero);
+          // FLUTTER WEBRTC FIX: 
+          // Platform Channels and Native WebRTC buffers will silently drop messages 
+          // or crash if we push too much data synchronously from Dart. 
+          // By adding a 2ms delay every 4 chunks (128 KB), we give the native thread 
+          // time to transmit the data over the network. This completely prevents
+          // the "stuck after 2MB" issue while maintaining high speeds.
+          if (loopCount % 4 == 0) {
+            await Future.delayed(const Duration(milliseconds: 2));
           }
 
           _emitProgress(
