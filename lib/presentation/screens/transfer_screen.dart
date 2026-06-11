@@ -542,6 +542,127 @@ class _TransferScreenState extends State<TransferScreen> {
               ),
             ),
           ],
+
+          // ── Tip: WiFi vs Mobile data ─────────────────────────────────────
+          AppSpacing.gapH12,
+          Container(
+            padding: EdgeInsets.all(AppSizes.p16),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [
+                  Colors.blue.withValues(alpha: 0.08),
+                  Colors.indigo.withValues(alpha: 0.05),
+                ],
+              ),
+              borderRadius: BorderRadius.circular(AppSizes.radiusMedium),
+              border: Border.all(color: Colors.blue.withValues(alpha: 0.2)),
+            ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(6),
+                  decoration: BoxDecoration(
+                    color: Colors.blue.withValues(alpha: 0.12),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(
+                    Icons.tips_and_updates_rounded,
+                    color: Colors.blue,
+                    size: 16,
+                  ),
+                ),
+                AppSpacing.gapW8,
+                Flexible(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '💡 Pro Tip — Best Speed',
+                        style: TextStyle(
+                          color: Colors.blue.shade700,
+                          fontWeight: FontWeight.bold,
+                          fontSize: AppSizes.textSmall,
+                          letterSpacing: 0.2,
+                        ),
+                      ),
+                      const SizedBox(height: 3),
+                      Text(
+                        'For the fastest transfer, connect both devices to the same Wi-Fi network. Mobile data works great too — speeds may vary based on your signal strength.',
+                        style: TextStyle(
+                          color: Colors.blue.shade600,
+                          fontSize: AppSizes.textSmall,
+                          height: 1.4,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          // ── Tip: Install the app (web only) ──────────────────────────────
+          if (kIsWeb) ...[
+            AppSpacing.gapH8,
+            Container(
+              padding: EdgeInsets.all(AppSizes.p16),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [
+                    Colors.purple.withValues(alpha: 0.08),
+                    Colors.deepPurple.withValues(alpha: 0.05),
+                  ],
+                ),
+                borderRadius: BorderRadius.circular(AppSizes.radiusMedium),
+                border: Border.all(color: Colors.purple.withValues(alpha: 0.2)),
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(6),
+                    decoration: BoxDecoration(
+                      color: Colors.purple.withValues(alpha: 0.12),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(
+                      Icons.rocket_launch_rounded,
+                      color: Colors.purple,
+                      size: 16,
+                    ),
+                  ),
+                  AppSpacing.gapW8,
+                  Flexible(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          '🚀 Even Better with the App',
+                          style: TextStyle(
+                            color: Colors.purple.shade700,
+                            fontWeight: FontWeight.bold,
+                            fontSize: AppSizes.textSmall,
+                            letterSpacing: 0.2,
+                          ),
+                        ),
+                        const SizedBox(height: 3),
+                        Text(
+                          'Install the PeerTransfer app for a smoother, faster experience — background transfers, no browser limits, and instant sharing at your fingertips.',
+                          style: TextStyle(
+                            color: Colors.purple.shade600,
+                            fontSize: AppSizes.textSmall,
+                            height: 1.4,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+
           AppSpacing.gapH32,
 
           if (state.progress < 1.0)
