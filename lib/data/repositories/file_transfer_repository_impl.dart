@@ -273,6 +273,22 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
               : end;
           final slice = bytes.sublist(offset, sliceEnd);
 
+          // Backpressure check: Prevent OS buffer overflow (Silent Packet Drops)
+          // If the internal WebRTC buffer has more than 1MB queued, wait for it to drain.
+          // This allows us to safely use a 2MB logical window without overwhelming the phone.
+          int waitLoops = 0;
+          while (_webrtcClient.bufferedAmount > 1048576) {
+            if (_isCancelled) return;
+            await Future.delayed(const Duration(milliseconds: 5));
+            waitLoops++;
+            // Safety escape hatch if buffer is permanently stuck (e.g. connection dropped)
+            if (waitLoops > 2000) { // 10 seconds
+               _progressController.addError('Connection stalled.');
+               haltTransfer();
+               return;
+            }
+          }
+
           _webrtcClient.sendDataMessageBinary(slice);
           bytesSent += slice.length;
           windowBytesSent += slice.length;
@@ -412,6 +428,7 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
             _receivingTotalSize = decoded['totalSize'];
             _receivingFileIndex = decoded['fileIndex'] ?? 1;
             _receivingTotalFiles = decoded['totalFiles'] ?? 1;
+            _remoteWindowSize = decoded['windowSize'] ?? _wifiWindowSize;
             _fileSaver = getFileSaver();
             _fileSaver!.setOnCancel(() {
               // Triggered when user cancels download from browser's native UI (Option B)
