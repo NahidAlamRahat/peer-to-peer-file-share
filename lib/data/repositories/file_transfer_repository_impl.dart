@@ -30,6 +30,7 @@ const int _wifiWindowSize = 2097152; // 2 MB
 const int _mobileMaxInFlight = 8; // 8 × 32 KB = 256 KB max in-flight
 
 int _lastEmitTime = 0;
+int _windowAcksReceived = 0;
 
 void _emitProgress({
   required StreamController<FileChunkInfo> controller,
@@ -271,6 +272,8 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
       // ── 2. Send data ──────────────────────────────────────────────────────
       int bytesSent = 0;
       int windowBytesSent = 0;
+      int windowAcksExpected = 0;
+      _windowAcksReceived = 0;
       int loopCount = 0;
       _inFlightChunks = 0;
 
@@ -320,16 +323,20 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
                 totalFiles: files.length,
               );
 
-              _windowAckCompleter = Completer<void>();
-              try {
-                await _windowAckCompleter!.future.timeout(const Duration(seconds: 60));
-              } catch (e) {
-                if (!_isCancelled) {
-                  _progressController.addError('Connection to peer was lost.');
-                  haltTransfer();
+              windowAcksExpected++;
+              while (_windowAcksReceived < windowAcksExpected) {
+                if (_isCancelled) return;
+                _windowAckCompleter = Completer<void>();
+                try {
+                  await _windowAckCompleter!.future.timeout(const Duration(seconds: 120));
+                } catch (e) {
+                  if (!_isCancelled) {
+                    _progressController.addError('Connection to peer was lost.');
+                    haltTransfer();
+                    return;
+                  }
                   return;
                 }
-                return;
               }
               windowBytesSent = 0;
             }
@@ -508,7 +515,7 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
             break;
 
           case 'ack-window':
-            // Unblock sender's WiFi window wait
+            _windowAcksReceived++;
             if (_windowAckCompleter != null && !_windowAckCompleter!.isCompleted) {
               _windowAckCompleter!.complete();
             }
