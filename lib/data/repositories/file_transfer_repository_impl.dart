@@ -86,18 +86,9 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
   @override
   Function()? onIncognitoDetected;
 
-  // ── WiFi mode: ACK-gated window ──────────────────────────────────────────
-  /// Completer that unblocks the sender when receiver ACKs a full window (WiFi).
-  Completer<void>? _windowAckCompleter;
-  /// Counts ACKs received; compared to windowAcksExpected to handle fast-ACK
-  /// race conditions where ACK arrives before the Completer is set up.
-  int _windowAcksReceived = 0;
-
-  // ── Mobile mode: in-flight pipeline ──────────────────────────────────────
-  /// How many chunks have been sent but not yet ACK'd (mobile mode).
-  int _inFlightChunks = 0;
-  /// Completer signalled each time an ack-chunk arrives (mobile mode).
-  Completer<void>? _chunkAckCompleter;
+  // ── Flow control state ──────────────────────────────────────────
+  /// Completer that unblocks the sender when the WebRTC native buffer drains.
+  Completer<void>? _drainCompleter;
 
   /// Completer that unblocks the sender after receiver saves the full file.
   final Map<String, Completer<void>> _ackCompleters = {};
@@ -160,14 +151,10 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
   }
 
   void _unblockSender() {
-    if (_windowAckCompleter != null && !_windowAckCompleter!.isCompleted) {
-      _windowAckCompleter!.completeError(Exception('Transfer stopped'));
+    if (_drainCompleter != null && !_drainCompleter!.isCompleted) {
+      _drainCompleter!.completeError(Exception('Transfer stopped'));
     }
-    _windowAckCompleter = null;
-    if (_chunkAckCompleter != null && !_chunkAckCompleter!.isCompleted) {
-      _chunkAckCompleter!.completeError(Exception('Transfer stopped'));
-    }
-    _chunkAckCompleter = null;
+    _drainCompleter = null;
     for (final c in _ackCompleters.values) {
       if (!c.isCompleted) c.completeError('Transfer stopped');
     }
@@ -177,9 +164,7 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
   @override
   void resetTransferState() {
     _isCancelled = false;
-    _inFlightChunks = 0;
-    _windowAckCompleter = null;
-    _chunkAckCompleter = null;
+    _drainCompleter = null;
     for (final c in _ackCompleters.values) {
       if (!c.isCompleted) c.completeError('Transfer stopped');
     }
@@ -203,7 +188,7 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
   @override
   Future<void> sendFiles(List<ShareFile> files) async {
     _isCancelled = false;
-    _inFlightChunks = 0;
+    _drainCompleter = null;
 
     // Wait for data channel to open (max 10 s)
     int waitCounter = 0;
@@ -306,86 +291,54 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
 
       // ── 2. Send data ──────────────────────────────────────────────────────
       int bytesSent = 0;
-      int windowBytesSent = 0;
-      int windowAcksExpected = 0;
-      _windowAcksReceived = 0;
       int loopCount = 0;
-      _inFlightChunks = 0;
 
       Future<void> sendChunks(Uint8List bytes, int start, int end) async {
         int offset = start;
+        const int maxBufferSize = 256 * 1024; // 256 KB max native buffer size
+        
         while (offset < end) {
           if (_isCancelled) return;
 
-          final sliceEnd = (offset + _chunkSize < end) ? offset + _chunkSize : end;
-          final slice = bytes.sublist(offset, sliceEnd);
-
-          if (isMobile) {
-            // ── MOBILE MODE: Pipeline with in-flight limit ────────────────
-            // Wait until there's room in the pipeline before sending next chunk
-            while (_inFlightChunks >= _mobileMaxInFlight) {
-              if (_isCancelled) return;
-              _chunkAckCompleter = Completer<void>();
-              try {
-                // Wait up to 30s for any chunk ACK to arrive
-                await _chunkAckCompleter!.future.timeout(const Duration(seconds: 30));
-              } catch (e) {
-                if (!_isCancelled) {
-                  _progressController.addError('Connection to peer was lost.');
-                  haltTransfer();
-                  return;
-                }
+          // 1. SCTP NATIVE FLOW CONTROL ─────────────────────────────────────
+          // If the native WebRTC buffer is full, wait for it to drain.
+          // This entirely prevents dropping chunks and silent connection kills.
+          if (_webrtcClient.bufferedAmount > maxBufferSize) {
+            _drainCompleter = Completer<void>();
+            _webrtcClient.setBufferedAmountLowThreshold(maxBufferSize ~/ 2); // 128 KB
+            
+            _webrtcClient.onBufferedAmountLow = (int amount) {
+              if (_drainCompleter != null && !_drainCompleter!.isCompleted) {
+                _drainCompleter!.complete();
+              }
+            };
+            
+            try {
+              // Wait for buffer to drain or timeout
+              await _drainCompleter!.future.timeout(const Duration(seconds: 30));
+            } catch (e) {
+              if (!_isCancelled) {
+                _progressController.addError('Connection to peer is stalled.');
+                haltTransfer();
                 return;
               }
             }
-
-            _inFlightChunks++;
-            _webrtcClient.sendDataMessageBinary(slice);
-          } else {
-            // ── WIFI MODE: ACK-gated window ───────────────────────────────
-            _webrtcClient.sendDataMessageBinary(slice);
-            windowBytesSent += slice.length;
-
-            if (windowBytesSent >= _wifiWindowSize) {
-              _lastEmitTime = 0;
-              _emitProgress(
-                controller: _progressController,
-                fileId: fileId,
-                fileName: fileName,
-                totalSize: totalSize,
-                bytesTransferred: bytesSent + slice.length,
-                fileIndex: i + 1,
-                totalFiles: files.length,
-              );
-
-              windowAcksExpected++;
-              while (_windowAcksReceived < windowAcksExpected) {
-                if (_isCancelled) return;
-                _windowAckCompleter = Completer<void>();
-                try {
-                  await _windowAckCompleter!.future.timeout(const Duration(seconds: 120));
-                } catch (e) {
-                  if (!_isCancelled) {
-                    _progressController.addError('Connection to peer was lost.');
-                    haltTransfer();
-                    return;
-                  }
-                  return;
-                }
-              }
-              windowBytesSent = 0;
-            }
+            _webrtcClient.onBufferedAmountLow = null;
+            _drainCompleter = null;
           }
 
+          if (_isCancelled) return;
+
+          // 2. Send chunk
+          final sliceEnd = (offset + _chunkSize < end) ? offset + _chunkSize : end;
+          final slice = bytes.sublist(offset, sliceEnd);
+          _webrtcClient.sendDataMessageBinary(slice);
+          
           bytesSent += slice.length;
           offset = sliceEnd;
           loopCount++;
 
-          // FLUTTER WEBRTC FIX: 
-          // We removed the artificial 10ms delay because the reduced 512KB window size 
-          // and robust ACK counter already completely prevent WebRTC buffer crashes.
-          // Yielding with Duration.zero every 16 chunks (512 KB) keeps the UI responsive
-          // while allowing local WiFi speeds to fly at 50-100 MB/s!
+          // 3. Keep UI responsive
           if (loopCount % 16 == 0) {
             await Future.delayed(Duration.zero);
           }
@@ -454,20 +407,7 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
       _fileSaver?.addChunk(message.binary);
       _receivedBytes += message.binary.length;
 
-      if (_remoteTransferMode == 'mobile') {
-        // ── MOBILE MODE: ACK every single chunk ──────────────────────────
-        _webrtcClient.sendDataMessage(
-          RTCDataChannelMessage(jsonEncode({'type': 'ack-chunk'})),
-        );
-      } else {
-        // ── WIFI MODE: ACK only when full window received ─────────────────
-        if (_receivedBytes - _lastWindowAckBytes >= _remoteWindowSize) {
-          _lastWindowAckBytes = _receivedBytes;
-          _webrtcClient.sendDataMessage(
-            RTCDataChannelMessage(jsonEncode({'type': 'ack-window'})),
-          );
-        }
-      }
+      // No application-level ACKs needed anymore; native WebRTC SCTP handles flow control.
 
       // Emit receiver progress
       _emitProgress(
@@ -546,21 +486,6 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
             // Final save ACK — unblock sender's post-EOF wait
             final fileId = decoded['fileId'] as String?;
             if (fileId != null) _ackCompleters[fileId]?.complete();
-            break;
-
-          case 'ack-window':
-            _windowAcksReceived++;
-            if (_windowAckCompleter != null && !_windowAckCompleter!.isCompleted) {
-              _windowAckCompleter!.complete();
-            }
-            break;
-
-          case 'ack-chunk':
-            // Unblock sender's mobile pipeline (one slot freed)
-            _inFlightChunks = (_inFlightChunks - 1).clamp(0, _mobileMaxInFlight);
-            if (_chunkAckCompleter != null && !_chunkAckCompleter!.isCompleted) {
-              _chunkAckCompleter!.complete();
-            }
             break;
 
           case 'cancel':
