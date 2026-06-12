@@ -114,6 +114,12 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
   bool _isInitializing = false;
   final List<Uint8List> _initQueue = [];
 
+  /// Receiver-side stall watchdog.
+  /// Restarted on every binary chunk arrival. If no chunk arrives within
+  /// 15 s while a transfer is active, the relay/connection is stuck and
+  /// we surface a clear error instead of hanging silently.
+  Timer? _receiveWatchdog;
+
   FileTransferRepositoryImpl(this._webrtcClient) {
     _webrtcClient.onDataMessage = _handleDataMessage;
   }
@@ -144,6 +150,8 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
       debugPrint('Failed to send cancel message to peer: $e');
     }
     _unblockSender();
+    _receiveWatchdog?.cancel();
+    _receiveWatchdog = null;
     _fileSaver?.discard();
     _fileSaver = null;
   }
@@ -152,6 +160,8 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
   void haltTransfer() {
     _isCancelled = true;
     _unblockSender();
+    _receiveWatchdog?.cancel();
+    _receiveWatchdog = null;
     _fileSaver?.discard();
     _fileSaver = null;
   }
@@ -188,6 +198,8 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
     _fileSaver = null;
     _isInitializing = false;
     _initQueue.clear();
+    _receiveWatchdog?.cancel();
+    _receiveWatchdog = null;
   }
 
   // ── SENDER ────────────────────────────────────────────────────────────────
@@ -310,6 +322,13 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
       // without overflowing the SCTP send buffer.
       final int maxBufferSize = isMobile ? 256 * 1024 : 1024 * 1024;
 
+      // Drain wait timeout:
+      //   Mobile/TURN relay → 10 s: relay congestion should be detected fast
+      //   WiFi/direct P2P  → 30 s: large local buffers can legitimately be slow
+      final Duration drainTimeout = isMobile
+          ? const Duration(seconds: 10)
+          : const Duration(seconds: 30);
+
       Future<void> sendChunks(Uint8List bytes, int start, int end) async {
         int offset = start;
 
@@ -376,8 +395,7 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
             });
 
             try {
-              await _drainCompleter!.future
-                  .timeout(const Duration(seconds: 30));
+              await _drainCompleter!.future.timeout(drainTimeout);
             } catch (e) {
               drainPoller.cancel();
               if (!_isCancelled) {
@@ -474,7 +492,26 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
       if (_isInitializing) {
         _initQueue.add(message.binary);
         _receivedBytes += message.binary.length;
+        // Watchdog not needed during init — data IS arriving, just queued.
         return;
+      }
+
+      // ── Receiver-side stall watchdog ─────────────────────────────────────
+      // Reset the 15 s countdown on every chunk that arrives.
+      // If no chunk arrives for 15 s while the file is still incomplete,
+      // the sender/relay is stuck and we surface a clear error.
+      _receiveWatchdog?.cancel();
+      if (_receivedBytes + message.binary.length < _receivingTotalSize) {
+        _receiveWatchdog = Timer(const Duration(seconds: 15), () {
+          if (!_isCancelled && !_progressController.isClosed) {
+            debugPrint('⏰ [P2P-RX] No data for 15 s — receiver watchdog fired.');
+            _progressController.addError(
+              'Data stopped arriving. The connection or relay may be congested. '
+              'Please try again.',
+            );
+            haltTransfer();
+          }
+        });
       }
 
       // Binary chunk — write to file saver
@@ -551,7 +588,9 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
             break;
 
           case 'eof':
-            // All data received — save file and notify sender
+            // All data received — cancel watchdog, save file, notify sender
+            _receiveWatchdog?.cancel();
+            _receiveWatchdog = null;
             if (_fileSaver != null) {
               final savedPath = await _fileSaver!.closeAndSave();
 
@@ -577,6 +616,8 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
 
           case 'cancel':
             _isCancelled = true;
+            _receiveWatchdog?.cancel();
+            _receiveWatchdog = null;
             _unblockSender();
             await _fileSaver?.discard();
             _fileSaver = null;
