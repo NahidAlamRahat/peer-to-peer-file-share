@@ -21,18 +21,20 @@ import 'file_transfer_web.dart'
 /// Still below SCTP max message size — no fragmentation issues.
 const int _wifiChunkSize = 262144; // 256 KB
 
-/// Mobile data / TURN relay chunk size (32 KB).
-/// Keeps each message small to avoid stalls on lossy TURN relay paths.
-const int _mobileChunkSize = 32768; // 32 KB
+/// Mobile data / TURN relay chunk size (16 KB).
+/// Smaller messages are more TURN-relay-friendly:
+///   • Each SCTP message is relayed individually by the TURN server
+///   • 16 KB fits within typical relay MTU without fragmentation
+///   • Reduces head-of-line blocking on congested relay paths
+const int _mobileChunkSize = 16384; // 16 KB
 
 /// How many bytes sender sends per "window" before waiting for receiver ACK.
 /// 8 MB gives maximum throughput on local WiFi (same router / hotspot).
 const int _wifiWindowSize = 8388608; // 8 MB
 
-/// Mobile data (TURN relay): pipeline depth in chunks.
-/// 24 × 32 KB = 768 KB max in-flight — enough to saturate a 4G link
-/// without overflowing the TURN relay's internal buffer.
-const int _mobileMaxInFlight = 24; // 24 × 32 KB = 768 KB max in-flight
+/// Mobile data (TURN relay): pipeline in-flight reference size (informational).
+/// Actual flow control is SCTP bufferedAmount-based, not this value.
+const int _mobileMaxInFlight = 8; // kept for debug log only
 
 int _lastEmitTime = 0;
 
@@ -317,10 +319,11 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
       // Mobile/TURN relay → 32 KB chunks to avoid relay buffer overflow.
       final int chunkSize = isMobile ? _mobileChunkSize : _wifiChunkSize;
 
-      // Native WebRTC buffer cap: 1 MB on WiFi, 256 KB on mobile.
-      // Drain threshold is set at half the cap to keep the pipe full
-      // without overflowing the SCTP send buffer.
-      final int maxBufferSize = isMobile ? 256 * 1024 : 1024 * 1024;
+      // Native WebRTC buffer cap:
+      //   WiFi/direct P2P  → 1 MB  (large buffer keeps the pipe full)
+      //   Mobile/TURN relay → 128 KB (small buffer = fast drain detection,
+      //                               less data stuck in relay on stall)
+      final int maxBufferSize = isMobile ? 128 * 1024 : 1024 * 1024;
 
       // Drain wait timeout:
       //   Mobile/TURN relay → 10 s: relay congestion should be detected fast

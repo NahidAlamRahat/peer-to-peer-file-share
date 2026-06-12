@@ -15,10 +15,21 @@ class WebRTCClient {
       {'urls': 'stun:stun.l.google.com:19302'},
       {'urls': 'stun:stun1.l.google.com:19302'},
       {'urls': 'stun:stun.stunprotocol.org:3478'},
-      // TURN servers — required for mobile data (Symmetric NAT)
-      // Personal metered.ca credentials — 20GB/month free
+      // TURN servers — required for mobile data (Symmetric NAT / 4G)
+      // Personal metered.ca credentials — 20 GB/month free
+      //
+      // ORDER MATTERS: WebRTC tries candidates top-to-bottom.
+      // TCP TURN (port 443) listed first because:
+      //   • Mobile carriers often block/throttle UDP
+      //   • TCP is more reliable on congested 4G networks
+      //   • Port 443 passes through most firewalls (HTTPS port)
       {
-        'urls': 'turn:a.relay.metered.ca:80',
+        'urls': 'turns:a.relay.metered.ca:443',  // TCP+TLS — most reliable on mobile
+        'username': 'a5eaa03ef3aef5dd7dbd66c9',
+        'credential': 'QwG/QE1Gg4K2UfRz',
+      },
+      {
+        'urls': 'turn:a.relay.metered.ca:443',    // TCP — fallback
         'username': 'a5eaa03ef3aef5dd7dbd66c9',
         'credential': 'QwG/QE1Gg4K2UfRz',
       },
@@ -28,18 +39,15 @@ class WebRTCClient {
         'credential': 'QwG/QE1Gg4K2UfRz',
       },
       {
-        'urls': 'turn:a.relay.metered.ca:443',
-        'username': 'a5eaa03ef3aef5dd7dbd66c9',
-        'credential': 'QwG/QE1Gg4K2UfRz',
-      },
-      {
-        'urls': 'turns:a.relay.metered.ca:443',
+        'urls': 'turn:a.relay.metered.ca:80',     // UDP — fastest but less reliable on 4G
         'username': 'a5eaa03ef3aef5dd7dbd66c9',
         'credential': 'QwG/QE1Gg4K2UfRz',
       },
     ],
     'sdpSemantics': 'unified-plan',
     'iceTransportPolicy': 'all',
+    // Aggressive ICE restart on connection drop
+    'iceCandidatePoolSize': 10,
   };
 
   // Callbacks
@@ -85,9 +93,10 @@ class WebRTCClient {
 
   Future<void> createDataChannel() async {
     if (_peerConnection == null) return;
-    
-    RTCDataChannelInit dataChannelDict = RTCDataChannelInit()
-      ..ordered = true; // We want an ordered channel for file chunks
+
+    final RTCDataChannelInit dataChannelDict = RTCDataChannelInit()
+      ..ordered = true       // Ordered delivery — essential for file integrity
+      ..protocol = 'p2p-ft'; // Named protocol for easier debugging
 
     _dataChannel = await _peerConnection!.createDataChannel(
       'file_transfer_channel',
