@@ -92,6 +92,7 @@ class WebFileSaver implements P2PFileSaver {
         'id': _streamId,
         'filename': _fileName,
         'mimeType': _getMimeType(_fileName),
+        'fileSize': fileSize, // enables Content-Length → browser shows % in download bar
       };
       
       // Listen for cancel and pause/resume events from the Service Worker

@@ -44,12 +44,13 @@ self.addEventListener('message', event => {
         }
         map.delete(data.id);
       }
-    }, { highWaterMark: 1024 * 1024 * 5 }); // 5MB buffer to absorb jitter
+    }, { highWaterMark: 1024 * 1024 * 16 }); // 16MB buffer — matches 256KB WiFi chunks
     map.set(data.id, {
       stream,
       controller,
       filename: data.filename,
       mimeType: data.mimeType || 'application/octet-stream',
+      fileSize: data.fileSize || 0, // 0 = unknown (no Content-Length header)
       isPaused: false,
       pauseTimer: null,
       clientPort: clientPort
@@ -66,17 +67,17 @@ self.addEventListener('message', event => {
       meta.controller.enqueue(new Uint8Array(data.data));
       
       // If the buffer is full, it means the browser MAY have paused.
-      // We use a 500ms debounce to avoid false positives when the browser
-      // is simply a little slow to read — which happens during normal fast downloads.
+      // We use a 1000ms debounce to avoid false positives — 256KB WiFi chunks
+      // arrive in bursts and the browser may briefly lag reading them.
       if (meta.controller.desiredSize <= 0 && !meta.isPaused && !meta.pauseTimer) {
         meta.pauseTimer = setTimeout(() => {
           meta.pauseTimer = null;
-          // Re-check: is it still full after 500ms? Then it's a real pause.
+          // Re-check: is it still full after 1000ms? Then it's a real pause.
           if (meta.controller.desiredSize <= 0 && !meta.isPaused) {
             meta.isPaused = true;
             if (meta.clientPort) meta.clientPort.postMessage(JSON.stringify({ type: 'pause', id: data.id }));
           }
-        }, 500);
+        }, 1000);
       }
     }
   } else if (data.type === 'end') {
@@ -106,6 +107,10 @@ self.addEventListener('fetch', event => {
         // The attachment flag forces the browser's download manager to open
         'Content-Disposition': 'attachment; filename="'+ encodeURIComponent(meta.filename) +'"'
       });
+      // Send Content-Length if known so the browser shows % progress in the download bar
+      if (meta.fileSize > 0) {
+        headers.set('Content-Length', String(meta.fileSize));
+      }
       event.respondWith(new Response(meta.stream, { headers }));
     } else {
       event.respondWith(new Response("Stream not found or expired", { status: 404 }));

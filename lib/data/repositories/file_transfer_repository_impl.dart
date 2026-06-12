@@ -16,20 +16,23 @@ import 'file_saver.dart';
 import 'file_transfer_web.dart'
     if (dart.library.io) 'file_transfer_mobile.dart';
 
-/// Max single WebRTC chunk size (32 KB).
-/// 32KB ensures zero SCTP fragmentation issues on older Androids.
-const int _chunkSize = 32768; // 32 KB
+/// WiFi chunk size (256 KB).
+/// Larger chunks drastically reduce per-chunk overhead on fast links.
+/// Still below SCTP max message size — no fragmentation issues.
+const int _wifiChunkSize = 262144; // 256 KB
+
+/// Mobile data / TURN relay chunk size (32 KB).
+/// Keeps each message small to avoid stalls on lossy TURN relay paths.
+const int _mobileChunkSize = 32768; // 32 KB
 
 /// How many bytes sender sends per "window" before waiting for receiver ACK.
-/// 2MB gives maximum throughput on local WiFi (same router / hotspot).
-/// The ACK counter prevents the race-condition freeze — window size is safe.
-const int _wifiWindowSize = 2097152; // 2 MB
+/// 8 MB gives maximum throughput on local WiFi (same router / hotspot).
+const int _wifiWindowSize = 8388608; // 8 MB
 
-/// Mobile data (TURN relay): tight in-flight limit.
-/// Keeps only 8 chunks (256 KB) in flight at once. This guarantees we never 
-/// overflow the OS/WebRTC internal buffer on mobile data, which causes silent
-/// packet drops and stuck transfers (like sticking at 0.97MB).
-const int _mobileMaxInFlight = 8; // 8 × 32 KB = 256 KB max in-flight
+/// Mobile data (TURN relay): pipeline depth in chunks.
+/// 24 × 32 KB = 768 KB max in-flight — enough to saturate a 4G link
+/// without overflowing the TURN relay's internal buffer.
+const int _mobileMaxInFlight = 24; // 24 × 32 KB = 768 KB max in-flight
 
 int _lastEmitTime = 0;
 
@@ -98,15 +101,18 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
   String? _receivingFileName;
   int _receivingTotalSize = 0;
   int _receivedBytes = 0;
-  int _lastWindowAckBytes = 0;
   int _receivingFileIndex = 1;
   int _receivingTotalFiles = 1;
   P2PFileSaver? _fileSaver;
 
   /// Transfer mode sent by sender in metadata: 'wifi' or 'mobile'.
+  /// Kept for debug logging only.
   String _remoteTransferMode = 'wifi';
-  /// Window size used for ACK in WiFi mode.
-  int _remoteWindowSize = _wifiWindowSize;
+
+  /// True while receiver is awaiting fileSaver.init() — binary chunks
+  /// that arrive during this window are queued here and replayed after init.
+  bool _isInitializing = false;
+  final List<Uint8List> _initQueue = [];
 
   FileTransferRepositoryImpl(this._webrtcClient) {
     _webrtcClient.onDataMessage = _handleDataMessage;
@@ -177,10 +183,11 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
     _receivingFileName = null;
     _receivingTotalSize = 0;
     _receivedBytes = 0;
-    _lastWindowAckBytes = 0;
     _receivingFileIndex = 1;
     _receivingTotalFiles = 1;
     _fileSaver = null;
+    _isInitializing = false;
+    _initQueue.clear();
   }
 
   // ── SENDER ────────────────────────────────────────────────────────────────
@@ -228,7 +235,7 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
       if (candidateType == 'relay') {
         // TURN relay path: same protocol as mobile data mode
         isMobile = true;
-        debugPrint('📡 [P2P] TURN relay detected → Pipeline mode (${_mobileMaxInFlight * _chunkSize ~/ 1024} KB in-flight)');
+        debugPrint('📡 [P2P] TURN relay detected → Pipeline mode (${_mobileMaxInFlight * _mobileChunkSize ~/ 1024} KB in-flight)');
       } else if (candidateType == 'host' || candidateType == 'srflx') {
         // Direct P2P path: use large window for maximum throughput
         isMobile = false;
@@ -293,36 +300,94 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
       int bytesSent = 0;
       int loopCount = 0;
 
+      // Choose chunk size based on connection type:
+      // WiFi/direct P2P → 256 KB chunks for maximum throughput.
+      // Mobile/TURN relay → 32 KB chunks to avoid relay buffer overflow.
+      final int chunkSize = isMobile ? _mobileChunkSize : _wifiChunkSize;
+
+      // Native WebRTC buffer cap: 1 MB on WiFi, 256 KB on mobile.
+      // Drain threshold is set at half the cap to keep the pipe full
+      // without overflowing the SCTP send buffer.
+      final int maxBufferSize = isMobile ? 256 * 1024 : 1024 * 1024;
+
       Future<void> sendChunks(Uint8List bytes, int start, int end) async {
         int offset = start;
-        const int maxBufferSize = 256 * 1024; // 256 KB max native buffer size
-        
+
         while (offset < end) {
           if (_isCancelled) return;
 
+          // ── Guard: halt immediately if data channel has closed ───────────
+          // Without this check, sends are silently dropped and the sender
+          // keeps looping until a 120 s EOF-ACK timeout causes a stall.
+          if (_webrtcClient.dataChannelState !=
+              RTCDataChannelState.RTCDataChannelOpen) {
+            if (!_isCancelled) {
+              debugPrint(
+                  '⚠️ [P2P] Data channel closed mid-transfer — halting.');
+              _progressController
+                  .addError('Connection to peer was lost during transfer.');
+              haltTransfer();
+            }
+            return;
+          }
+
           // 1. SCTP NATIVE FLOW CONTROL ─────────────────────────────────────
           // If the native WebRTC buffer is full, wait for it to drain.
-          // This entirely prevents dropping chunks and silent connection kills.
+          // Two mechanisms work in parallel so we never stall permanently:
+          //   a) onBufferedAmountLow callback (instant when supported)
+          //   b) 50 ms polling fallback (catches devices where (a) never fires)
           if (_webrtcClient.bufferedAmount > maxBufferSize) {
             _drainCompleter = Completer<void>();
-            _webrtcClient.setBufferedAmountLowThreshold(maxBufferSize ~/ 2); // 128 KB
-            
+            _webrtcClient.setBufferedAmountLowThreshold(maxBufferSize ~/ 2);
+
+            // (a) Native callback
             _webrtcClient.onBufferedAmountLow = (int amount) {
               if (_drainCompleter != null && !_drainCompleter!.isCompleted) {
                 _drainCompleter!.complete();
               }
             };
-            
+
+            // (b) Polling fallback — fires every 50 ms in case (a) is silent
+            Timer? drainPoller;
+            drainPoller = Timer.periodic(
+                const Duration(milliseconds: 50), (t) {
+              if (_drainCompleter == null || _drainCompleter!.isCompleted) {
+                t.cancel();
+                return;
+              }
+              // Also stop if channel closed — don't wait for a drain that
+              // will never come on a dead connection.
+              if (_isCancelled ||
+                  _webrtcClient.dataChannelState !=
+                      RTCDataChannelState.RTCDataChannelOpen) {
+                if (!(_drainCompleter?.isCompleted ?? true)) {
+                  _drainCompleter!
+                      .completeError(Exception('Channel closed during drain'));
+                }
+                t.cancel();
+                return;
+              }
+              if (_webrtcClient.bufferedAmount <= maxBufferSize ~/ 2) {
+                if (!(_drainCompleter?.isCompleted ?? true)) {
+                  _drainCompleter!.complete();
+                }
+                t.cancel();
+              }
+            });
+
             try {
-              // Wait for buffer to drain or timeout
-              await _drainCompleter!.future.timeout(const Duration(seconds: 30));
+              await _drainCompleter!.future
+                  .timeout(const Duration(seconds: 30));
             } catch (e) {
+              drainPoller.cancel();
               if (!_isCancelled) {
-                _progressController.addError('Connection to peer is stalled.');
+                _progressController
+                    .addError('Connection to peer is stalled.');
                 haltTransfer();
                 return;
               }
             }
+            drainPoller.cancel();
             _webrtcClient.onBufferedAmountLow = null;
             _drainCompleter = null;
           }
@@ -330,16 +395,17 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
           if (_isCancelled) return;
 
           // 2. Send chunk
-          final sliceEnd = (offset + _chunkSize < end) ? offset + _chunkSize : end;
+          final sliceEnd =
+              (offset + chunkSize < end) ? offset + chunkSize : end;
           final slice = bytes.sublist(offset, sliceEnd);
           _webrtcClient.sendDataMessageBinary(slice);
-          
+
           bytesSent += slice.length;
           offset = sliceEnd;
           loopCount++;
 
-          // 3. Keep UI responsive
-          if (loopCount % 16 == 0) {
+          // 3. Keep UI responsive (yield every 32 chunks)
+          if (loopCount % 32 == 0) {
             await Future.delayed(Duration.zero);
           }
 
@@ -403,11 +469,19 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
     if (_isCancelled) return;
 
     if (message.isBinary) {
+      // If fileSaver is still initializing (await init() hasn't returned yet),
+      // queue the chunk so it is NOT silently dropped.
+      if (_isInitializing) {
+        _initQueue.add(message.binary);
+        _receivedBytes += message.binary.length;
+        return;
+      }
+
       // Binary chunk — write to file saver
       _fileSaver?.addChunk(message.binary);
       _receivedBytes += message.binary.length;
 
-      // No application-level ACKs needed anymore; native WebRTC SCTP handles flow control.
+      // No application-level ACKs needed; native WebRTC SCTP handles flow control.
 
       // Emit receiver progress
       _emitProgress(
@@ -433,7 +507,6 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
             _receivingFileIndex = decoded['fileIndex'] ?? 1;
             _receivingTotalFiles = decoded['totalFiles'] ?? 1;
             _remoteTransferMode = decoded['transferMode'] ?? 'wifi';
-            _remoteWindowSize = decoded['windowSize'] ?? _wifiWindowSize;
             _fileSaver = getFileSaver();
             _fileSaver!.setOnCancel(() {
               debugPrint('🛑 [P2P-ACK] Cancelled from Browser UI.');
@@ -445,7 +518,21 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
               cancelTransfer(myRole: 'receiver');
               onIncognitoDetected?.call();
             });
+
+            // Guard: mark initializing so any binary chunks that arrive
+            // during the async init() call are queued, not silently dropped.
+            _isInitializing = true;
             await _fileSaver!.init(_receivingFileName ?? 'file', fileSize: _receivingTotalSize);
+            _isInitializing = false;
+
+            // Drain any chunks that arrived during init()
+            if (_initQueue.isNotEmpty) {
+              debugPrint('📦 [P2P-ACK] Draining ${_initQueue.length} queued chunks from init window.');
+              for (final queued in _initQueue) {
+                _fileSaver?.addChunk(queued);
+              }
+              _initQueue.clear();
+            }
 
             // Emit 0% progress immediately so receiver UI switches to progress screen
             _emitProgress(

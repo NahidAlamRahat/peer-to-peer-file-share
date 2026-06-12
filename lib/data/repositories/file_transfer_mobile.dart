@@ -7,7 +7,7 @@ P2PFileSaver getFileSaver() => MobileFileSaver();
 
 class MobileFileSaver implements P2PFileSaver {
   IOSink? _sink;
-  late File _file;
+  File? _file; // nullable: init() may not have been called if transfer is cancelled early
 
   @override
   Future<void> init(String fileName, {int fileSize = 0}) async {
@@ -28,9 +28,9 @@ class MobileFileSaver implements P2PFileSaver {
       savePath = File('${dir.path}/$nameWithoutExt ($counter)$ext');
       counter++;
     }
-    
+
     _file = savePath;
-    _sink = _file.openWrite();
+    _sink = _file!.openWrite();
   }
 
   @override
@@ -43,15 +43,17 @@ class MobileFileSaver implements P2PFileSaver {
     await _sink?.flush();
     await _sink?.close();
     _sink = null;
-    return _file.path;
+    return _file?.path ?? '';
   }
 
   @override
   Future<void> discard() async {
     await _sink?.close();
     _sink = null;
-    if (await _file.exists()) {
-      await _file.delete();
+    final f = _file;
+    _file = null;
+    if (f != null && await f.exists()) {
+      await f.delete();
     }
   }
 
