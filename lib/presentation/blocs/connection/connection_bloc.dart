@@ -100,12 +100,14 @@ class ConnectionBloc extends Bloc<ConnectionEvent, ConnectionStateBloc> {
     }
   }
 
-  void _onSessionStateChanged(
+  Future<void> _onSessionStateChanged(
     SessionStateChangedEvent event,
     Emitter<ConnectionStateBloc> emit,
-  ) {
+  ) async {
     if (event.state == SessionState.connected) {
-      emit(ConnectionConnected(currentRole!));
+      final type = await peerRepository.activeConnectionType;
+      final connectionType = type == 'relay' ? 'relay' : 'direct';
+      emit(ConnectionConnected(currentRole!, connectionType: connectionType));
     } else if (event.state == SessionState.failed) {
       // Don't overwrite if we already have a specific error message
       if (state is! ConnectionFailed && state is! ConnectionServerError) {

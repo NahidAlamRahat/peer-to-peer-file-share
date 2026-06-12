@@ -22,7 +22,15 @@ class PeerRepositoryImpl implements PeerRepository {
   Timer? _disconnectTimer; // Debounce for temporary WebRTC disconnects
   String? _pendingJoinSessionId; // Retry join after reconnect
 
+  // ── TURN Fallback State ──
+  final List<Map<String, dynamic>> _queuedRelayCandidates = [];
+  Timer? _relayFallbackTimer;
+  bool _fallbackTriggered = false;
+
   PeerRepositoryImpl(this._signalingService, this._webrtcClient);
+
+  @override
+  Future<String> get activeConnectionType async => await _webrtcClient.getSelectedCandidateType();
 
   @override
   Stream<SessionState> get sessionStateStream => _sessionStateController.stream;
@@ -55,6 +63,7 @@ class PeerRepositoryImpl implements PeerRepository {
           !_createSessionCompleter!.isCompleted) {
         _createSessionCompleter!.complete(_currentSessionId!);
       }
+      _startRelayFallbackTimer();
       await _webrtcClient.createDataChannel();
     };
 
@@ -64,6 +73,7 @@ class PeerRepositoryImpl implements PeerRepository {
         _signalingService.sendOffer(_currentSessionId!, offer.toMap());
       }
       // Receiver just waits for the offer
+      _startRelayFallbackTimer();
     };
 
     _signalingService.onOfferReceived = (data) async {
@@ -94,10 +104,19 @@ class PeerRepositoryImpl implements PeerRepository {
 
     _webrtcClient.onIceCandidate = (candidate) {
       if (_currentSessionId != null) {
-        _signalingService.sendIceCandidate(
-          _currentSessionId!,
-          candidate.toMap(),
-        );
+        final candidateMap = candidate.toMap();
+        final candidateString = candidateMap['candidate'] as String? ?? '';
+        
+        // If it's a TURN relay candidate, queue it instead of sending immediately.
+        if (candidateString.contains('typ relay') && !_fallbackTriggered) {
+          debugPrint('⏳ [TURN] Holding relay candidate (STUN priority).');
+          _queuedRelayCandidates.add(candidateMap);
+        } else {
+          _signalingService.sendIceCandidate(
+            _currentSessionId!,
+            candidateMap,
+          );
+        }
       }
     };
 
@@ -108,6 +127,13 @@ class PeerRepositoryImpl implements PeerRepository {
         _disconnectTimer = null;
         _pendingJoinSessionId = null; // Join succeeded — no need to retry
         _sessionStateController.add(SessionState.connected);
+        
+        // Direct P2P succeeded! Cancel fallback and drop relay candidates.
+        _relayFallbackTimer?.cancel();
+        if (!_fallbackTriggered) {
+          debugPrint('✅ [TURN] Direct P2P connected. Dropping ${_queuedRelayCandidates.length} relay candidates.');
+          _queuedRelayCandidates.clear();
+        }
       } else if (state ==
           RTCPeerConnectionState.RTCPeerConnectionStateDisconnected) {
         // WebRTC DISCONNECTED is usually temporary (ICE restart).
@@ -260,6 +286,39 @@ class PeerRepositoryImpl implements PeerRepository {
       _sessionStateController.add(SessionState.failed);
       throw Exception('Connection timed out. Please make sure the sender is still waiting on the Share screen.');
     }
+  }
+
+  void resetSession() {
+    _createSessionCompleter = null;
+    _currentSessionId = null;
+    _currentRole = null;
+    _sessionStateController.add(SessionState.disconnected);
+    _webrtcClient.dispose();
+    
+    _relayFallbackTimer?.cancel();
+    _relayFallbackTimer = null;
+    _queuedRelayCandidates.clear();
+    _fallbackTriggered = false;
+  }
+
+  void _startRelayFallbackTimer() {
+    _relayFallbackTimer?.cancel();
+    _fallbackTriggered = false;
+    _queuedRelayCandidates.clear();
+    
+    // Give STUN 5 seconds to establish a direct connection
+    _relayFallbackTimer = Timer(const Duration(seconds: 5), () {
+      if (_currentSessionId == null) return;
+      
+      _fallbackTriggered = true;
+      if (_queuedRelayCandidates.isNotEmpty) {
+        debugPrint('⏱️ [TURN] 5s STUN timeout. Releasing ${_queuedRelayCandidates.length} relay candidates...');
+        for (final candidate in _queuedRelayCandidates) {
+          _signalingService.sendIceCandidate(_currentSessionId!, candidate);
+        }
+        _queuedRelayCandidates.clear();
+      }
+    });
   }
 
   @override

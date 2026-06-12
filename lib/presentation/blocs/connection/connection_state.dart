@@ -32,10 +32,11 @@ class ConnectionCreated extends ConnectionStateBloc {
 
 class ConnectionConnected extends ConnectionStateBloc {
   final SessionRole role;
-  const ConnectionConnected(this.role);
+  final String? connectionType; // 'direct' or 'relay'
+  const ConnectionConnected(this.role, {this.connectionType});
 
   @override
-  List<Object?> get props => [role];
+  List<Object?> get props => [role, connectionType];
 }
 
 class ConnectionFailed extends ConnectionStateBloc {

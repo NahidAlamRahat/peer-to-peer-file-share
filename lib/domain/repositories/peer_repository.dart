@@ -13,6 +13,9 @@ abstract class PeerRepository {
   /// Close the connection and clean up resources
   Future<void> dispose();
 
+  /// Get the active connection type (e.g., 'host', 'srflx', 'relay')
+  Future<String> get activeConnectionType;
+
   /// Stream of session state changes
   Stream<SessionState> get sessionStateStream;
 }

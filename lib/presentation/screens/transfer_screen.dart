@@ -478,7 +478,49 @@ class _TransferScreenState extends State<TransferScreen> {
               ),
             ],
           ),
-          AppSpacing.gapH48,
+          AppSpacing.gapH24,
+          BlocBuilder<ConnectionBloc, ConnectionStateBloc>(
+            builder: (context, connState) {
+              if (connState is ConnectionConnected) {
+                final isRelay = connState.connectionType == 'relay';
+                return Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: isRelay 
+                        ? Colors.orange.withValues(alpha: 0.1) 
+                        : Colors.green.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(
+                      color: isRelay 
+                          ? Colors.orange.withValues(alpha: 0.5) 
+                          : Colors.green.withValues(alpha: 0.5),
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        isRelay ? Icons.cloud_sync_rounded : Icons.flash_on_rounded,
+                        color: isRelay ? Colors.orange : Colors.green,
+                        size: 16,
+                      ),
+                      AppSpacing.gapW4,
+                      Text(
+                        isRelay ? 'Connection: TURN Relay (Slower)' : 'Connection: Direct P2P (Fast)',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                          color: isRelay ? Colors.orange.shade700 : Colors.green.shade700,
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              }
+              return const SizedBox.shrink();
+            },
+          ),
+          AppSpacing.gapH24,
           Container(
             padding: EdgeInsets.symmetric(
               horizontal: AppSizes.p16,

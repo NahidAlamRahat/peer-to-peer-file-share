@@ -46,12 +46,14 @@ void _emitProgress({
   required int bytesTransferred,
   required int fileIndex,
   required int totalFiles,
+  bool force = false,
 }) {
   if (controller.isClosed) return;
 
   final now = DateTime.now().millisecondsSinceEpoch;
-  // Always emit 0% and 100%; otherwise limit to 10 FPS (100ms) to prevent UI starvation.
-  if (bytesTransferred == 0 ||
+  // Always emit 0% and 100%, or when forced, or limit to 10 FPS (100ms) to prevent UI starvation.
+  if (force ||
+      bytesTransferred == 0 ||
       bytesTransferred == totalSize ||
       now - _lastEmitTime > 100) {
     _lastEmitTime = now;
@@ -396,6 +398,18 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
                 t.cancel();
               }
             });
+
+            // Force UI update before blocking, so sender UI doesn't lag behind receiver UI
+            _emitProgress(
+              controller: _progressController,
+              fileId: fileId,
+              fileName: fileName,
+              totalSize: totalSize,
+              bytesTransferred: bytesSent,
+              fileIndex: i + 1,
+              totalFiles: files.length,
+              force: true,
+            );
 
             try {
               await _drainCompleter!.future.timeout(drainTimeout);
