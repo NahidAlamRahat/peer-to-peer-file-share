@@ -15,6 +15,7 @@ class ConnectionBloc extends Bloc<ConnectionEvent, ConnectionStateBloc> {
   StreamSubscription? _statusSubscription;
 
   SessionRole? currentRole;
+  String? currentConnectionType;
 
   ConnectionBloc({required this.peerRepository}) : super(ConnectionInitial()) {
     on<CreateSessionEvent>(_onCreateSession);
@@ -106,8 +107,8 @@ class ConnectionBloc extends Bloc<ConnectionEvent, ConnectionStateBloc> {
   ) async {
     if (event.state == SessionState.connected) {
       final type = await peerRepository.activeConnectionType;
-      final connectionType = type == 'relay' ? 'relay' : 'direct';
-      emit(ConnectionConnected(currentRole!, connectionType: connectionType));
+      currentConnectionType = type == 'relay' ? 'relay' : 'direct';
+      emit(ConnectionConnected(currentRole!, connectionType: currentConnectionType));
     } else if (event.state == SessionState.failed) {
       // Don't overwrite if we already have a specific error message
       if (state is! ConnectionFailed && state is! ConnectionServerError) {
@@ -148,6 +149,7 @@ class ConnectionBloc extends Bloc<ConnectionEvent, ConnectionStateBloc> {
   ) async {
     await peerRepository.dispose();
     currentRole = null;
+    currentConnectionType = null;
     emit(ConnectionInitial());
     // Reinitialize for next usage
     await peerRepository.initialize();

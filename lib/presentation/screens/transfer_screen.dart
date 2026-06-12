@@ -479,10 +479,12 @@ class _TransferScreenState extends State<TransferScreen> {
             ],
           ),
           AppSpacing.gapH24,
-          BlocBuilder<ConnectionBloc, ConnectionStateBloc>(
-            builder: (context, connState) {
-              if (connState is ConnectionConnected) {
-                final isRelay = connState.connectionType == 'relay';
+          AppSpacing.gapH24,
+          Builder(
+            builder: (context) {
+              final connType = context.read<ConnectionBloc>().currentConnectionType;
+              if (connType != null) {
+                final isRelay = connType == 'relay';
                 return Container(
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                   decoration: BoxDecoration(
