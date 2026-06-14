@@ -168,12 +168,20 @@ class HomeScreen extends StatelessWidget {
   Widget _buildMobileLayout(BuildContext context) {
     return BlocBuilder<TransferBloc, TransferState>(
       builder: (context, transferState) {
-        return Padding(
-          padding: EdgeInsets.symmetric(
-            horizontal: AppSizes.p24,
-            vertical: AppSizes.p16,
-          ),
-          child: Column(
+        return LayoutBuilder(
+          builder: (context, constraints) {
+            return SingleChildScrollView(
+              child: ConstrainedBox(
+                constraints: BoxConstraints(
+                  minHeight: constraints.maxHeight,
+                ),
+                child: IntrinsicHeight(
+                  child: Padding(
+                    padding: EdgeInsets.symmetric(
+                      horizontal: AppSizes.p24,
+                      vertical: AppSizes.p16,
+                    ),
+                    child: Column(
             children: [
               _buildServerStatus(),
               const Spacer(flex: 2),
@@ -201,6 +209,11 @@ class HomeScreen extends StatelessWidget {
               ],
             ],
           ),
+        ),
+                ),
+              ),
+            );
+          },
         );
       },
     );
