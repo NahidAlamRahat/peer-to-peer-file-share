@@ -315,6 +315,9 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
       int bytesSent = 0;
       int bytesSinceLastAck = 0;
       int loopCount = 0;
+      
+      // Initialize the completer before the loop so early ACKs aren't dropped
+      _windowAckCompleter = Completer<void>();
 
       // Choose chunk size based on connection type:
       // WiFi/direct P2P → 256 KB chunks for maximum throughput.
@@ -355,8 +358,6 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
           // OOM crashes and relay floods.
           final int windowSize = isMobile ? _mobileWindowSize : _wifiWindowSize;
           if (bytesSinceLastAck >= windowSize) {
-            _windowAckCompleter = Completer<void>();
-            
             // Force UI update before blocking
             _emitProgress(
               controller: _progressController,
@@ -380,7 +381,9 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
                 return;
               }
             }
-            _windowAckCompleter = null;
+            
+            // Create a new completer for the NEXT window
+            _windowAckCompleter = Completer<void>();
             
             // It's possible slice.length pushed bytesSinceLastAck past windowSize,
             // so we subtract windowSize to accurately track remainder.
