@@ -28,7 +28,7 @@ const int _mobileChunkSize = 16384; // 16 KB
 /// We MUST use this because flutter_webrtc's native bufferedAmount is unreliable on mobile,
 /// causing the sender to flood the memory and crash the transfer.
 const int _wifiWindowSize = 4194304; // 4 MB for local WiFi
-const int _mobileWindowSize = 524288; // 512 KB for TURN Relay
+const int _mobileWindowSize = 131072; // 128 KB for TURN Relay
 
 int _lastEmitTime = 0;
 
@@ -184,7 +184,7 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
   void resetTransferState() {
     _isCancelled = false;
     _drainCompleter = null;
-    _windowAckCompleter = null;
+    _windowAckCompleter = Completer<void>();
     for (final c in _ackCompleters.values) {
       if (!c.isCompleted) c.completeError('Transfer stopped');
     }
@@ -380,14 +380,19 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
                 haltTransfer();
                 return;
               }
+              return;
+            }
+
+            // Double check data channel state after awaiting
+            if (_webrtcClient.dataChannelState != RTCDataChannelState.RTCDataChannelOpen) {
+              if (!_isCancelled) {
+                _progressController.addError('Connection to peer was lost during transfer.');
+                haltTransfer();
+              }
+              return;
             }
             
-            // Create a new completer for the NEXT window
-            _windowAckCompleter = Completer<void>();
-            
-            // It's possible slice.length pushed bytesSinceLastAck past windowSize,
-            // so we subtract windowSize to accurately track remainder.
-            bytesSinceLastAck -= windowSize;
+            bytesSinceLastAck = 0;
           }
 
           if (_isCancelled) return;
@@ -403,8 +408,10 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
           offset = sliceEnd;
           loopCount++;
 
-          // 3. Keep UI responsive (yield every 32 chunks)
-          if (loopCount % 32 == 0) {
+          // 3. Keep UI responsive and TURN buffer clear
+          if (isMobile) {
+            await Future.delayed(const Duration(milliseconds: 1));
+          } else if (loopCount % 32 == 0) {
             await Future.delayed(Duration.zero);
           }
 
@@ -433,6 +440,13 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
       }
 
       if (_isCancelled) break;
+
+      // Handle any pending un-ACKed partial window before EOF
+      if (bytesSinceLastAck > 0 && bytesSinceLastAck < (isMobile ? _mobileWindowSize : _wifiWindowSize)) {
+        if (_windowAckCompleter != null && !_windowAckCompleter!.isCompleted) {
+          _windowAckCompleter!.complete();
+        }
+      }
 
       // ── 3. Send EOF and wait for receiver to save the file ───────────────
       final ackCompleter = Completer<void>();
@@ -472,18 +486,21 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
       // queue the chunk so it is NOT silently dropped.
       if (_isInitializing) {
         _initQueue.add(message.binary);
-        _receivedBytes += message.binary.length;
+        // _receivedBytes is not incremented here; it will be incremented during drain
         // Watchdog not needed during init — data IS arriving, just queued.
         return;
       }
 
       // ── Receiver-side stall watchdog ─────────────────────────────────────
-      // Reset the 15 s countdown on every chunk that arrives.
-      // If no chunk arrives for 15 s while the file is still incomplete,
+      // Reset the countdown on every chunk that arrives.
+      // If no chunk arrives while the file is still incomplete,
       // the sender/relay is stuck and we surface a clear error.
       _receiveWatchdog?.cancel();
       if (_receivedBytes + message.binary.length < _receivingTotalSize) {
-        _receiveWatchdog = Timer(const Duration(seconds: 15), () {
+        final watchdogDuration = _remoteTransferMode == 'mobile'
+            ? const Duration(seconds: 30)
+            : const Duration(seconds: 15);
+        _receiveWatchdog = Timer(watchdogDuration, () {
           if (!_isCancelled && !_progressController.isClosed) {
             debugPrint('⏰ [P2P-RX] No data for 15 s — receiver watchdog fired.');
             _progressController.addError(
@@ -559,8 +576,10 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
             // Drain any chunks that arrived during init()
             if (_initQueue.isNotEmpty) {
               debugPrint('📦 [P2P-ACK] Draining ${_initQueue.length} queued chunks from init window.');
+              _windowBytesReceived = 0;
               for (final queued in _initQueue) {
                 _fileSaver?.addChunk(queued);
+                _receivedBytes += queued.length;
                 _windowBytesReceived += queued.length;
                 if (_windowBytesReceived >= _remoteWindowSize) {
                   _windowBytesReceived = 0;
@@ -618,6 +637,7 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
             if (_windowAckCompleter != null && !_windowAckCompleter!.isCompleted) {
               _windowAckCompleter!.complete();
             }
+            _windowAckCompleter = Completer<void>();
             break;
 
           case 'cancel':
