@@ -313,6 +313,7 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
 
       // ── 2. Send data ──────────────────────────────────────────────────────
       int bytesSent = 0;
+      int bytesSinceLastAck = 0;
       int loopCount = 0;
 
       // Choose chunk size based on connection type:
@@ -352,7 +353,8 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
           // flutter_webrtc's native bufferedAmount is unreliable on mobile,
           // so we use an explicit application-level ACK system to prevent
           // OOM crashes and relay floods.
-          if (bytesSent > 0 && bytesSent % (isMobile ? _mobileWindowSize : _wifiWindowSize) == 0) {
+          final int windowSize = isMobile ? _mobileWindowSize : _wifiWindowSize;
+          if (bytesSinceLastAck >= windowSize) {
             _windowAckCompleter = Completer<void>();
             
             // Force UI update before blocking
@@ -379,6 +381,10 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
               }
             }
             _windowAckCompleter = null;
+            
+            // It's possible slice.length pushed bytesSinceLastAck past windowSize,
+            // so we subtract windowSize to accurately track remainder.
+            bytesSinceLastAck -= windowSize;
           }
 
           if (_isCancelled) return;
@@ -390,6 +396,7 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
           _webrtcClient.sendDataMessageBinary(slice);
 
           bytesSent += slice.length;
+          bytesSinceLastAck += slice.length;
           offset = sliceEnd;
           loopCount++;
 
