@@ -142,6 +142,18 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
   bool _isInitializing = false;
   final List<Uint8List> _initQueue = [];
 
+  // ── Serial message processing queue ──────────────────────────────────────
+  // Problem: _handleDataMessage is async. When waitForReady() yields the event
+  // loop (browser pause signal), the next DataChannel message (e.g. EOF) can
+  // be processed immediately — BEFORE the current binary chunk's addChunk()
+  // has been called. This causes _fileSaver to become null mid-chunk, losing
+  // the last bytes and causing the browser to show "Cancelled".
+  //
+  // Fix: all incoming messages are serialised through this queue. Each message
+  // is fully processed (including any awaits) before the next one starts.
+  final List<RTCDataChannelMessage> _msgQueue = [];
+  bool _isProcessingMsg = false;
+
   /// Receiver-side stall watchdog.
   /// Restarted on every binary chunk arrival. If no chunk arrives within
   /// the timeout while a transfer is active, the relay/connection is stuck
@@ -234,6 +246,10 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
     _initQueue.clear();
     _receiveWatchdog?.cancel();
     _receiveWatchdog = null;
+    // Drain the serial queue — any in-flight messages after cancel are irrelevant.
+    _msgQueue.clear();
+    // NOTE: _isProcessingMsg is intentionally NOT reset here.
+    // If a message is mid-processing it will see _isCancelled=true and exit early.
   }
 
   // ── SENDER ────────────────────────────────────────────────────────────────
@@ -550,7 +566,20 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
 
   // ── RECEIVER ──────────────────────────────────────────────────────────────
 
+  // ── Public entry point: enqueue and drain serially ──────────────────────
   Future<void> _handleDataMessage(RTCDataChannelMessage message) async {
+    _msgQueue.add(message);
+    if (_isProcessingMsg) return; // Another message is already being processed
+    _isProcessingMsg = true;
+    while (_msgQueue.isNotEmpty) {
+      final msg = _msgQueue.removeAt(0);
+      await _processDataMessage(msg);
+    }
+    _isProcessingMsg = false;
+  }
+
+  // ── Actual processing (called one at a time — strictly ordered) ───────────
+  Future<void> _processDataMessage(RTCDataChannelMessage message) async {
     if (_isCancelled) return;
 
     if (message.isBinary) {
