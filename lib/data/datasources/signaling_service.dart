@@ -204,8 +204,12 @@ class SignalingService {
     }
   }
 
-  void createSession() {
-    _send({'type': 'create-session'});
+  void createSession({String? sessionId}) {
+    if (sessionId != null) {
+      _send({'type': 'create-session', 'sessionId': sessionId});
+    } else {
+      _send({'type': 'create-session'});
+    }
   }
 
   void joinSession(String sessionId) {

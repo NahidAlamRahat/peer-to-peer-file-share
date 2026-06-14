@@ -550,6 +550,11 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
               debugPrint('📦 [P2P-ACK] Draining ${_initQueue.length} queued chunks from init window.');
               for (final queued in _initQueue) {
                 _fileSaver?.addChunk(queued);
+                _windowBytesReceived += queued.length;
+                if (_windowBytesReceived >= _remoteWindowSize) {
+                  _windowBytesReceived = 0;
+                  _webrtcClient.sendDataMessage(RTCDataChannelMessage(jsonEncode({'type': 'ack_window'})));
+                }
               }
               _initQueue.clear();
             }

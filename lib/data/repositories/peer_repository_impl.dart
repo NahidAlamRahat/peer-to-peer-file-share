@@ -177,6 +177,11 @@ class PeerRepositoryImpl implements PeerRepository {
           '🔄 [REPO] Retrying pending join for session: $_pendingJoinSessionId',
         );
         _signalingService.joinSession(_pendingJoinSessionId!);
+      } else if (_currentSessionId != null && _currentRole == SessionRole.sender) {
+        debugPrint(
+          '🔄 [REPO] Reclaiming active session after reconnect: $_currentSessionId',
+        );
+        _signalingService.createSession(sessionId: _currentSessionId);
       }
     };
 
