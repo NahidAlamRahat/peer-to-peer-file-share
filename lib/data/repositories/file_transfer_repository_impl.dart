@@ -527,7 +527,14 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
             _receivingFileIndex = decoded['fileIndex'] ?? 1;
             _receivingTotalFiles = decoded['totalFiles'] ?? 1;
             _remoteTransferMode = decoded['transferMode'] ?? 'wifi';
-            _remoteWindowSize = decoded['windowSize'] ?? 4194304;
+            
+            // Backwards compatibility for older senders that didn't send windowSize
+            if (decoded['windowSize'] != null) {
+              _remoteWindowSize = decoded['windowSize'];
+            } else {
+              _remoteWindowSize = _remoteTransferMode == 'mobile' ? 524288 : 4194304;
+            }
+            
             _fileSaver = getFileSaver();
             _fileSaver!.setOnCancel(() {
               debugPrint('🛑 [P2P-ACK] Cancelled from Browser UI.');
