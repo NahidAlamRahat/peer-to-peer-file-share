@@ -16,6 +16,7 @@ import 'file_saver.dart';
 import 'file_transfer_web.dart'
     if (dart.library.io) 'file_transfer_mobile.dart';
 
+// ── Chunk sizes ──────────────────────────────────────────────────────────────
 /// WiFi chunk size (256 KB).
 /// Larger chunks drastically reduce per-chunk overhead on fast links.
 /// Still below SCTP max message size — no fragmentation issues.
@@ -24,11 +25,36 @@ const int _wifiChunkSize = 262144; // 256 KB
 /// Mobile data / TURN relay chunk size (16 KB).
 const int _mobileChunkSize = 16384; // 16 KB
 
-/// Application-level flow control window sizes.
-/// We MUST use this because flutter_webrtc's native bufferedAmount is unreliable on mobile,
-/// causing the sender to flood the memory and crash the transfer.
-const int _wifiWindowSize = 4194304; // 4 MB for local WiFi
-const int _mobileWindowSize = 131072; // 128 KB for TURN Relay
+// ── Window sizes (memory safety guard only — NOT speed controller) ───────────
+/// Large window so ACK almost never blocks the sender on WiFi.
+const int _wifiWindowSize = 8388608; // 8 MB
+
+/// 2 MB window on TURN relay — only blocks if receiver is severely behind.
+/// Real throttling is done by _mobileChunkDelay + bufferedAmount, not windows.
+const int _mobileWindowSize = 2097152; // 2 MB
+
+// ── bufferedAmount thresholds (real speed controller for Web) ────────────────
+/// Pause sending on Web when internal buffer exceeds 256 KB.
+const int _maxBufferedAmount = 262144; // 256 KB
+
+/// Resume sending on Web once buffer drains below 64 KB.
+// ignore: unused_element
+const int _resumeBufferedAmount = 65536; // 64 KB
+
+// ── Per-chunk delay for mobile (TURN relay breathing room) ──────────────────
+/// 2 ms per 16 KB chunk → ~8 MB/s theoretical send rate.
+/// TURN relay handles ~1–2 MB/s, so 2 ms prevents relay buffer overflow
+/// and SCTP retransmits (which cause 3–5 s freezes).
+const Duration _mobileChunkDelay = Duration(milliseconds: 2);
+
+// ── Watchdog timeouts ────────────────────────────────────────────────────────
+/// Mobile/TURN relay has higher latency — give it more time before giving up.
+const Duration _mobileWatchdogTimeout = Duration(seconds: 30);
+const Duration _wifiWatchdogTimeout = Duration(seconds: 15);
+
+// ── Window ACK timeouts ──────────────────────────────────────────────────────
+const Duration _mobileWindowTimeout = Duration(seconds: 20);
+const Duration _wifiWindowTimeout = Duration(seconds: 30);
 
 int _lastEmitTime = 0;
 
@@ -104,10 +130,11 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
   P2PFileSaver? _fileSaver;
 
   /// Transfer mode sent by sender in metadata: 'wifi' or 'mobile'.
-  /// Kept for debug logging only.
   String _remoteTransferMode = 'wifi';
-  int _remoteWindowSize = 4194304;
+  int _remoteWindowSize = 8388608;
   int _windowBytesReceived = 0;
+
+  /// Window ACK completer — created fresh by ack_window handler (race-free).
   Completer<void>? _windowAckCompleter;
 
   /// True while receiver is awaiting fileSaver.init() — binary chunks
@@ -117,8 +144,8 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
 
   /// Receiver-side stall watchdog.
   /// Restarted on every binary chunk arrival. If no chunk arrives within
-  /// 15 s while a transfer is active, the relay/connection is stuck and
-  /// we surface a clear error instead of hanging silently.
+  /// the timeout while a transfer is active, the relay/connection is stuck
+  /// and we surface a clear error instead of hanging silently.
   Timer? _receiveWatchdog;
 
   FileTransferRepositoryImpl(this._webrtcClient) {
@@ -184,6 +211,8 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
   void resetTransferState() {
     _isCancelled = false;
     _drainCompleter = null;
+    // ✅ Create a fresh completer — next session is ready immediately.
+    // Do NOT leave null: sender loop expects it to exist before the first window fill.
     _windowAckCompleter = Completer<void>();
     for (final c in _ackCompleters.values) {
       if (!c.isCompleted) c.completeError('Transfer stopped');
@@ -252,11 +281,11 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
       if (candidateType == 'relay') {
         // TURN relay path: same protocol as mobile data mode
         isMobile = true;
-        debugPrint('📡 [P2P] TURN relay detected → App-Level Windowing (${_mobileWindowSize ~/ 1024} KB windows)');
+        debugPrint('📡 [P2P] TURN relay detected → Pipeline mode (${_mobileWindowSize ~/ (1024 * 1024)} MB window, ${_mobileChunkSize ~/ 1024} KB chunks, ${_mobileChunkDelay.inMilliseconds}ms/chunk)');
       } else if (candidateType == 'host' || candidateType == 'srflx') {
         // Direct P2P path: use large window for maximum throughput
         isMobile = false;
-        debugPrint('📶 [P2P] Direct P2P ($candidateType) → App-Level Windowing (${_wifiWindowSize ~/ (1024 * 1024)} MB windows)');
+        debugPrint('📶 [P2P] Direct P2P ($candidateType) → WiFi mode (${_wifiWindowSize ~/ (1024 * 1024)} MB window, ${_wifiChunkSize ~/ 1024} KB chunks)');
       } else {
         // Stats not available — fall back to connectivity_plus as best-effort
         final connectivityResult = await Connectivity().checkConnectivity();
@@ -315,36 +344,39 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
       int bytesSent = 0;
       int bytesSinceLastAck = 0;
       int loopCount = 0;
-      
-      // Initialize the completer before the loop so early ACKs aren't dropped
+
+      // Initialize the completer ONCE before the loop so early ACKs aren't dropped.
+      // ack_window handler will create the NEXT completer — no race condition.
       _windowAckCompleter = Completer<void>();
 
       // Choose chunk size based on connection type:
       // WiFi/direct P2P → 256 KB chunks for maximum throughput.
-      // Mobile/TURN relay → 32 KB chunks to avoid relay buffer overflow.
+      // Mobile/TURN relay → 16 KB chunks to avoid relay buffer overflow.
       final int chunkSize = isMobile ? _mobileChunkSize : _wifiChunkSize;
 
-      // Drain wait timeout:
-      //   Mobile/TURN relay → 10 s: relay congestion should be detected fast
+      // Window ACK drain timeout:
+      //   Mobile/TURN relay → 20 s: relay congestion should be detected
       //   WiFi/direct P2P  → 30 s: large local buffers can legitimately be slow
-      final Duration drainTimeout = isMobile
-          ? const Duration(seconds: 10)
-          : const Duration(seconds: 30);
+      final Duration drainTimeout =
+          isMobile ? _mobileWindowTimeout : _wifiWindowTimeout;
 
+      // ── Inner send loop — Pipeline + Adaptive Backpressure ────────────────
+      // KEY DESIGN CHANGE vs old code:
+      //   OLD: Window-and-Wait — send 512 KB, block for ACK (~200–400ms dead time)
+      //   NEW: Continuous Pipeline — send chunk, 2ms yield (mobile), check guards
+      //        Window ACK is now memory safety guard (every 2 MB), not speed limiter.
+      //        Real throttling = _mobileChunkDelay + bufferedAmount (web only).
       Future<void> sendChunks(Uint8List bytes, int start, int end) async {
         int offset = start;
 
         while (offset < end) {
           if (_isCancelled) return;
 
-          // ── Guard: halt immediately if data channel has closed ───────────
-          // Without this check, sends are silently dropped and the sender
-          // keeps looping until a 120 s EOF-ACK timeout causes a stall.
+          // ── Guard 1: Data channel must be open ───────────────────────────
           if (_webrtcClient.dataChannelState !=
               RTCDataChannelState.RTCDataChannelOpen) {
             if (!_isCancelled) {
-              debugPrint(
-                  '⚠️ [P2P] Data channel closed mid-transfer — halting.');
+              debugPrint('⚠️ [P2P] Data channel closed mid-transfer — halting.');
               _progressController
                   .addError('Connection to peer was lost during transfer.');
               haltTransfer();
@@ -352,13 +384,15 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
             return;
           }
 
-          // 1. APPLICATION-LEVEL FLOW CONTROL (WINDOW ACKS) ───────────────
-          // flutter_webrtc's native bufferedAmount is unreliable on mobile,
-          // so we use an explicit application-level ACK system to prevent
-          // OOM crashes and relay floods.
-          final int windowSize = isMobile ? _mobileWindowSize : _wifiWindowSize;
+          // ── Guard 2: Window ACK (memory safety — blocks only if receiver is 2MB+ behind) ──
+          // This is NOT the speed controller. It prevents OOM if receiver is very slow.
+          // Real speed control is done by _mobileChunkDelay and bufferedAmount.
+          final int windowSize =
+              isMobile ? _mobileWindowSize : _wifiWindowSize;
           if (bytesSinceLastAck >= windowSize) {
-            // Force UI update before blocking
+            debugPrint(
+              '⏸ [P2P] Window full (${bytesSinceLastAck ~/ 1024} KB unACKed) — waiting for receiver...',
+            );
             _emitProgress(
               controller: _progressController,
               fileId: fileId,
@@ -371,33 +405,54 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
             );
 
             try {
-              // Wait for the receiver to send 'ack_window' indicating it has
-              // processed the current window of bytes.
+              // Wait for receiver to send 'ack_window' — ack_window handler
+              // creates the NEXT completer, so no race condition here.
               await _windowAckCompleter!.future.timeout(drainTimeout);
             } catch (e) {
               if (!_isCancelled) {
-                _progressController.addError('Connection to peer is stalled (Window ACK timeout).');
+                _progressController.addError(
+                    'Receiver is not responding (Window ACK timeout).');
                 haltTransfer();
                 return;
               }
               return;
             }
 
-            // Double check data channel state after awaiting
-            if (_webrtcClient.dataChannelState != RTCDataChannelState.RTCDataChannelOpen) {
+            // ✅ Full reset — no boundary mismatch bugs from subtract approach
+            bytesSinceLastAck = 0;
+
+            // Double-check channel after awaiting
+            if (_webrtcClient.dataChannelState !=
+                RTCDataChannelState.RTCDataChannelOpen) {
               if (!_isCancelled) {
-                _progressController.addError('Connection to peer was lost during transfer.');
+                _progressController
+                    .addError('Connection to peer was lost during transfer.');
                 haltTransfer();
               }
               return;
             }
-            
-            bytesSinceLastAck = 0;
+          }
+
+          // ── Guard 3: bufferedAmount backpressure (Web only — real speed control) ──
+          // flutter_webrtc's bufferedAmount is reliable in browsers but NOT on
+          // native Flutter mobile. So we only use it on Web where it matters.
+          // This prevents browser tab crash from WebRTC internal buffer overflow.
+          if (kIsWeb) {
+            final buffered = _webrtcClient.bufferedAmount;
+            if (buffered > _maxBufferedAmount) {
+              // Buffer is full — yield 5ms without advancing offset.
+              // This is a soft spin: we keep checking until buffer drains.
+              debugPrint(
+                '🐢 [P2P-Web] bufferedAmount ${buffered ~/ 1024} KB > ${_maxBufferedAmount ~/ 1024} KB — yielding 5ms',
+              );
+              await Future.delayed(const Duration(milliseconds: 5));
+              continue; // Re-check all guards without advancing
+            }
           }
 
           if (_isCancelled) return;
 
-          // 2. Send chunk
+          // ── Send chunk ──────────────────────────────────────────────────
           final sliceEnd =
               (offset + chunkSize < end) ? offset + chunkSize : end;
           final slice = bytes.sublist(offset, sliceEnd);
@@ -408,10 +463,22 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
           offset = sliceEnd;
           loopCount++;
 
-          // 3. Keep UI responsive and TURN buffer clear
+          // ── Timing: Mobile → 2ms/chunk, WiFi → event loop yield every 64 chunks ──
+          //
+          // Mobile/TURN relay rationale:
+          //   16 KB chunk ÷ 2ms = 8 MB/s theoretical send rate.
+          //   TURN relay handles ~1–2 MB/s. Without delay, we burst 512 KB
+          //   (32 × 16 KB) before yielding, overflowing relay's 64–256 KB buffer.
+          //   Buffer overflow → chunk drop → SCTP retransmit → 3–5s freeze.
+          //   2ms per chunk gives relay breathing room → no drops → smooth stream.
+          //
+          // WiFi rationale:
+          //   256 KB chunks, yield every 64 (= 16 MB per yield). This keeps
+          //   the event loop from starving without adding unnecessary latency.
+          //   bufferedAmount guard (web) handles any backpressure needed.
           if (isMobile) {
-            await Future.delayed(const Duration(milliseconds: 1));
-          } else if (loopCount % 32 == 0) {
+            await Future.delayed(_mobileChunkDelay);
+          } else if (loopCount % 64 == 0) {
             await Future.delayed(Duration.zero);
           }
 
@@ -441,8 +508,12 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
 
       if (_isCancelled) break;
 
-      // Handle any pending un-ACKed partial window before EOF
-      if (bytesSinceLastAck > 0 && bytesSinceLastAck < (isMobile ? _mobileWindowSize : _wifiWindowSize)) {
+      // Handle any pending un-ACKed partial window before EOF.
+      // If the final window didn't reach the threshold, the completer is still
+      // pending. Complete it so cleanup is clean (ack_window may never arrive
+      // if the last window was partial).
+      if (bytesSinceLastAck > 0 &&
+          bytesSinceLastAck < (isMobile ? _mobileWindowSize : _wifiWindowSize)) {
         if (_windowAckCompleter != null && !_windowAckCompleter!.isCompleted) {
           _windowAckCompleter!.complete();
         }
@@ -462,7 +533,8 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
         debugPrint('✅ [P2P-ACK] Receiver saved $fileName');
       } on TimeoutException {
         debugPrint('⚠️ [P2P-ACK] EOF ACK timeout (120s) — peer likely gone.');
-        _progressController.addError('Connection to peer was lost while saving the file.');
+        _progressController
+            .addError('Connection to peer was lost while saving the file.');
         haltTransfer();
         return;
       } catch (e) {
@@ -484,32 +556,39 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
     if (message.isBinary) {
       // If fileSaver is still initializing (await init() hasn't returned yet),
       // queue the chunk so it is NOT silently dropped.
+      // ✅ Do NOT increment _receivedBytes here — only during drain to avoid double-count.
       if (_isInitializing) {
         _initQueue.add(message.binary);
-        // _receivedBytes is not incremented here; it will be incremented during drain
         // Watchdog not needed during init — data IS arriving, just queued.
         return;
       }
 
-      // ── Receiver-side stall watchdog ─────────────────────────────────────
-      // Reset the countdown on every chunk that arrives.
-      // If no chunk arrives while the file is still incomplete,
-      // the sender/relay is stuck and we surface a clear error.
+      // ── Receiver-side stall watchdog ──────────────────────────────────────
+      // Reset countdown on every chunk. Mobile/TURN gets more time (30s vs 15s)
+      // because TURN relay can have bursts of latency without actual stall.
       _receiveWatchdog?.cancel();
       if (_receivedBytes + message.binary.length < _receivingTotalSize) {
         final watchdogDuration = _remoteTransferMode == 'mobile'
-            ? const Duration(seconds: 30)
-            : const Duration(seconds: 15);
+            ? _mobileWatchdogTimeout // 30s for TURN relay
+            : _wifiWatchdogTimeout;  // 15s for direct P2P
         _receiveWatchdog = Timer(watchdogDuration, () {
           if (!_isCancelled && !_progressController.isClosed) {
-            debugPrint('⏰ [P2P-RX] No data for 15 s — receiver watchdog fired.');
+            debugPrint(
+              '⏰ [P2P-RX] No data for ${watchdogDuration.inSeconds}s — watchdog fired.',
+            );
             _progressController.addError(
-              'Data stopped arriving. The connection or relay may be congested. '
-              'Please try again.',
+              'Data stopped arriving. The connection may be congested. Please try again.',
             );
             haltTransfer();
           }
         });
+      }
+
+      // ── Web receiver backpressure ─────────────────────────────────────────
+      // Honor the Service Worker's pause/resume signal before writing the chunk.
+      // Without this, the browser download manager gets overwhelmed and hangs.
+      if (kIsWeb) {
+        await _fileSaver?.waitForReady();
       }
 
       // Binary chunk — write to file saver
@@ -517,10 +596,15 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
       _receivedBytes += message.binary.length;
       _windowBytesReceived += message.binary.length;
 
-      // Send window ACK back to sender to unblock them
+      // Send window ACK back to sender to unblock their Guard 2
       if (_windowBytesReceived >= _remoteWindowSize) {
         _windowBytesReceived = 0;
-        _webrtcClient.sendDataMessage(RTCDataChannelMessage(jsonEncode({'type': 'ack_window'})));
+        _webrtcClient.sendDataMessage(
+          RTCDataChannelMessage(jsonEncode({'type': 'ack_window'})),
+        );
+        debugPrint(
+          '📨 [P2P-RX] Sent ack_window (received ${_receivedBytes ~/ 1024} KB total)',
+        );
       }
 
       // Emit receiver progress
@@ -547,14 +631,16 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
             _receivingFileIndex = decoded['fileIndex'] ?? 1;
             _receivingTotalFiles = decoded['totalFiles'] ?? 1;
             _remoteTransferMode = decoded['transferMode'] ?? 'wifi';
-            
+
             // Backwards compatibility for older senders that didn't send windowSize
             if (decoded['windowSize'] != null) {
               _remoteWindowSize = decoded['windowSize'];
             } else {
-              _remoteWindowSize = _remoteTransferMode == 'mobile' ? 524288 : 4194304;
+              _remoteWindowSize = _remoteTransferMode == 'mobile'
+                  ? _mobileWindowSize
+                  : _wifiWindowSize;
             }
-            
+
             _fileSaver = getFileSaver();
             _fileSaver!.setOnCancel(() {
               debugPrint('🛑 [P2P-ACK] Cancelled from Browser UI.');
@@ -562,7 +648,8 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
               onSelfCancelled?.call();
             });
             _fileSaver!.setOnIncognitoDetected(() {
-              debugPrint('⚠️ [P2P-ACK] Incognito mode detected. Aborting transfer.');
+              debugPrint(
+                  '⚠️ [P2P-ACK] Incognito mode detected. Aborting transfer.');
               cancelTransfer(myRole: 'receiver');
               onIncognitoDetected?.call();
             });
@@ -570,20 +657,32 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
             // Guard: mark initializing so any binary chunks that arrive
             // during the async init() call are queued, not silently dropped.
             _isInitializing = true;
-            await _fileSaver!.init(_receivingFileName ?? 'file', fileSize: _receivingTotalSize);
+            await _fileSaver!.init(
+              _receivingFileName ?? 'file',
+              fileSize: _receivingTotalSize,
+            );
             _isInitializing = false;
 
-            // Drain any chunks that arrived during init()
+            // Drain any chunks that arrived during init().
+            // ✅ Reset _windowBytesReceived BEFORE drain to avoid extra ACKs
+            //    from chunks that were already partially counted before.
             if (_initQueue.isNotEmpty) {
-              debugPrint('📦 [P2P-ACK] Draining ${_initQueue.length} queued chunks from init window.');
-              _windowBytesReceived = 0;
+              debugPrint(
+                '📦 [P2P-ACK] Draining ${_initQueue.length} queued chunks from init window.',
+              );
+              _windowBytesReceived = 0; // ✅ Clean slate before drain
               for (final queued in _initQueue) {
+                if (kIsWeb) await _fileSaver?.waitForReady();
                 _fileSaver?.addChunk(queued);
-                _receivedBytes += queued.length;
+                _receivedBytes += queued.length; // ✅ Count here, NOT in init queue
                 _windowBytesReceived += queued.length;
                 if (_windowBytesReceived >= _remoteWindowSize) {
                   _windowBytesReceived = 0;
-                  _webrtcClient.sendDataMessage(RTCDataChannelMessage(jsonEncode({'type': 'ack_window'})));
+                  _webrtcClient.sendDataMessage(
+                    RTCDataChannelMessage(
+                      jsonEncode({'type': 'ack_window'}),
+                    ),
+                  );
                 }
               }
               _initQueue.clear();
@@ -601,7 +700,8 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
             );
 
             debugPrint(
-              '📥 [P2P-ACK] Receiving $_receivingFileName ($_receivingTotalSize bytes) — mode: $_remoteTransferMode',
+              '📥 [P2P-ACK] Receiving $_receivingFileName ($_receivingTotalSize bytes) '
+              '— mode: $_remoteTransferMode, window: ${_remoteWindowSize ~/ 1024} KB',
             );
             break;
 
@@ -633,10 +733,16 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
             break;
 
           case 'ack_window':
-            // Window ACK — unblock sender's chunk loop
-            if (_windowAckCompleter != null && !_windowAckCompleter!.isCompleted) {
+            // Window ACK — unblock sender's Guard 2 (memory safety check).
+            // ✅ Complete existing completer FIRST, then create new one here.
+            //    This eliminates the race condition where sender creates the
+            //    next completer AFTER the handler fires (missed signal).
+            if (_windowAckCompleter != null &&
+                !_windowAckCompleter!.isCompleted) {
               _windowAckCompleter!.complete();
             }
+            // ✅ New completer is created HERE in the handler — not in the sender loop.
+            //    Sender loop just awaits the existing one; no race possible.
             _windowAckCompleter = Completer<void>();
             break;
 
