@@ -570,13 +570,13 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
               _initQueue.clear();
             }
 
-            // Emit 0% progress immediately so receiver UI switches to progress screen
+            // Emit initial progress so receiver UI switches to progress screen
             _emitProgress(
               controller: _progressController,
               fileId: _receivingFileId ?? '',
               fileName: _receivingFileName ?? '',
               totalSize: _receivingTotalSize,
-              bytesTransferred: 0,
+              bytesTransferred: _receivedBytes,
               fileIndex: _receivingFileIndex,
               totalFiles: _receivingTotalFiles,
             );

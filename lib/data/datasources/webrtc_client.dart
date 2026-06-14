@@ -180,6 +180,7 @@ class WebRTCClient {
 
       // Step 1: Find the nominated (active) candidate-pair
       String? activePairLocalId;
+      String? activePairRemoteId;
       for (final stat in stats) {
         if (stat.type == 'candidate-pair') {
           final nominated = stat.values['nominated'];
@@ -187,21 +188,34 @@ class WebRTCClient {
           // 'nominated' is the definitive signal; fall back to 'succeeded' state
           if (nominated == true || state == 'succeeded') {
             activePairLocalId = stat.values['localCandidateId'] as String?;
-            if (activePairLocalId != null) break;
+            activePairRemoteId = stat.values['remoteCandidateId'] as String?;
+            if (activePairLocalId != null || activePairRemoteId != null) break;
           }
         }
       }
 
-      if (activePairLocalId == null) return 'unknown';
+      if (activePairLocalId == null && activePairRemoteId == null) return 'unknown';
 
-      // Step 2: Look up the local-candidate to read its type
+      // Step 2: Look up the candidates to read their types
+      String localType = 'unknown';
+      String remoteType = 'unknown';
+
       for (final stat in stats) {
         if (stat.type == 'local-candidate' && stat.id == activePairLocalId) {
-          final type = stat.values['candidateType'] as String? ?? 'unknown';
-          debugPrint('🔍 [ICE] Active candidate type: $type (id: $activePairLocalId)');
-          return type;
+          localType = stat.values['candidateType'] as String? ?? 'unknown';
+        } else if (stat.type == 'remote-candidate' && stat.id == activePairRemoteId) {
+          remoteType = stat.values['candidateType'] as String? ?? 'unknown';
         }
       }
+
+      debugPrint('🔍 [ICE] Active candidate pair: local=$localType, remote=$remoteType');
+
+      if (localType == 'relay' || remoteType == 'relay') {
+        return 'relay';
+      }
+      
+      // If neither is relay, just return the local type as fallback
+      return localType != 'unknown' ? localType : remoteType;
     } catch (e) {
       debugPrint('⚠️ [ICE] getStats() error: $e');
     }
