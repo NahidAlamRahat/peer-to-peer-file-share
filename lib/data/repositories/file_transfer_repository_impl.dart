@@ -29,9 +29,9 @@ const int _mobileChunkSize = 16384; // 16 KB
 /// Large window so ACK almost never blocks the sender on WiFi.
 const int _wifiWindowSize = 8388608; // 8 MB
 
-/// 2 MB window on TURN relay — only blocks if receiver is severely behind.
-/// Real throttling is done by _mobileChunkDelay + bufferedAmount, not windows.
-const int _mobileWindowSize = 524288; // 512 KB
+/// 256 KB window on TURN relay.
+/// Strict Window-and-Wait prevents relay buffer overflow.
+const int _mobileWindowSize = 262144; // 256 KB
 
 // ── bufferedAmount thresholds (real speed controller for Web) ────────────────
 /// Pause sending on Web when internal buffer exceeds 256 KB.
@@ -42,10 +42,7 @@ const int _maxBufferedAmount = 262144; // 256 KB
 const int _resumeBufferedAmount = 65536; // 64 KB
 
 // ── Per-chunk delay for mobile (TURN relay breathing room) ──────────────────
-/// 2 ms per 16 KB chunk → ~8 MB/s theoretical send rate.
-/// TURN relay handles ~1–2 MB/s, so 2 ms prevents relay buffer overflow
-/// and SCTP retransmits (which cause 3–5 s freezes).
-const Duration _mobileChunkDelay = Duration(milliseconds: 2);
+// const Duration _mobileChunkDelay = Duration(milliseconds: 2); // DELETE
 
 // ── Watchdog timeouts ────────────────────────────────────────────────────────
 /// Mobile/TURN relay has higher latency — give it more time before giving up.
@@ -297,7 +294,9 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
       if (candidateType == 'relay') {
         // TURN relay path: same protocol as mobile data mode
         isMobile = true;
-        debugPrint('📡 [P2P] TURN relay detected → Pipeline mode (${_mobileWindowSize ~/ (1024 * 1024)} MB window, ${_mobileChunkSize ~/ 1024} KB chunks, ${_mobileChunkDelay.inMilliseconds}ms/chunk)');
+        debugPrint('📡 [P2P] TURN relay → Window-and-Wait mode '
+            '(${_mobileWindowSize ~/ 1024} KB window, '
+            '${_mobileChunkSize ~/ 1024} KB chunks)');
       } else if (candidateType == 'host' || candidateType == 'srflx') {
         // Direct P2P path: use large window for maximum throughput
         isMobile = false;
@@ -407,7 +406,7 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
               isMobile ? _mobileWindowSize : _wifiWindowSize;
           if (bytesSinceLastAck >= windowSize) {
             debugPrint(
-              '⏸ [P2P] Window full (${bytesSinceLastAck ~/ 1024} KB unACKed) — waiting for receiver...',
+              '⏸ [P2P-TX] Window full — sent ${bytesSinceLastAck ~/ 1024} KB, waiting for ack_window...',
             );
             _emitProgress(
               controller: _progressController,
@@ -479,22 +478,9 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
           offset = sliceEnd;
           loopCount++;
 
-          // ── Timing: Mobile → 2ms/chunk, WiFi → event loop yield every 64 chunks ──
-          //
-          // Mobile/TURN relay rationale:
-          //   16 KB chunk ÷ 2ms = 8 MB/s theoretical send rate.
-          //   TURN relay handles ~1–2 MB/s. Without delay, we burst 512 KB
-          //   (32 × 16 KB) before yielding, overflowing relay's 64–256 KB buffer.
-          //   Buffer overflow → chunk drop → SCTP retransmit → 3–5s freeze.
-          //   2ms per chunk gives relay breathing room → no drops → smooth stream.
-          //
-          // WiFi rationale:
-          //   256 KB chunks, yield every 64 (= 16 MB per yield). This keeps
-          //   the event loop from starving without adding unnecessary latency.
-          //   bufferedAmount guard (web) handles any backpressure needed.
-          if (isMobile) {
-            await Future.delayed(_mobileChunkDelay);
-          } else if (loopCount % 64 == 0) {
+          // ── Timing: Mobile & WiFi → event loop yield every 32 chunks ──
+          // Mobile এবং WiFi উভয়ের জন্য একই: প্রতি 32 chunk এ শুধু event loop yield
+          if (loopCount % 32 == 0) {
             await Future.delayed(Duration.zero);
           }
 
