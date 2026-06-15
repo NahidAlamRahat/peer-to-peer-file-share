@@ -22,16 +22,16 @@ import 'file_transfer_web.dart'
 /// Still below SCTP max message size — no fragmentation issues.
 const int _wifiChunkSize = 262144; // 256 KB
 
-/// Mobile data / TURN relay chunk size (16 KB).
-const int _mobileChunkSize = 16384; // 16 KB
+/// Mobile data / TURN relay chunk size (64 KB).
+const int _mobileChunkSize = 65536; // 64 KB
 
 // ── Window sizes (memory safety guard only — NOT speed controller) ───────────
 /// Large window so ACK almost never blocks the sender on WiFi.
 const int _wifiWindowSize = 8388608; // 8 MB
 
-/// 256 KB window on TURN relay.
+/// 1 MB window on TURN relay.
 /// Strict Window-and-Wait prevents relay buffer overflow.
-const int _mobileWindowSize = 262144; // 256 KB
+const int _mobileWindowSize = 1048576; // 1 MB
 
 // ── bufferedAmount thresholds (real speed controller for Web) ────────────────
 /// Pause sending on Web when internal buffer exceeds 256 KB.
@@ -46,11 +46,11 @@ const int _resumeBufferedAmount = 65536; // 64 KB
 
 // ── Watchdog timeouts ────────────────────────────────────────────────────────
 /// Mobile/TURN relay has higher latency — give it more time before giving up.
-const Duration _mobileWatchdogTimeout = Duration(seconds: 30);
+const Duration _mobileWatchdogTimeout = Duration(seconds: 60);
 const Duration _wifiWatchdogTimeout = Duration(seconds: 15);
 
 // ── Window ACK timeouts ──────────────────────────────────────────────────────
-const Duration _mobileWindowTimeout = Duration(seconds: 20);
+const Duration _mobileWindowTimeout = Duration(seconds: 60);
 const Duration _wifiWindowTimeout = Duration(seconds: 30);
 
 int _lastEmitTime = 0;
@@ -294,9 +294,10 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
       if (candidateType == 'relay') {
         // TURN relay path: same protocol as mobile data mode
         isMobile = true;
-        debugPrint('📡 [P2P] TURN relay → Window-and-Wait mode '
+        debugPrint('📡 [P2P] TURN relay → Window-and-Wait '
             '(${_mobileWindowSize ~/ 1024} KB window, '
-            '${_mobileChunkSize ~/ 1024} KB chunks)');
+            '${_mobileChunkSize ~/ 1024} KB chunks, '
+            'ACK timeout: ${_mobileWindowTimeout.inSeconds}s)');
       } else if (candidateType == 'host' || candidateType == 'srflx') {
         // Direct P2P path: use large window for maximum throughput
         isMobile = false;
@@ -478,9 +479,9 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
           offset = sliceEnd;
           loopCount++;
 
-          // ── Timing: Mobile & WiFi → event loop yield every 32 chunks ──
-          // Mobile এবং WiFi উভয়ের জন্য একই: প্রতি 32 chunk এ শুধু event loop yield
-          if (loopCount % 32 == 0) {
+          // ── Timing: Mobile & WiFi → event loop yield every 8 chunks ──
+          // Mobile এবং WiFi উভয়ের জন্য একই: প্রতি 8 chunk এ শুধু event loop yield
+          if (loopCount % 8 == 0) {
             await Future.delayed(Duration.zero);
           }
 
@@ -642,7 +643,7 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
 
             // Backwards compatibility for older senders that didn't send windowSize
             if (decoded['windowSize'] != null) {
-              _remoteWindowSize = decoded['windowSize'];
+              _remoteWindowSize = decoded['windowSize'] as int;
             } else {
               _remoteWindowSize = _remoteTransferMode == 'mobile'
                   ? _mobileWindowSize
