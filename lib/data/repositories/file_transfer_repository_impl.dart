@@ -31,7 +31,7 @@ const int _wifiWindowSize = 8388608; // 8 MB
 
 /// 2 MB window on TURN relay — only blocks if receiver is severely behind.
 /// Real throttling is done by _mobileChunkDelay + bufferedAmount, not windows.
-const int _mobileWindowSize = 2097152; // 2 MB
+const int _mobileWindowSize = 524288; // 512 KB
 
 // ── bufferedAmount thresholds (real speed controller for Web) ────────────────
 /// Pause sending on Web when internal buffer exceeds 256 KB.
@@ -611,13 +611,6 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
             haltTransfer();
           }
         });
-      }
-
-      // ── Web receiver backpressure ─────────────────────────────────────────
-      // Honor the Service Worker's pause/resume signal before writing the chunk.
-      // Without this, the browser download manager gets overwhelmed and hangs.
-      if (kIsWeb) {
-        await _fileSaver?.waitForReady();
       }
 
       // Binary chunk — write to file saver
