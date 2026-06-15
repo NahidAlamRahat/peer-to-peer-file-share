@@ -273,7 +273,7 @@ class _ShareLinkScreenState extends State<ShareLinkScreen> {
   }
 
   Widget _buildGeneratingSessionState(ConnectionStateBloc state) {
-     String statusText = 'Generating secure session...';
+     String statusText = 'Generating link...';
      double? progressValue;
 
      if (state is ConnectionProgress) {

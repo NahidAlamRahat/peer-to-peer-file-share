@@ -59,7 +59,7 @@ class ConnectionBloc extends Bloc<ConnectionEvent, ConnectionStateBloc> {
     Emitter<ConnectionStateBloc> emit,
   ) async {
     debugPrint('📊 [BLOC] Starting session creation flow...');
-    emit(const ConnectionProgress(0.1, 'Connecting to signaling server...'));
+    emit(const ConnectionProgress(0.1, 'Generating link...'));
 
     // Fake progress timer to make it feel fast (psychological speed boost)
     double progress = 0.1;
@@ -67,8 +67,8 @@ class ConnectionBloc extends Bloc<ConnectionEvent, ConnectionStateBloc> {
       if (state is ConnectionProgress && progress < 0.95) {
         progress += (0.95 - progress) * 0.2; // Asymptotic approach to 95%
         final percent = (progress * 100).toInt();
-        debugPrint('📊 [BLOC] Progress: $percent% - Securing connection...');
-        add(StatusUpdateEvent('Securing connection... $percent%'));
+        debugPrint('📊 [BLOC] Progress: $percent% - Generating link...');
+        add(StatusUpdateEvent('Generating link... $percent%'));
       } else {
         timer.cancel();
       }
