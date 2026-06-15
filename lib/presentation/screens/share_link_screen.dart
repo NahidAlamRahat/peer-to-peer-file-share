@@ -71,7 +71,7 @@ class _ShareLinkScreenState extends State<ShareLinkScreen> {
 
     if (!kIsWeb && Platform.isAndroid) {
       // Request gallery and storage permissions before picking
-      final statuses = await [
+      await [
         Permission.storage,
         Permission.photos,
         Permission.videos,

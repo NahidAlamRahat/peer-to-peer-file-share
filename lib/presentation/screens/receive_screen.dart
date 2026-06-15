@@ -111,12 +111,14 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
 
     final code = _codeController.text.trim();
     if (code.isNotEmpty) {
+      if (!mounted) return;
       setState(() {
         _waitingForFile = true;
         _isSenderOffline = false;
         _fileMetadata = null;
       });
       debugPrint('🔗 [UI] Joining session with code: $code');
+      if (!mounted) return;
       context.read<ConnectionBloc>().add(JoinSessionEvent(code));
     }
   }
@@ -134,6 +136,7 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
       }
     }
 
+    if (!mounted) return;
     // Reset any old transfer state so _isCancelled flag is cleared
     context.read<TransferBloc>().add(ResetTransferEvent());
     setState(() {
@@ -143,6 +146,7 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
       _fileMetadata = null;
     });
     debugPrint('🔗 [UI] Joining session from link (auto-accept): ${_codeController.text}');
+    if (!mounted) return;
     context.read<ConnectionBloc>().add(JoinSessionEvent(_codeController.text.trim()));
   }
 

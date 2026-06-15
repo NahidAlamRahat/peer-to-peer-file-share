@@ -205,17 +205,47 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
     _isCancelled = false;
     _inFlightChunks = 0;
 
-    // Detect network type to choose transfer mode
+    // ── Detect actual WebRTC connection path ─────────────────────────────────
+    // We use WebRTC's own getStats() instead of connectivity_plus because:
+    //   • connectivity_plus only reports local network type (WiFi/mobile)
+    //   • It CANNOT detect if WebRTC chose TURN relay (e.g. AP Isolation on router)
+    //
+    // Candidate types:
+    //   'host'  → direct local network P2P → 2MB window → MAXIMUM speed
+    //   'srflx' → direct STUN P2P         → 2MB window → FAST
+    //   'relay' → TURN relay server        → 256KB pipeline → RELIABLE
+    //   'unknown' → fallback to connectivity_plus
     bool isMobile = false;
     try {
-      final connectivityResult = await Connectivity().checkConnectivity();
-      isMobile = connectivityResult.contains(ConnectivityResult.mobile);
-      debugPrint(isMobile
-          ? '📱 [P2P] Mobile data → Pipeline mode (max $_mobileMaxInFlight in-flight chunks)'
-          : '📶 [P2P] WiFi → Window mode (${_wifiWindowSize ~/ 1024}KB windows)');
+      final candidateType = await _webrtcClient.getSelectedCandidateType();
+
+      if (candidateType == 'relay') {
+        // TURN relay path: same protocol as mobile data mode
+        isMobile = true;
+        debugPrint('📡 [P2P] TURN relay detected → Pipeline mode (${_mobileMaxInFlight * _chunkSize ~/ 1024} KB in-flight)');
+      } else if (candidateType == 'host' || candidateType == 'srflx') {
+        // Direct P2P path: use large window for maximum throughput
+        isMobile = false;
+        debugPrint('📶 [P2P] Direct P2P ($candidateType) → Window mode (${_wifiWindowSize ~/ (1024 * 1024)} MB windows)');
+      } else {
+        // Stats not available — fall back to connectivity_plus as best-effort
+        final connectivityResult = await Connectivity().checkConnectivity();
+        isMobile = connectivityResult.contains(ConnectivityResult.mobile);
+        debugPrint(isMobile
+            ? '📱 [P2P] Mobile data (connectivity fallback) → Pipeline mode'
+            : '📶 [P2P] WiFi (connectivity fallback) → Window mode');
+      }
     } catch (e) {
-      debugPrint('Error checking connectivity, defaulting to WiFi mode: $e');
+      // Any error → safe fallback using connectivity_plus
+      debugPrint('⚠️ [P2P] Connection type detection failed, using connectivity fallback: $e');
+      try {
+        final connectivityResult = await Connectivity().checkConnectivity();
+        isMobile = connectivityResult.contains(ConnectivityResult.mobile);
+      } catch (_) {
+        isMobile = false; // Last resort: assume WiFi mode
+      }
     }
+
 
     // Wait for data channel to open (max 10 s)
     int waitCounter = 0;

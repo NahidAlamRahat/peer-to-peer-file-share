@@ -1,6 +1,6 @@
 import 'dart:async';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
-import 'dart:typed_data';
 
 class WebRTCClient {
   RTCPeerConnection? _peerConnection;
@@ -153,6 +153,50 @@ class WebRTCClient {
     if (_dataChannel != null && _dataChannel!.state == RTCDataChannelState.RTCDataChannelOpen) {
       _dataChannel!.send(RTCDataChannelMessage.fromBinary(bytes));
     }
+  }
+
+  /// Returns the ICE candidate type of the active (nominated) connection:
+  ///   'host'  → local network direct P2P  (fastest — same WiFi/hotspot)
+  ///   'srflx' → STUN reflexive direct P2P (fast — different network, NAT traversal)
+  ///   'relay' → TURN relay server         (limited by TURN bandwidth)
+  ///   'unknown' → stats not available yet
+  ///
+  /// This is the only reliable way to know if data is going through TURN,
+  /// because connectivity_plus only reports the local network type (WiFi/mobile)
+  /// and cannot detect whether WebRTC chose a TURN relay path regardless.
+  Future<String> getSelectedCandidateType() async {
+    if (_peerConnection == null) return 'unknown';
+    try {
+      final stats = await _peerConnection!.getStats();
+
+      // Step 1: Find the nominated (active) candidate-pair
+      String? activePairLocalId;
+      for (final stat in stats) {
+        if (stat.type == 'candidate-pair') {
+          final nominated = stat.values['nominated'];
+          final state = stat.values['state'];
+          // 'nominated' is the definitive signal; fall back to 'succeeded' state
+          if (nominated == true || state == 'succeeded') {
+            activePairLocalId = stat.values['localCandidateId'] as String?;
+            if (activePairLocalId != null) break;
+          }
+        }
+      }
+
+      if (activePairLocalId == null) return 'unknown';
+
+      // Step 2: Look up the local-candidate to read its type
+      for (final stat in stats) {
+        if (stat.type == 'local-candidate' && stat.id == activePairLocalId) {
+          final type = stat.values['candidateType'] as String? ?? 'unknown';
+          debugPrint('🔍 [ICE] Active candidate type: $type (id: $activePairLocalId)');
+          return type;
+        }
+      }
+    } catch (e) {
+      debugPrint('⚠️ [ICE] getStats() error: $e');
+    }
+    return 'unknown';
   }
 
   void dispose() {

@@ -1,8 +1,7 @@
 import 'dart:async';
-import 'dart:typed_data';
 // ignore: avoid_web_libraries_in_flutter, deprecated_member_use
 import 'dart:html' as html;
-// ignore: deprecated_member_use
+// ignore: avoid_web_libraries_in_flutter, deprecated_member_use
 import 'dart:js' as js;
 import 'package:flutter/foundation.dart';
 import 'package:uuid/uuid.dart';
@@ -69,7 +68,7 @@ class WebFileSaver implements P2PFileSaver {
         sw = html.window.navigator.serviceWorker?.controller;
       }
       if (sw != null) {
-        debugPrint('✅ [P2P-SW] controller ready after ${sw == null ? 5000 : 0}ms retry.');
+        debugPrint('✅ [P2P-SW] SW controller became ready after polling.');
       }
     }
 
