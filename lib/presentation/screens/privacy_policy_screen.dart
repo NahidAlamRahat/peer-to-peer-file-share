@@ -9,7 +9,7 @@ class PrivacyPolicyScreen extends StatelessWidget {
   static const String _appName = 'PeerTransfer';
   static const String _contactEmail = 'nahidrahat007@gmail.com';
   static const String _contactNumber = '+880 1642-743187';
-  static const String _lastUpdated = 'May 31, 2026';
+  static const String _lastUpdated = 'June 16, 2026';
 
   @override
   Widget build(BuildContext context) {
@@ -91,8 +91,9 @@ class PrivacyPolicyScreen extends StatelessWidget {
             title: '2. What Data We Collect & Access',
             content:
                 '• **Camera:** We use the camera solely for scanning QR codes locally to connect devices. No images are saved or transmitted to any server.\n\n'
-                '• **Files you choose to share:** We access files only when you explicitly select them for transfer. Files are transferred directly between devices and are never stored on our servers.\n\n'
-                '• **No usage tracking:** We do not collect your personal information.\n\n'
+                '• **Storage and Media:** We require read/write access to your device storage (including granular media permissions on Android 13+) to let you select and save files.\n\n'
+                '• **All Files Access:** On Android 11+, we require "All Files Access" to let you browse and transfer files of any format across your entire storage. This is necessary for the core functionality of a file-sharing app.\n\n'
+                '• **No file uploading:** Files are transferred directly between devices via WebRTC. We do not store or access your files on our servers.\n\n'
                 '• **Signaling server:** A minimal signaling server is used only to help establish the WebRTC connection between peers. It does not receive or store your actual file data.',
           ),
 
