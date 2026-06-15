@@ -85,9 +85,9 @@ class _ShareLinkScreenState extends State<ShareLinkScreen> {
     setState(() => _isPicking = true);
 
     try {
-      // file_picker 12.x: pickFiles() is already for multiple files — no allowMultiple needed
-      // withReadStream deprecated — use readAsByteStream() per file directly
-      FilePickerResult? result = await FilePicker.pickFiles();
+      // Enable withReadStream to stream large files directly without copying them to cache
+      // ignore: deprecated_member_use
+      FilePickerResult? result = await FilePicker.pickFiles(withReadStream: true);
       if (result != null && result.files.isNotEmpty) {
         final List<ShareFile> shareFiles = [];
         for (final pf in result.files) {

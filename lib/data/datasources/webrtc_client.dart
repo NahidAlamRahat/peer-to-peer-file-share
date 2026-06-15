@@ -14,7 +14,6 @@ class WebRTCClient {
       // STUN servers (works on WiFi & simple NAT)
       {'urls': 'stun:stun.l.google.com:19302'},
       {'urls': 'stun:stun1.l.google.com:19302'},
-      {'urls': 'stun:stun.stunprotocol.org:3478'},
       // TURN servers — required for mobile data (Symmetric NAT / 4G)
       // Personal metered.ca credentials — 20 GB/month free
       //

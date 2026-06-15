@@ -43,11 +43,13 @@ class PeerRepositoryImpl implements PeerRepository {
 
   @override
   Future<void> initialize() async {
-    // Only connect the WebSocket — fast, non-blocking
+    // Connect the WebSocket
     if (!_signalingService.isConnected) {
       _signalingService.connect();
     }
-    // WebRTC initialized lazily on first session — NOT here
+    // Initialize WebRTC early in the background so it's ready instantly when creating a session
+    _webrtcClient.initialize();
+
     if (!_listenersSetup) {
       _setupListeners();
       _listenersSetup = true;
