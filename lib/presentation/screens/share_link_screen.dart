@@ -257,6 +257,40 @@ class _ShareLinkScreenState extends State<ShareLinkScreen> {
   }
 
   Widget _buildFileSelectionState() {
+     if (_isPicking) {
+       return Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              width: double.infinity,
+              padding: EdgeInsets.all(AppSizes.p24),
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
+                borderRadius: BorderRadius.circular(AppSizes.radiusLarge),
+                border: Border.all(
+                  color: Theme.of(context).colorScheme.outlineVariant.withValues(alpha: 0.5),
+                ),
+              ),
+              child: Column(
+                children: [
+                  const CircularProgressIndicator(),
+                  AppSpacing.gapH24,
+                  Text(
+                    'Generating link...',
+                    style: TextStyle(
+                      fontSize: AppSizes.textBody,
+                      fontWeight: FontWeight.w500,
+                      color: Theme.of(context).colorScheme.onSurface,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                ],
+              ),
+            ),
+          ],
+       );
+     }
+
      return Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [

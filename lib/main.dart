@@ -26,29 +26,31 @@ void main() async {
   // ── Parse deep-link before showing UI ──────────────────────────────────────
   String? initialSessionId;
   String? initialFileName;
-  int?    initialFileSize;
-  int?    initialFileCount;
+  int? initialFileSize;
+  int? initialFileCount;
 
   if (kIsWeb) {
     try {
       final uri = Uri.base;
       initialSessionId = uri.queryParameters['session'];
-      initialFileName  = uri.queryParameters['name'] != null
+      initialFileName = uri.queryParameters['name'] != null
           ? Uri.decodeComponent(uri.queryParameters['name']!)
           : null;
-      initialFileSize  = int.tryParse(uri.queryParameters['size'] ?? '');
+      initialFileSize = int.tryParse(uri.queryParameters['size'] ?? '');
       initialFileCount = int.tryParse(uri.queryParameters['count'] ?? '');
     } catch (_) {}
   }
   // Mobile deep link parsing is moved to initState to avoid blocking main()
 
   // ── Launch UI immediately ─────────────────────────────────────────────────
-  runApp(P2PFileShareApp(
-    initialSessionId: initialSessionId,
-    initialFileName:  initialFileName,
-    initialFileSize:  initialFileSize,
-    initialFileCount: initialFileCount,
-  ));
+  runApp(
+    P2PFileShareApp(
+      initialSessionId: initialSessionId,
+      initialFileName: initialFileName,
+      initialFileSize: initialFileSize,
+      initialFileCount: initialFileCount,
+    ),
+  );
 
   // ── Firebase + MobileAds in background (non-blocking) ────────────────────
   _initHeavyServices();
@@ -72,8 +74,8 @@ final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 class P2PFileShareApp extends StatefulWidget {
   final String? initialSessionId;
   final String? initialFileName;
-  final int?    initialFileSize;
-  final int?    initialFileCount;
+  final int? initialFileSize;
+  final int? initialFileCount;
 
   const P2PFileShareApp({
     super.key,
@@ -89,18 +91,20 @@ class P2PFileShareApp extends StatefulWidget {
 
 class _P2PFileShareAppState extends State<P2PFileShareApp> {
   late final AppLinks _appLinks;
-  
+
   @override
   void initState() {
     super.initState();
     _checkIncognito();
-    
+
     if (!kIsWeb) {
       _appLinks = AppLinks();
       _appLinks.uriLinkStream.listen((uri) {
         final sessionId = uri.queryParameters['session'];
         if (sessionId != null && sessionId.isNotEmpty) {
-          final fileName = uri.queryParameters['name'] != null ? Uri.decodeComponent(uri.queryParameters['name']!) : null;
+          final fileName = uri.queryParameters['name'] != null
+              ? Uri.decodeComponent(uri.queryParameters['name']!)
+              : null;
           final fileSize = int.tryParse(uri.queryParameters['size'] ?? '');
           final fileCount = int.tryParse(uri.queryParameters['count'] ?? '');
 
@@ -136,9 +140,15 @@ class _P2PFileShareAppState extends State<P2PFileShareApp> {
                 actions: [
                   TextButton(
                     onPressed: () {
-                      Clipboard.setData(ClipboardData(text: web_helpers.getWebUrl()));
+                      Clipboard.setData(
+                        ClipboardData(text: web_helpers.getWebUrl()),
+                      );
                       ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Link copied! Open a normal tab and paste it.')),
+                        const SnackBar(
+                          content: Text(
+                            'Link copied! Open a normal tab and paste it.',
+                          ),
+                        ),
                       );
                     },
                     child: const Text('Copy Link'),
@@ -160,9 +170,7 @@ class _P2PFileShareAppState extends State<P2PFileShareApp> {
           lazy: false,
           create: (_) => di.sl<ConnectionBloc>(),
         ),
-        BlocProvider(
-          create: (_) => di.sl<TransferBloc>(),
-        ),
+        BlocProvider(create: (_) => di.sl<TransferBloc>()),
       ],
       child: MaterialApp(
         navigatorKey: navigatorKey,
@@ -170,11 +178,13 @@ class _P2PFileShareAppState extends State<P2PFileShareApp> {
         debugShowCheckedModeBanner: false,
         theme: AppTheme.lightTheme,
         darkTheme: AppTheme.darkTheme,
-        home: (widget.initialSessionId != null && widget.initialSessionId!.isNotEmpty)
+        home:
+            (widget.initialSessionId != null &&
+                widget.initialSessionId!.isNotEmpty)
             ? ReceiveScreen(
                 autoJoinSessionId: widget.initialSessionId,
-                preloadedFileName:  widget.initialFileName,
-                preloadedFileSize:  widget.initialFileSize,
+                preloadedFileName: widget.initialFileName,
+                preloadedFileSize: widget.initialFileSize,
                 preloadedFileCount: widget.initialFileCount,
               )
             : const HomeScreen(),
