@@ -181,7 +181,7 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
     _windowAckCompleter = null;
     _chunkAckCompleter = null;
     for (final c in _ackCompleters.values) {
-      if (!c.isCompleted) c.completeError('Transfer reset');
+      if (!c.isCompleted) c.completeError('Transfer stopped');
     }
     _ackCompleters.clear();
     _resetReceiveState();
@@ -205,19 +205,40 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
     _isCancelled = false;
     _inFlightChunks = 0;
 
+    // Wait for data channel to open (max 10 s)
+    int waitCounter = 0;
+    while (_webrtcClient.dataChannelState !=
+        RTCDataChannelState.RTCDataChannelOpen) {
+      if (_isCancelled) return;
+      if (waitCounter > 100) {
+        _progressController.addError(
+          'Timeout waiting for peer DataChannel to open',
+        );
+        haltTransfer();
+        return;
+      }
+      await Future.delayed(const Duration(milliseconds: 100));
+      waitCounter++;
+    }
+
+    // Give receiver 300 ms to attach listeners
+    await Future.delayed(const Duration(milliseconds: 300));
+
     // ── Detect actual WebRTC connection path ─────────────────────────────────
-    // We use WebRTC's own getStats() instead of connectivity_plus because:
-    //   • connectivity_plus only reports local network type (WiFi/mobile)
-    //   • It CANNOT detect if WebRTC chose TURN relay (e.g. AP Isolation on router)
-    //
-    // Candidate types:
-    //   'host'  → direct local network P2P → 2MB window → MAXIMUM speed
-    //   'srflx' → direct STUN P2P         → 2MB window → FAST
-    //   'relay' → TURN relay server        → 256KB pipeline → RELIABLE
-    //   'unknown' → fallback to connectivity_plus
+    // We use WebRTC's own getStats() instead of connectivity_plus.
+    // ICE often connects via 'relay' instantly but upgrades to 'host' (direct P2P)
+    // a second later. We poll up to 2 seconds to allow this upgrade to happen
+    // before locking in the mode.
     bool isMobile = false;
     try {
-      final candidateType = await _webrtcClient.getSelectedCandidateType();
+      String candidateType = 'unknown';
+      for (int i = 0; i < 5; i++) {
+        candidateType = await _webrtcClient.getSelectedCandidateType();
+        if (candidateType == 'host' || candidateType == 'srflx') {
+          break; // Upgraded to direct connection!
+        }
+        if (i < 4) await Future.delayed(const Duration(milliseconds: 400));
+      }
 
       if (candidateType == 'relay') {
         // TURN relay path: same protocol as mobile data mode
@@ -245,26 +266,6 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
         isMobile = false; // Last resort: assume WiFi mode
       }
     }
-
-
-    // Wait for data channel to open (max 10 s)
-    int waitCounter = 0;
-    while (_webrtcClient.dataChannelState !=
-        RTCDataChannelState.RTCDataChannelOpen) {
-      if (_isCancelled) return;
-      if (waitCounter > 100) {
-        _progressController.addError(
-          'Timeout waiting for peer DataChannel to open',
-        );
-        haltTransfer();
-        return;
-      }
-      await Future.delayed(const Duration(milliseconds: 100));
-      waitCounter++;
-    }
-
-    // Give receiver 300 ms to attach listeners
-    await Future.delayed(const Duration(milliseconds: 300));
 
     for (int i = 0; i < files.length; i++) {
       if (_isCancelled) break;
