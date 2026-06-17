@@ -84,7 +84,7 @@ class P2PFileShareApp extends StatefulWidget {
     this.initialFileSize,
     this.initialFileCount,
   });
-
+  
   @override
   State<P2PFileShareApp> createState() => _P2PFileShareAppState();
 }

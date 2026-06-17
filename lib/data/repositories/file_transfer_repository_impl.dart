@@ -29,9 +29,11 @@ const int _mobileChunkSize = 65536; // 64 KB
 /// Large window so ACK almost never blocks the sender on WiFi.
 const int _wifiWindowSize = 8388608; // 8 MB
 
-/// 1 MB window on TURN relay.
-/// Strict Window-and-Wait prevents relay buffer overflow.
-const int _mobileWindowSize = 1048576; // 1 MB
+/// 8 MB window on TURN relay — large enough that even at 11 KB/s the sender
+/// almost never blocks. Previously 1 MB caused a race: sender filled 1 MB
+/// locally in milliseconds, then waited 60 s for ACK, but receiver on a slow
+/// relay needed ~95 s to accumulate 1 MB → timeout fired first → stuck.
+const int _mobileWindowSize = 8388608; // 8 MB (same as WiFi — ACK is memory guard, not speed limiter)
 
 // ── bufferedAmount thresholds (real speed controller for Web) ────────────────
 /// Pause sending on Web when internal buffer exceeds 256 KB.
@@ -46,11 +48,15 @@ const int _resumeBufferedAmount = 65536; // 64 KB
 
 // ── Watchdog timeouts ────────────────────────────────────────────────────────
 /// Mobile/TURN relay has higher latency — give it more time before giving up.
-const Duration _mobileWatchdogTimeout = Duration(seconds: 60);
+/// 90 s: at 11 KB/s, a 64 KB chunk takes ~6 s. 90 s gives ~15 chunks of gap.
+const Duration _mobileWatchdogTimeout = Duration(seconds: 90);
 const Duration _wifiWatchdogTimeout = Duration(seconds: 15);
 
 // ── Window ACK timeouts ──────────────────────────────────────────────────────
-const Duration _mobileWindowTimeout = Duration(seconds: 60);
+/// 300 s (5 min): at 11 KB/s, filling an 8 MB window takes ~720 s, but the
+/// ACK is sent as soon as the receiver gets 8 MB. On a congested relay,
+/// allow plenty of time before declaring the receiver unresponsive.
+const Duration _mobileWindowTimeout = Duration(seconds: 300);
 const Duration _wifiWindowTimeout = Duration(seconds: 30);
 
 int _lastEmitTime = 0;
@@ -152,10 +158,18 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
   bool _isProcessingMsg = false;
 
   /// Receiver-side stall watchdog.
-  /// Restarted on every binary chunk arrival. If no chunk arrives within
-  /// the timeout while a transfer is active, the relay/connection is stuck
-  /// and we surface a clear error instead of hanging silently.
+  /// Restarted on every binary chunk arrival with an adaptive timeout
+  /// calculated from the measured receive speed:
+  ///   timeout = clamp(chunkSize / speed × 4, 20 s, 120 s)
+  /// At 10 KB/s → ~26 s. At 50 KB/s → ~20 s. Falls back to 90 s if unknown.
   Timer? _receiveWatchdog;
+
+  /// Exponentially smoothed receive speed (bytes/s). Updated per chunk.
+  /// Used to compute the adaptive watchdog timeout.
+  double _rxSmoothedSpeed = 0;
+
+  /// Timestamp (ms) of the previous binary chunk — used to measure interval.
+  int _lastRxChunkMs = 0;
 
   FileTransferRepositoryImpl(this._webrtcClient) {
     _webrtcClient.onDataMessage = _handleDataMessage;
@@ -243,10 +257,34 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
     _initQueue.clear();
     _receiveWatchdog?.cancel();
     _receiveWatchdog = null;
+    _rxSmoothedSpeed = 0;
+    _lastRxChunkMs = 0;
     // Drain the serial queue — any in-flight messages after cancel are irrelevant.
     _msgQueue.clear();
     // NOTE: _isProcessingMsg is intentionally NOT reset here.
     // If a message is mid-processing it will see _isCancelled=true and exit early.
+  }
+
+  /// Computes an adaptive watchdog duration based on measured receive speed.
+  ///
+  /// Logic:
+  ///   expected_chunk_interval = chunkSize / speed
+  ///   timeout = clamp(expected_interval × 4, 20 s, 120 s)
+  ///
+  /// Examples:
+  ///   10 KB/s  → 65536/10240 × 4 ≈ 25.6 s → 26 s
+  ///   50 KB/s  → 65536/51200 × 4 ≈  5.1 s → 20 s (floor)
+  ///   speed=0  → fallback: mobile=90 s, wifi=15 s
+  Duration _computeAdaptiveWatchdog() {
+    if (_rxSmoothedSpeed > 0) {
+      final expectedSec = _mobileChunkSize / _rxSmoothedSpeed;
+      final timeoutSec = (expectedSec * 4).clamp(20.0, 120.0);
+      return Duration(seconds: timeoutSec.round());
+    }
+    // No speed measured yet — use static fallback
+    return _remoteTransferMode == 'mobile'
+        ? _mobileWatchdogTimeout
+        : _wifiWatchdogTimeout;
   }
 
   // ── SENDER ────────────────────────────────────────────────────────────────
@@ -360,6 +398,11 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
       int bytesSent = 0;
       int bytesSinceLastAck = 0;
       int loopCount = 0;
+
+      // Sender-side speed tracking (for debug logging only).
+      // Helps diagnose if SCTP back-pressure is slowing us down.
+      int txLastLogBytes = 0;
+      int txLastLogMs = DateTime.now().millisecondsSinceEpoch;
 
       // Initialize the completer ONCE before the loop so early ACKs aren't dropped.
       // ack_window handler will create the NEXT completer — no race condition.
@@ -483,6 +526,16 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
           // Mobile এবং WiFi উভয়ের জন্য একই: প্রতি 8 chunk এ শুধু event loop yield
           if (loopCount % 8 == 0) {
             await Future.delayed(Duration.zero);
+            
+            // Calculate and log speed occasionally
+            final nowMs = DateTime.now().millisecondsSinceEpoch;
+            final elapsedMs = nowMs - txLastLogMs;
+            if (elapsedMs > 1000) { // Log at most once per second
+              final speedKbps = ((bytesSent - txLastLogBytes) / elapsedMs * 1000) / 1024;
+              debugPrint('🚀 [P2P-TX] Sender speed: ${speedKbps.toStringAsFixed(1)} KB/s');
+              txLastLogMs = nowMs;
+              txLastLogBytes = bytesSent;
+            }
           }
 
           _emitProgress(
@@ -579,21 +632,38 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
         return;
       }
 
-      // ── Receiver-side stall watchdog ──────────────────────────────────────
-      // Reset countdown on every chunk. Mobile/TURN gets more time (30s vs 15s)
-      // because TURN relay can have bursts of latency without actual stall.
+      // ── Adaptive receive watchdog ──────────────────────────────────────────
+      // Measure the real receive speed from the interval between chunks, then
+      // compute a watchdog timeout proportional to that speed:
+      //   timeout = clamp(chunkSize / speed × 4, 20 s, 120 s)
+      // This means a slow 10 KB/s link gets ~26 s, while a fast 1 MB/s link
+      // gets the 20 s floor. Unknown speed → static fallback (90 s / 15 s).
+      final nowMs = DateTime.now().millisecondsSinceEpoch;
+      if (_lastRxChunkMs > 0) {
+        final elapsedMs = nowMs - _lastRxChunkMs;
+        if (elapsedMs > 0) {
+          final instantSpeed = (message.binary.length / elapsedMs) * 1000; // bytes/s
+          // Exponential moving average: 30% new reading, 70% history
+          _rxSmoothedSpeed = _rxSmoothedSpeed == 0
+              ? instantSpeed
+              : 0.3 * instantSpeed + 0.7 * _rxSmoothedSpeed;
+        }
+      }
+      _lastRxChunkMs = nowMs;
+
       _receiveWatchdog?.cancel();
       if (_receivedBytes + message.binary.length < _receivingTotalSize) {
-        final watchdogDuration = _remoteTransferMode == 'mobile'
-            ? _mobileWatchdogTimeout // 30s for TURN relay
-            : _wifiWatchdogTimeout;  // 15s for direct P2P
+        final watchdogDuration = _computeAdaptiveWatchdog();
         _receiveWatchdog = Timer(watchdogDuration, () {
           if (!_isCancelled && !_progressController.isClosed) {
+            final speedKB = (_rxSmoothedSpeed / 1024).toStringAsFixed(1);
             debugPrint(
-              '⏰ [P2P-RX] No data for ${watchdogDuration.inSeconds}s — watchdog fired.',
+              '⏰ [P2P-RX] No data for ${watchdogDuration.inSeconds}s '
+              '(last speed: $speedKB KB/s) — adaptive watchdog fired.',
             );
             _progressController.addError(
-              'Data stopped arriving. The connection may be congested. Please try again.',
+              'No data received for ${watchdogDuration.inSeconds}s. '
+              'The connection appears to be lost. Please try again.',
             );
             haltTransfer();
           }

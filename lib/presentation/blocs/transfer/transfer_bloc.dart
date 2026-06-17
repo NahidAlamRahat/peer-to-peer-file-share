@@ -14,6 +14,19 @@ class TransferBloc extends Bloc<TransferEvent, TransferState> {
   int _lastBytes = 0;
   double _currentSpeed = 0;
 
+  // ── Stall detection ────────────────────────────────────────────────────────────
+  /// Fires when no progress event is received for 10 seconds.
+  /// Sets isStalled=true so the UI can show a "slow connection" warning.
+  Timer? _stallTimer;
+  bool _isStalled = false;
+  static const _stallThreshold = Duration(seconds: 10);
+
+  // ── Dead timer (auto-cancel on zero data) ────────────────────────────────
+  /// Starts when stall is detected. If STILL stalled after 120 s (0 KB/s
+  /// for 2 minutes total) → auto-cancel with a clear error message.
+  Timer? _deadTimer;
+  static const _deadThreshold = Duration(seconds: 120);
+
   TransferBloc({required this.fileTransferRepository})
     : super(TransferInitial()) {
     on<SendFilesEvent>(_onSendFiles);
@@ -88,8 +101,7 @@ class TransferBloc extends Bloc<TransferEvent, TransferState> {
     TransferProgressEvent event,
     Emitter<TransferState> emit,
   ) {
-    // If cancelled or any terminal state already set, silently drop progress — do NOT emit TransferInitial.
-    // Emitting TransferInitial here was causing the false 'Verifying Connection...' screen flash.
+    // If cancelled or any terminal state already set, silently drop progress.
     if (fileTransferRepository.isCancelled) return;
     if (state is TransferSuccess || state is TransferCancelledByPeer || state is TransferFailure) return;
 
@@ -107,6 +119,65 @@ class TransferBloc extends Bloc<TransferEvent, TransferState> {
       _lastBytes = event.bytesTransferred;
     }
 
+    // ── Stall detection: reset timer on every progress tick ───────────────────
+    _stallTimer?.cancel();
+    if (event.bytesTransferred < event.totalSize) {
+      // ✅ Progress resumed — clear stall + dead state immediately.
+      // Without this, _isStalled stays true even when data is flowing (e.g. 1 KB/s
+      // sends a chunk every 64s), causing the dead timer to fire a false auto-cancel.
+      if (_isStalled) {
+        _isStalled = false;
+        _deadTimer?.cancel();
+        _deadTimer = null;
+      }
+
+      // Start fresh 10s stall timer. If no progress for 10s → stalled.
+      _stallTimer = Timer(_stallThreshold, () {
+        if (state is! TransferInProgress) return;
+        _isStalled = true;
+
+        // ── Dead timer: if stall persists 120s (no data at all for 2 min) ──
+        // Only start if not already running from a previous stall cycle.
+        _deadTimer ??= Timer(_deadThreshold, () {
+          _deadTimer = null;
+          if (_isStalled && state is TransferInProgress && !isClosed) {
+            add(const TransferErrorEvent(
+              'No data received for 2 minutes. The connection is lost. Please try again.',
+            ));
+          }
+        });
+
+        // Re-emit with isStalled=true so UI updates immediately.
+        final s = state as TransferInProgress;
+        if (!isClosed) {
+          add(TransferProgressEvent(
+            fileId: s.fileId,
+            fileName: s.fileName,
+            totalSize: s.totalSize,
+            bytesTransferred: s.bytesTransferred,
+            fileIndex: s.fileIndex,
+            totalFiles: s.totalFiles,
+          ));
+        }
+      });
+    } else {
+      // 100% — clear all stall + dead state
+      _isStalled = false;
+      _stallTimer?.cancel();
+      _stallTimer = null;
+      _deadTimer?.cancel();
+      _deadTimer = null;
+    }
+
+    // ── ETA calculation ────────────────────────────────────────────────────────
+    // Only show ETA when data is actively flowing (not stalled).
+    // When stalled, _currentSpeed is stale — showing it would mislead the user.
+    final bytesRemaining = event.totalSize - event.bytesTransferred;
+    int? eta;
+    if (!_isStalled && _currentSpeed > 0 && bytesRemaining > 0) {
+      eta = (bytesRemaining / _currentSpeed).round();
+    }
+
     emit(
       TransferInProgress(
         fileId: event.fileId,
@@ -116,6 +187,8 @@ class TransferBloc extends Bloc<TransferEvent, TransferState> {
         transferSpeed: _currentSpeed,
         fileIndex: event.fileIndex,
         totalFiles: event.totalFiles,
+        isStalled: _isStalled,
+        estimatedSecondsLeft: eta,
       ),
     );
   }
@@ -147,17 +220,18 @@ class TransferBloc extends Bloc<TransferEvent, TransferState> {
   ) {
     try {
       fileTransferRepository.cancelTransfer(myRole: event.myRole);
-      // DO NOT call resetTransferState() here! It will synchronously clear the isCancelled flag 
-      // and allow suspended async tasks to resume and emit progress.
     } catch (e) {
       debugPrint('Error during cancel: $e');
     }
-    // Reset speed counters
+    // Reset speed + stall + dead counters
     _lastUpdate = null;
     _lastBytes = 0;
     _currentSpeed = 0;
-    // DO NOT emit TransferInitial here — it causes a visible 'Verifying Connection...' flash
-    // for 600ms before navigation. Navigation handles the screen transition.
+    _isStalled = false;
+    _stallTimer?.cancel();
+    _stallTimer = null;
+    _deadTimer?.cancel();
+    _deadTimer = null;
   }
 
   void _onPeerCancelled(PeerCancelledEvent event, Emitter<TransferState> emit) {
@@ -188,6 +262,11 @@ class TransferBloc extends Bloc<TransferEvent, TransferState> {
     _lastUpdate = null;
     _lastBytes = 0;
     _currentSpeed = 0;
+    _isStalled = false;
+    _stallTimer?.cancel();
+    _stallTimer = null;
+    _deadTimer?.cancel();
+    _deadTimer = null;
     emit(TransferInitial());
   }
 
@@ -218,6 +297,10 @@ class TransferBloc extends Bloc<TransferEvent, TransferState> {
     fileTransferRepository.onIncognitoDetected = null;
     _progressSubscription?.cancel();
     _fileReceivedSubscription?.cancel();
+    _stallTimer?.cancel();
+    _stallTimer = null;
+    _deadTimer?.cancel();
+    _deadTimer = null;
     return super.close();
   }
 }

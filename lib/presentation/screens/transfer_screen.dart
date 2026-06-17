@@ -470,10 +470,24 @@ class _TransferScreenState extends State<TransferScreen> {
                     speedText,
                     style: TextStyle(
                       fontSize: AppSizes.textSmall,
-                      color: Theme.of(context).colorScheme.primary,
+                      color: state.isStalled
+                          ? Colors.orange
+                          : Theme.of(context).colorScheme.primary,
                       fontWeight: FontWeight.bold,
                     ),
                   ),
+                  // ETA display
+                  if (state.estimatedSecondsLeft != null && state.estimatedSecondsLeft! > 0) ...
+                    [
+                      const SizedBox(height: 2),
+                      Text(
+                        _formatEta(state.estimatedSecondsLeft!),
+                        style: TextStyle(
+                          fontSize: 9,
+                          color: Colors.grey.shade500,
+                        ),
+                      ),
+                    ],
                 ],
               ),
             ],
@@ -523,6 +537,13 @@ class _TransferScreenState extends State<TransferScreen> {
             },
           ),
           AppSpacing.gapH24,
+          // ── Stall warning banner ──────────────────────────────────────────
+          // Shown when no progress for 10+ seconds. Reassures the user the
+          // transfer is still active — just slow via TURN relay.
+          if (state.isStalled) ...[  
+            _StallWarningBanner(),
+            AppSpacing.gapH8,
+          ],
           Container(
             padding: EdgeInsets.symmetric(
               horizontal: AppSizes.p16,
@@ -960,4 +981,98 @@ class _TransferScreenState extends State<TransferScreen> {
       ],
     );
   }
+
+  /// Formats seconds into a human-readable ETA string.
+  /// e.g. 65 → "~1 min 5 s left", 3600 → "~1 hr left"
+  String _formatEta(int seconds) {
+    if (seconds >= 3600) {
+      final h = seconds ~/ 3600;
+      final m = (seconds % 3600) ~/ 60;
+      return m > 0 ? '~$h hr $m min left' : '~$h hr left';
+    } else if (seconds >= 60) {
+      final m = seconds ~/ 60;
+      final s = seconds % 60;
+      return s > 0 ? '~$m min $s s left' : '~$m min left';
+    } else {
+      return '~$seconds s left';
+    }
+  }
 }
+
+// ────────────────────────────────────────────────────────────────────────────
+/// Animated banner shown when transfer progress hasn't changed for 10 seconds.
+/// A gentle pulse animation tells the user the app is alive and waiting for
+/// the TURN relay to deliver more data — so they don't think it crashed.
+// ────────────────────────────────────────────────────────────────────────────
+class _StallWarningBanner extends StatefulWidget {
+  const _StallWarningBanner();
+
+  @override
+  State<_StallWarningBanner> createState() => _StallWarningBannerState();
+}
+
+class _StallWarningBannerState extends State<_StallWarningBanner>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _pulse;
+  late final Animation<double> _opacity;
+
+  @override
+  void initState() {
+    super.initState();
+    _pulse = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1200),
+    )..repeat(reverse: true);
+    _opacity = Tween<double>(begin: 0.6, end: 1.0).animate(
+      CurvedAnimation(parent: _pulse, curve: Curves.easeInOut),
+    );
+  }
+
+  @override
+  void dispose() {
+    _pulse.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FadeTransition(
+      opacity: _opacity,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        decoration: BoxDecoration(
+          color: Colors.deepOrange.withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: Colors.deepOrange.withValues(alpha: 0.35),
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const SizedBox(
+              width: 14,
+              height: 14,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                color: Colors.deepOrange,
+              ),
+            ),
+            const SizedBox(width: 8),
+            Flexible(
+              child: Text(
+                'Relay is slow — transfer is still active, please wait…',
+                style: TextStyle(
+                  color: Colors.deepOrange.shade700,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
