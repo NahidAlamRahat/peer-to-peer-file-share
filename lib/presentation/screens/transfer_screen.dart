@@ -289,21 +289,10 @@ class _TransferScreenState extends State<TransferScreen> {
                 _stopBackgroundExecution();
                 _notifications.showTransferFailed(reason: state.message);
               } else if (state is TransferCancelledBySelf) {
-                // Receiver cancelled from browser's native download bar — go home silently
+                // Receiver cancelled from browser's native download bar
                 WakelockPlus.disable();
                 _stopBackgroundExecution();
-                if (context.mounted) {
-                  final tBloc = context.read<TransferBloc>();
-                  final cBloc = context.read<ConnectionBloc>();
-                  Navigator.of(context).pushAndRemoveUntil(
-                    MaterialPageRoute(builder: (_) => const HomeScreen()),
-                    (route) => false,
-                  );
-                  Future.delayed(const Duration(milliseconds: 400), () {
-                    tBloc.add(ResetTransferEvent());
-                    cBloc.add(ResetConnectionEvent());
-                  });
-                }
+                _notifications.showTransferFailed(reason: 'Download was cancelled from the browser.');
               } else if (state is TransferIncognitoError) {
                 // Incognito mode detected — show an unmissable dialog
                 WakelockPlus.disable();
@@ -851,8 +840,12 @@ class _TransferScreenState extends State<TransferScreen> {
           ),
         ],
       );
-    } else if (state is TransferCancelledByPeer) {
-      // Peer cancelled — show message. No notification button needed (notification already shown).
+    } else if (state is TransferCancelledByPeer || state is TransferCancelledBySelf) {
+      final message = state is TransferCancelledByPeer 
+          ? state.message 
+          : 'Download was cancelled from the browser.';
+      
+      // Peer or self cancelled — show message. No notification button needed (notification already shown).
       return Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
@@ -871,7 +864,7 @@ class _TransferScreenState extends State<TransferScreen> {
           ),
           AppSpacing.gapH16,
           Text(
-            state.message,
+            message,
             style: const TextStyle(color: Colors.orange, fontSize: 16),
             textAlign: TextAlign.center,
           ),

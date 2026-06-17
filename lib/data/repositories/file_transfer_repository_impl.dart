@@ -480,6 +480,10 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
             // ✅ Full reset — no boundary mismatch bugs from subtract approach
             bytesSinceLastAck = 0;
 
+            // ✅ Create the new completer for the NEXT window AFTER awaiting.
+            //    This guarantees we don't drop an early ACK while yielding.
+            _windowAckCompleter = Completer<void>();
+
             // Double-check channel after awaiting
             if (_webrtcClient.dataChannelState !=
                 RTCDataChannelState.RTCDataChannelOpen) {
@@ -813,16 +817,14 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
 
           case 'ack_window':
             // Window ACK — unblock sender's Guard 2 (memory safety check).
-            // ✅ Complete existing completer FIRST, then create new one here.
-            //    This eliminates the race condition where sender creates the
-            //    next completer AFTER the handler fires (missed signal).
             if (_windowAckCompleter != null &&
                 !_windowAckCompleter!.isCompleted) {
               _windowAckCompleter!.complete();
             }
-            // ✅ New completer is created HERE in the handler — not in the sender loop.
-            //    Sender loop just awaits the existing one; no race possible.
-            _windowAckCompleter = Completer<void>();
+            // ✅ DO NOT recreate the completer here! The sender loop will recreate it
+            //    after it unblocks. Recreating it here caused a race condition where
+            //    an early ACK would recreate the completer BEFORE the sender loop
+            //    awaited it, causing the sender to await the NEW pending completer and deadlock.
             break;
 
           case 'cancel':

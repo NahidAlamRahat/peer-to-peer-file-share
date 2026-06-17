@@ -13,6 +13,7 @@ class TransferBloc extends Bloc<TransferEvent, TransferState> {
   DateTime? _lastUpdate;
   int _lastBytes = 0;
   double _currentSpeed = 0;
+  bool _isManuallyCancelled = false;
 
   // ── Stall detection ────────────────────────────────────────────────────────────
   /// Fires when no progress event is received for 10 seconds.
@@ -201,7 +202,7 @@ class TransferBloc extends Bloc<TransferEvent, TransferState> {
   }
 
   void _onTransferError(TransferErrorEvent event, Emitter<TransferState> emit) {
-    if (fileTransferRepository.isCancelled) return; // cancelled by us — silent
+    if (_isManuallyCancelled) return; // internally cancelled — silent
     if (state is TransferSuccess || state is TransferCancelledByPeer || state is TransferFailure) return;
     
     // Use haltTransfer() (NOT cancelTransfer) to stop background loops.
@@ -218,6 +219,7 @@ class TransferBloc extends Bloc<TransferEvent, TransferState> {
     CancelTransferEvent event,
     Emitter<TransferState> emit,
   ) {
+    _isManuallyCancelled = true;
     try {
       fileTransferRepository.cancelTransfer(myRole: event.myRole);
     } catch (e) {
@@ -267,6 +269,7 @@ class TransferBloc extends Bloc<TransferEvent, TransferState> {
     _stallTimer = null;
     _deadTimer?.cancel();
     _deadTimer = null;
+    _isManuallyCancelled = false;
     emit(TransferInitial());
   }
 
@@ -274,6 +277,7 @@ class TransferBloc extends Bloc<TransferEvent, TransferState> {
     SelfCancelledFromBrowserEvent event,
     Emitter<TransferState> emit,
   ) {
+    _isManuallyCancelled = true;
     _lastUpdate = null;
     _lastBytes = 0;
     _currentSpeed = 0;
