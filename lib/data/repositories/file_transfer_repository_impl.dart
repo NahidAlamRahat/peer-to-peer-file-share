@@ -49,8 +49,8 @@ const int _resumeBufferedAmount = 65536; // 64 KB
 // ── Watchdog timeouts ────────────────────────────────────────────────────────
 /// Mobile/TURN relay has higher latency — give it more time before giving up.
 /// 90 s: at 11 KB/s, a 64 KB chunk takes ~6 s. 90 s gives ~15 chunks of gap.
-const Duration _mobileWatchdogTimeout = Duration(seconds: 90);
-const Duration _wifiWatchdogTimeout = Duration(seconds: 15);
+const Duration _mobileWatchdogTimeout = Duration(seconds: 120);
+const Duration _wifiWatchdogTimeout = Duration(seconds: 60);
 
 // ── Window ACK timeouts ──────────────────────────────────────────────────────
 /// 300 s (5 min): at 11 KB/s, filling an 8 MB window takes ~720 s, but the
@@ -265,23 +265,7 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
     // If a message is mid-processing it will see _isCancelled=true and exit early.
   }
 
-  /// Computes an adaptive watchdog duration based on measured receive speed.
-  ///
-  /// Logic:
-  ///   expected_chunk_interval = chunkSize / speed
-  ///   timeout = clamp(expected_interval × 4, 20 s, 120 s)
-  ///
-  /// Examples:
-  ///   10 KB/s  → 65536/10240 × 4 ≈ 25.6 s → 26 s
-  ///   50 KB/s  → 65536/51200 × 4 ≈  5.1 s → 20 s (floor)
-  ///   speed=0  → fallback: mobile=90 s, wifi=15 s
   Duration _computeAdaptiveWatchdog() {
-    if (_rxSmoothedSpeed > 0) {
-      final expectedSec = _mobileChunkSize / _rxSmoothedSpeed;
-      final timeoutSec = (expectedSec * 4).clamp(20.0, 120.0);
-      return Duration(seconds: timeoutSec.round());
-    }
-    // No speed measured yet — use static fallback
     return _remoteTransferMode == 'mobile'
         ? _mobileWatchdogTimeout
         : _wifiWatchdogTimeout;

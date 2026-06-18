@@ -8,39 +8,28 @@ class WebRTCClient {
 
   // Configuration for WebRTC with robust NAT traversal (Global STUN + TURN)
   // TURN servers are required for mobile data (Symmetric NAT) connections.
-  // Using personal metered.ca TURN credentials (20GB/month free)
+  // Using ExpressTURN free TURN server credentials
   final Map<String, dynamic> _configuration = {
     'iceServers': [
       // STUN servers (works on WiFi & simple NAT)
       {'urls': 'stun:stun.l.google.com:19302'},
       {'urls': 'stun:stun1.l.google.com:19302'},
       // TURN servers — required for mobile data (Symmetric NAT / 4G)
-      // Personal metered.ca credentials — 20 GB/month free
+      // ExpressTURN credentials — free tier
       //
       // ORDER MATTERS: WebRTC tries candidates top-to-bottom.
-      // TCP TURN (port 443) listed first because:
+      // TCP listed first because:
       //   • Mobile carriers often block/throttle UDP
       //   • TCP is more reliable on congested 4G networks
-      //   • Port 443 passes through most firewalls (HTTPS port)
       {
-        'urls': 'turns:a.relay.metered.ca:443',  // TCP+TLS — most reliable on mobile
-        'username': 'a5eaa03ef3aef5dd7dbd66c9',
-        'credential': 'QwG/QE1Gg4K2UfRz',
+        'urls': 'turn:free.expressturn.com:3478?transport=tcp',  // TCP — reliable on mobile
+        'username': '000000002097160514',
+        'credential': 'KCpw2nCpdk4icI0EcwEPujIJpJ0=',
       },
       {
-        'urls': 'turn:a.relay.metered.ca:443',    // TCP — fallback
-        'username': 'a5eaa03ef3aef5dd7dbd66c9',
-        'credential': 'QwG/QE1Gg4K2UfRz',
-      },
-      {
-        'urls': 'turn:a.relay.metered.ca:80?transport=tcp',
-        'username': 'a5eaa03ef3aef5dd7dbd66c9',
-        'credential': 'QwG/QE1Gg4K2UfRz',
-      },
-      {
-        'urls': 'turn:a.relay.metered.ca:80',     // UDP — fastest but less reliable on 4G
-        'username': 'a5eaa03ef3aef5dd7dbd66c9',
-        'credential': 'QwG/QE1Gg4K2UfRz',
+        'urls': 'turn:free.expressturn.com:3478',  // UDP — faster when available
+        'username': '000000002097160514',
+        'credential': 'KCpw2nCpdk4icI0EcwEPujIJpJ0=',
       },
     ],
     'sdpSemantics': 'unified-plan',

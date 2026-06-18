@@ -1008,6 +1008,8 @@ class _StallWarningBannerState extends State<_StallWarningBanner>
     with SingleTickerProviderStateMixin {
   late final AnimationController _pulse;
   late final Animation<double> _opacity;
+  int _secondsRemaining = 110; // stall detected after 10s, total timeout is 120s
+  Timer? _countdownTimer;
 
   @override
   void initState() {
@@ -1019,10 +1021,19 @@ class _StallWarningBannerState extends State<_StallWarningBanner>
     _opacity = Tween<double>(begin: 0.6, end: 1.0).animate(
       CurvedAnimation(parent: _pulse, curve: Curves.easeInOut),
     );
+    
+    _countdownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (mounted) {
+        setState(() {
+          if (_secondsRemaining > 0) _secondsRemaining--;
+        });
+      }
+    });
   }
 
   @override
   void dispose() {
+    _countdownTimer?.cancel();
     _pulse.dispose();
     super.dispose();
   }
@@ -1054,7 +1065,7 @@ class _StallWarningBannerState extends State<_StallWarningBanner>
             const SizedBox(width: 8),
             Flexible(
               child: Text(
-                'Relay is slow — transfer is still active, please wait…',
+                'Relay is slow — waiting for data ($_secondsRemaining s)',
                 style: TextStyle(
                   color: Colors.deepOrange.shade700,
                   fontSize: 12,
