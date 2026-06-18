@@ -510,12 +510,21 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
           offset = sliceEnd;
           loopCount++;
 
-          // ── Timing: Mobile & WiFi → event loop yield every 8 chunks ──
-          // Mobile এবং WiFi উভয়ের জন্য একই: প্রতি 8 chunk এ শুধু event loop yield
-          if (loopCount % 8 == 0) {
+          // ── Timing & Throttling ─────────────────────────────────────────
+          if (isMobile) {
+            // Mobile (TURN relay) needs breathing room.
+            // Yielding 2ms per chunk (64KB) prevents SCTP congestion control from
+            // aggressively throttling the connection due to buffer overflow.
+            // This ensures data goes "aste aste" (gradually) and smooth.
+            await Future.delayed(const Duration(milliseconds: 2));
+          } else if (loopCount % 8 == 0) {
+            // WiFi / Direct P2P can handle blasting, but we must yield the 
+            // event loop occasionally so the UI doesn't freeze.
             await Future.delayed(Duration.zero);
-            
-            // Calculate and log speed occasionally
+          }
+
+          // Calculate and log speed occasionally
+          if (loopCount % 8 == 0 || isMobile) {
             final nowMs = DateTime.now().millisecondsSinceEpoch;
             final elapsedMs = nowMs - txLastLogMs;
             if (elapsedMs > 1000) { // Log at most once per second
