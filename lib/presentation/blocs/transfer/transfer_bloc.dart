@@ -28,6 +28,12 @@ class TransferBloc extends Bloc<TransferEvent, TransferState> {
   Timer? _deadTimer;
   static const _deadThreshold = Duration(seconds: 120);
 
+  // ── Last bytes at which stall was detected ─────────────────────────────────
+  // Used to distinguish a real progress event from the stall timer's own
+  // re-emit (which carries the same byte count). Without this, the re-emit
+  // immediately clears _isStalled and the banner never shows.
+  int _stalledAtBytes = -1;
+
   TransferBloc({required this.fileTransferRepository})
     : super(TransferInitial()) {
     on<SendFilesEvent>(_onSendFiles);
@@ -123,11 +129,13 @@ class TransferBloc extends Bloc<TransferEvent, TransferState> {
     // ── Stall detection: reset timer on every progress tick ───────────────────
     _stallTimer?.cancel();
     if (event.bytesTransferred < event.totalSize) {
-      // ✅ Progress resumed — clear stall + dead state immediately.
-      // Without this, _isStalled stays true even when data is flowing (e.g. 1 KB/s
-      // sends a chunk every 64s), causing the dead timer to fire a false auto-cancel.
-      if (_isStalled) {
+      // ✅ Progress resumed — clear stall ONLY if bytes actually increased.
+      // The stall timer re-emits with the same byte count to update isStalled in UI.
+      // Without this check, that re-emit immediately clears _isStalled and the
+      // stall banner never appears on screen.
+      if (_isStalled && event.bytesTransferred > _stalledAtBytes) {
         _isStalled = false;
+        _stalledAtBytes = -1;
         _deadTimer?.cancel();
         _deadTimer = null;
       }
@@ -136,6 +144,7 @@ class TransferBloc extends Bloc<TransferEvent, TransferState> {
       _stallTimer = Timer(_stallThreshold, () {
         if (state is! TransferInProgress) return;
         _isStalled = true;
+        _stalledAtBytes = (state as TransferInProgress).bytesTransferred;
 
         // ── Dead timer: if stall persists 120s (no data at all for 2 min) ──
         // Only start if not already running from a previous stall cycle.
@@ -164,6 +173,7 @@ class TransferBloc extends Bloc<TransferEvent, TransferState> {
     } else {
       // 100% — clear all stall + dead state
       _isStalled = false;
+      _stalledAtBytes = -1;
       _stallTimer?.cancel();
       _stallTimer = null;
       _deadTimer?.cancel();
@@ -265,6 +275,7 @@ class TransferBloc extends Bloc<TransferEvent, TransferState> {
     _lastBytes = 0;
     _currentSpeed = 0;
     _isStalled = false;
+    _stalledAtBytes = -1;
     _stallTimer?.cancel();
     _stallTimer = null;
     _deadTimer?.cancel();

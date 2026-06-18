@@ -57,7 +57,7 @@ const Duration _wifiWatchdogTimeout = Duration(seconds: 60);
 /// ACK is sent as soon as the receiver gets 8 MB. On a congested relay,
 /// allow plenty of time before declaring the receiver unresponsive.
 const Duration _mobileWindowTimeout = Duration(seconds: 300);
-const Duration _wifiWindowTimeout = Duration(seconds: 30);
+const Duration _wifiWindowTimeout = Duration(seconds: 300); // same as mobile — receiver may be slow even on WiFi via TURN relay
 
 int _lastEmitTime = 0;
 
