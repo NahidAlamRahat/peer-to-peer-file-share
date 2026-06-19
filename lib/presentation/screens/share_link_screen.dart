@@ -166,7 +166,7 @@ class _ShareLinkScreenState extends State<ShareLinkScreen> {
 
           if (shouldPop && context.mounted) {
             if (_isPicking || _selectedFiles.isNotEmpty) {
-              FilePicker.platform.clearTemporaryFiles();
+              FilePicker.clearTemporaryFiles();
             }
             context.read<ConnectionBloc>().add(ResetConnectionEvent());
             Navigator.of(context).pop();
