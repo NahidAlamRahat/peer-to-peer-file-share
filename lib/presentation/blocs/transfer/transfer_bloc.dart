@@ -113,7 +113,9 @@ class TransferBloc extends Bloc<TransferEvent, TransferState> {
 
     // ── Slow Network detection ──────────────────────────────────
     _slowNetworkTimer?.cancel();
-    _isNetworkSlow = false;
+    
+    // Set to true if speed is greater than 0 but less than 10 KB/s
+    _isNetworkSlow = (_currentSpeed > 0 && _currentSpeed < 10240);
     
     if (event.bytesTransferred < event.totalSize) {
       _slowNetworkTimer = Timer(const Duration(seconds: 3), () {
