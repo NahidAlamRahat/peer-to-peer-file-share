@@ -480,21 +480,16 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
             }
           }
 
-          // ── Guard 3: bufferedAmount backpressure (Web only — real speed control) ──
-          // flutter_webrtc's bufferedAmount is reliable in browsers but NOT on
-          // native Flutter mobile. So we only use it on Web where it matters.
-          // This prevents browser tab crash from WebRTC internal buffer overflow.
-          if (kIsWeb) {
-            final buffered = _webrtcClient.bufferedAmount;
-            if (buffered > _maxBufferedAmount) {
-              // Buffer is full — yield 5ms without advancing offset.
-              // This is a soft spin: we keep checking until buffer drains.
-              debugPrint(
-                '🐢 [P2P-Web] bufferedAmount ${buffered ~/ 1024} KB > ${_maxBufferedAmount ~/ 1024} KB — yielding 5ms',
-              );
-              await Future.delayed(const Duration(milliseconds: 5));
-              continue; // Re-check all guards without advancing
-            }
+          // ── Guard 3: bufferedAmount backpressure (Real speed control) ──
+          // This prevents the WebRTC internal buffer from overflowing and ensures 
+          // the sender's progress bar stays in sync with the actual network speed, 
+          // instead of instantly jumping to 8MB and causing fake stall warnings.
+          final buffered = _webrtcClient.bufferedAmount ?? 0;
+          if (buffered > 1048576) { // 1 MB buffer limit
+            // Buffer is full — yield 5ms without advancing offset.
+            // This is a soft spin: we keep checking until buffer drains.
+            await Future.delayed(const Duration(milliseconds: 5));
+            continue; // Re-check all guards without advancing
           }
 
           if (_isCancelled) return;
@@ -511,20 +506,13 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
           loopCount++;
 
           // ── Timing & Throttling ─────────────────────────────────────────
-          if (isMobile) {
-            // Mobile (TURN relay) needs breathing room.
-            // Yielding 2ms per chunk (64KB) prevents SCTP congestion control from
-            // aggressively throttling the connection due to buffer overflow.
-            // This ensures data goes "aste aste" (gradually) and smooth.
-            await Future.delayed(const Duration(milliseconds: 2));
-          } else if (loopCount % 8 == 0) {
-            // WiFi / Direct P2P can handle blasting, but we must yield the 
-            // event loop occasionally so the UI doesn't freeze.
-            await Future.delayed(Duration.zero);
-          }
+          // Yielding 2ms per chunk (64KB) prevents SCTP congestion control from
+          // aggressively throttling the connection due to buffer overflow.
+          // We apply this for BOTH Mobile and WiFi so the UI doesn't "jump" instantly.
+          await Future.delayed(const Duration(milliseconds: 2));
 
           // Calculate and log speed occasionally
-          if (loopCount % 8 == 0 || isMobile) {
+          if (loopCount % 8 == 0) {
             final nowMs = DateTime.now().millisecondsSinceEpoch;
             final elapsedMs = nowMs - txLastLogMs;
             if (elapsedMs > 1000) { // Log at most once per second
