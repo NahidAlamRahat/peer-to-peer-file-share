@@ -132,20 +132,23 @@ class _ShareLinkScreenState extends State<ShareLinkScreen> {
       onPopInvokedWithResult: (didPop, result) async {
         if (didPop) return;
 
-        // Only warn if a session is active (files selected + session created/connected)
         final state = context.read<ConnectionBloc>().state;
+        
+        final isGeneratingLink = _isPicking || state is ConnectionLoading || state is ConnectionProgress;
+        // Only warn if a session is active (files selected + session created/connected)
         final isSessionActive = _selectedFiles.isNotEmpty &&
             (state is ConnectionCreated ||
                 state is ConnectionConnected ||
                 state is ConnectionMessageReceived);
 
-        if (isSessionActive) {
+        if (isSessionActive || isGeneratingLink) {
           final shouldPop = await showDialog<bool>(
             context: context,
             builder: (context) => AlertDialog(
               title: const Text('Cancel Session?'),
-              content: const Text(
-                  'If you go back now, the session will end and the receiver will not be able to connect. Are you sure?'),
+              content: Text(isGeneratingLink
+                  ? 'Process is in progress. If you go back now, it will be canceled and you will need to select the file again. Are you sure?'
+                  : 'If you go back now, the session will end and the receiver will not be able to connect. Are you sure?'),
               actions: [
                 TextButton(
                   onPressed: () => Navigator.of(context).pop(false),
@@ -162,6 +165,9 @@ class _ShareLinkScreenState extends State<ShareLinkScreen> {
           ) ?? false;
 
           if (shouldPop && context.mounted) {
+            if (_isPicking || _selectedFiles.isNotEmpty) {
+              FilePicker.platform.clearTemporaryFiles();
+            }
             context.read<ConnectionBloc>().add(ResetConnectionEvent());
             Navigator.of(context).pop();
           }
@@ -276,7 +282,7 @@ class _ShareLinkScreenState extends State<ShareLinkScreen> {
                   const CircularProgressIndicator(),
                   AppSpacing.gapH24,
                   Text(
-                    'Generating link...',
+                    'Preparing file...\nPlease wait, this may take a moment for large files.',
                     style: TextStyle(
                       fontSize: AppSizes.textBody,
                       fontWeight: FontWeight.w500,
