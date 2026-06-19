@@ -201,8 +201,6 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
       debugPrint('Failed to send cancel message to peer: $e');
     }
     _unblockSender();
-    _receiveWatchdog?.cancel();
-    _receiveWatchdog = null;
     _fileSaver?.discard();
     _fileSaver = null;
   }
@@ -211,8 +209,6 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
   void haltTransfer() {
     _isCancelled = true;
     _unblockSender();
-    _receiveWatchdog?.cancel();
-    _receiveWatchdog = null;
     _fileSaver?.discard();
     _fileSaver = null;
   }
@@ -450,7 +446,7 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
             try {
               // Wait for receiver to send 'ack_window' — ack_window handler
               // creates the NEXT completer, so no race condition here.
-              await _windowAckCompleter!.future.timeout(drainTimeout);
+              await _windowAckCompleter!.future;
             } catch (e) {
               if (!_isCancelled) {
                 _progressController.addError(
@@ -617,43 +613,7 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
         return;
       }
 
-      // ── Adaptive receive watchdog ──────────────────────────────────────────
-      // Measure the real receive speed from the interval between chunks, then
-      // compute a watchdog timeout proportional to that speed:
-      //   timeout = clamp(chunkSize / speed × 4, 20 s, 120 s)
-      // This means a slow 10 KB/s link gets ~26 s, while a fast 1 MB/s link
-      // gets the 20 s floor. Unknown speed → static fallback (90 s / 15 s).
-      final nowMs = DateTime.now().millisecondsSinceEpoch;
-      if (_lastRxChunkMs > 0) {
-        final elapsedMs = nowMs - _lastRxChunkMs;
-        if (elapsedMs > 0) {
-          final instantSpeed = (message.binary.length / elapsedMs) * 1000; // bytes/s
-          // Exponential moving average: 30% new reading, 70% history
-          _rxSmoothedSpeed = _rxSmoothedSpeed == 0
-              ? instantSpeed
-              : 0.3 * instantSpeed + 0.7 * _rxSmoothedSpeed;
-        }
-      }
-      _lastRxChunkMs = nowMs;
 
-      _receiveWatchdog?.cancel();
-      if (_receivedBytes + message.binary.length < _receivingTotalSize) {
-        final watchdogDuration = _computeAdaptiveWatchdog();
-        _receiveWatchdog = Timer(watchdogDuration, () {
-          if (!_isCancelled && !_progressController.isClosed) {
-            final speedKB = (_rxSmoothedSpeed / 1024).toStringAsFixed(1);
-            debugPrint(
-              '⏰ [P2P-RX] No data for ${watchdogDuration.inSeconds}s '
-              '(last speed: $speedKB KB/s) — adaptive watchdog fired.',
-            );
-            _progressController.addError(
-              'No data received for ${watchdogDuration.inSeconds}s. '
-              'The connection appears to be lost. Please try again.',
-            );
-            haltTransfer();
-          }
-        });
-      }
 
       // Binary chunk — write to file saver
       _fileSaver?.addChunk(message.binary);

@@ -18,9 +18,9 @@ class TransferInProgress extends TransferState {
   final int fileIndex;
   final int totalFiles;
 
-  /// True when no progress has been made for 10+ seconds.
-  /// Used to show a "transfer is slow" warning in the UI.
-  final bool isStalled;
+  /// True when the network is very slow (speed ~0 for >3s).
+  /// Used to show a "network slow" warning in the UI.
+  final bool isNetworkSlow;
 
   /// Estimated seconds remaining based on current speed.
   /// Null when speed is 0 or transfer is complete.
@@ -34,14 +34,14 @@ class TransferInProgress extends TransferState {
     required this.transferSpeed,
     required this.fileIndex,
     required this.totalFiles,
-    this.isStalled = false,
+    this.isNetworkSlow = false,
     this.estimatedSecondsLeft,
   });
 
   double get progress => totalSize == 0 ? 0 : bytesTransferred / totalSize;
 
   @override
-  List<Object?> get props => [fileId, fileName, totalSize, bytesTransferred, transferSpeed, fileIndex, totalFiles, isStalled, estimatedSecondsLeft];
+  List<Object?> get props => [fileId, fileName, totalSize, bytesTransferred, transferSpeed, fileIndex, totalFiles, isNetworkSlow, estimatedSecondsLeft];
 }
 
 class TransferSuccess extends TransferState {

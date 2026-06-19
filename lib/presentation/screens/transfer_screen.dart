@@ -461,9 +461,7 @@ class _TransferScreenState extends State<TransferScreen> {
                     speedText,
                     style: TextStyle(
                       fontSize: AppSizes.textSmall,
-                      color: state.isStalled
-                          ? Colors.orange
-                          : Theme.of(context).colorScheme.primary,
+                      color: Theme.of(context).colorScheme.primary,
                       fontWeight: FontWeight.bold,
                     ),
                   ),
@@ -528,12 +526,40 @@ class _TransferScreenState extends State<TransferScreen> {
             },
           ),
           AppSpacing.gapH24,
-          // ── Stall warning banner ──────────────────────────────────────────
-          // Shown when no progress for 10+ seconds. Reassures the user the
-          // transfer is still active — just slow via TURN relay.
-          if (state.isStalled) ...[  
-            _StallWarningBanner(),
-            AppSpacing.gapH8,
+          // ── Network Slow Banner ──────────────────────────────────────────
+          if (state.isNetworkSlow) ...[
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              decoration: BoxDecoration(
+                color: Colors.orange.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.orange.withValues(alpha: 0.3)),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const SizedBox(
+                    width: 14,
+                    height: 14,
+                    child: CircularProgressIndicator(strokeWidth: 2, color: Colors.orange),
+                  ),
+                  const SizedBox(width: 10),
+                  Flexible(
+                    child: Text(
+                      widget.role == SessionRole.sender
+                          ? "Receiver's net is slow — waiting for them..."
+                          : "Sender's net is slow — waiting for data...",
+                      style: TextStyle(
+                        color: Colors.orange.shade700,
+                        fontSize: 13,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            AppSpacing.gapH16,
           ],
           Container(
             padding: EdgeInsets.symmetric(
@@ -999,86 +1025,5 @@ class _TransferScreenState extends State<TransferScreen> {
 /// A gentle pulse animation tells the user the app is alive and waiting for
 /// the TURN relay to deliver more data — so they don't think it crashed.
 // ────────────────────────────────────────────────────────────────────────────
-class _StallWarningBanner extends StatefulWidget {
-  const _StallWarningBanner();
 
-  @override
-  State<_StallWarningBanner> createState() => _StallWarningBannerState();
-}
-
-class _StallWarningBannerState extends State<_StallWarningBanner>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _pulse;
-  late final Animation<double> _opacity;
-  int _secondsRemaining = 110; // stall detected after 10s, total timeout is 120s
-  Timer? _countdownTimer;
-
-  @override
-  void initState() {
-    super.initState();
-    _pulse = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 1200),
-    )..repeat(reverse: true);
-    _opacity = Tween<double>(begin: 0.6, end: 1.0).animate(
-      CurvedAnimation(parent: _pulse, curve: Curves.easeInOut),
-    );
-    
-    _countdownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      if (mounted) {
-        setState(() {
-          if (_secondsRemaining > 0) _secondsRemaining--;
-        });
-      }
-    });
-  }
-
-  @override
-  void dispose() {
-    _countdownTimer?.cancel();
-    _pulse.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return FadeTransition(
-      opacity: _opacity,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-        decoration: BoxDecoration(
-          color: Colors.deepOrange.withValues(alpha: 0.08),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: Colors.deepOrange.withValues(alpha: 0.35),
-          ),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const SizedBox(
-              width: 14,
-              height: 14,
-              child: CircularProgressIndicator(
-                strokeWidth: 2,
-                color: Colors.deepOrange,
-              ),
-            ),
-            const SizedBox(width: 8),
-            Flexible(
-              child: Text(
-                'Relay is slow — waiting for data ($_secondsRemaining s)',
-                style: TextStyle(
-                  color: Colors.deepOrange.shade700,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
 
