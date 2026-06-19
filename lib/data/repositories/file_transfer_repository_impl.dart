@@ -766,19 +766,6 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
           case 'ack':
             // Final save ACK — unblock sender's post-EOF wait
             final fileId = decoded['fileId'] as String?;
-            
-            // Force 100% progress on sender side when file is confirmed saved
-            // Since we rely on rx_progress, it might have missed the exact 100% tick
-            _emitProgress(
-              controller: _progressController,
-              fileId: fileId ?? '',
-              fileName: _receivingFileName ?? '', // We don't have the exact name, but the Bloc only cares about bytes
-              totalSize: 1, // Doesn't matter
-              bytesTransferred: 1, // Will be overridden or ignored, wait...
-              // Actually we should just let the sender loop finish, and at the end of the file loop,
-              // the sender automatically switches to the next file.
-            );
-            
             if (fileId != null) _ackCompleters[fileId]?.complete();
             break;
 
