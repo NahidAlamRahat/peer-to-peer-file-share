@@ -27,13 +27,10 @@ const int _mobileChunkSize = 65536; // 64 KB
 
 // ── Window sizes (memory safety guard only — NOT speed controller) ───────────
 /// Large window so ACK almost never blocks the sender on WiFi.
-const int _wifiWindowSize = 8388608; // 8 MB
+const int _wifiWindowSize = 4194304; // 4 MB (Sweet spot for max speed without choking routers)
 
-/// 8 MB window on TURN relay — large enough that even at 11 KB/s the sender
-/// almost never blocks. Previously 1 MB caused a race: sender filled 1 MB
-/// locally in milliseconds, then waited 60 s for ACK, but receiver on a slow
-/// relay needed ~95 s to accumulate 1 MB → timeout fired first → stuck.
-const int _mobileWindowSize = 8388608; // 8 MB (same as WiFi — ACK is memory guard, not speed limiter)
+/// Window size for Mobile Data (TURN relay)
+const int _mobileWindowSize = 2097152; // 2 MB (Prevents TURN server buffer bloat)
 
 // ── bufferedAmount thresholds (real speed controller for Web) ────────────────
 /// Pause sending on Web when internal buffer exceeds 256 KB.
