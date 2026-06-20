@@ -9,7 +9,7 @@ class AboutScreen extends StatelessWidget {
 
   static const String _whatsappNumber = '8801642743187'; // BD country code
   static const String _playStoreUrl =
-      'https://play.google.com/store/apps/details?id=com.nahidrahat.p2pfileshare';
+      'https://play.google.com/store/apps/details?id=com.peertransfer.app';
   static const String _developerName = 'Nahid Alam Rahat';
   static const String _appName = 'PeerTransfer';
   static const String _appVersion = '1.0.0';

@@ -33,28 +33,10 @@ const int _wifiWindowSize = 4194304; // 4 MB (Sweet spot for max speed without c
 const int _mobileWindowSize = 2097152; // 2 MB (Prevents TURN server buffer bloat)
 
 // ── bufferedAmount thresholds (real speed controller for Web) ────────────────
-/// Pause sending on Web when internal buffer exceeds 256 KB.
-const int _maxBufferedAmount = 262144; // 256 KB
-
 /// Resume sending on Web once buffer drains below 64 KB.
 // ignore: unused_element
 const int _resumeBufferedAmount = 65536; // 64 KB
 
-// ── Per-chunk delay for mobile (TURN relay breathing room) ──────────────────
-// const Duration _mobileChunkDelay = Duration(milliseconds: 2); // DELETE
-
-// ── Watchdog timeouts ────────────────────────────────────────────────────────
-/// Mobile/TURN relay has higher latency — give it more time before giving up.
-/// 90 s: at 11 KB/s, a 64 KB chunk takes ~6 s. 90 s gives ~15 chunks of gap.
-const Duration _mobileWatchdogTimeout = Duration(seconds: 120);
-const Duration _wifiWatchdogTimeout = Duration(seconds: 60);
-
-// ── Window ACK timeouts ──────────────────────────────────────────────────────
-/// 300 s (5 min): at 11 KB/s, filling an 8 MB window takes ~720 s, but the
-/// ACK is sent as soon as the receiver gets 8 MB. On a congested relay,
-/// allow plenty of time before declaring the receiver unresponsive.
-const Duration _mobileWindowTimeout = Duration(seconds: 300);
-const Duration _wifiWindowTimeout = Duration(seconds: 300); // same as mobile — receiver may be slow even on WiFi via TURN relay
 
 int _lastEmitTime = 0;
 
@@ -162,12 +144,6 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
   /// At 10 KB/s → ~26 s. At 50 KB/s → ~20 s. Falls back to 90 s if unknown.
   Timer? _receiveWatchdog;
 
-  /// Exponentially smoothed receive speed (bytes/s). Updated per chunk.
-  /// Used to compute the adaptive watchdog timeout.
-  double _rxSmoothedSpeed = 0;
-
-  /// Timestamp (ms) of the previous binary chunk — used to measure interval.
-  int _lastRxChunkMs = 0;
 
   FileTransferRepositoryImpl(this._webrtcClient) {
     _webrtcClient.onDataMessage = _handleDataMessage;
@@ -251,19 +227,12 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
     _initQueue.clear();
     _receiveWatchdog?.cancel();
     _receiveWatchdog = null;
-    _rxSmoothedSpeed = 0;
-    _lastRxChunkMs = 0;
     // Drain the serial queue — any in-flight messages after cancel are irrelevant.
     _msgQueue.clear();
     // NOTE: _isProcessingMsg is intentionally NOT reset here.
     // If a message is mid-processing it will see _isCancelled=true and exit early.
   }
 
-  Duration _computeAdaptiveWatchdog() {
-    return _remoteTransferMode == 'mobile'
-        ? _mobileWatchdogTimeout
-        : _wifiWatchdogTimeout;
-  }
 
   // ── SENDER ────────────────────────────────────────────────────────────────
 
@@ -313,7 +282,7 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
         debugPrint('📡 [P2P] TURN relay → Window-and-Wait '
             '(${_mobileWindowSize ~/ 1024} KB window, '
             '${_mobileChunkSize ~/ 1024} KB chunks, '
-            'ACK timeout: ${_mobileWindowTimeout.inSeconds}s)');
+            'ACK timeout: 300s)');
       } else if (candidateType == 'host' || candidateType == 'srflx') {
         // Direct P2P path: use large window for maximum throughput
         isMobile = false;
@@ -391,11 +360,6 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
       // Mobile/TURN relay → 16 KB chunks to avoid relay buffer overflow.
       final int chunkSize = isMobile ? _mobileChunkSize : _wifiChunkSize;
 
-      // Window ACK drain timeout:
-      //   Mobile/TURN relay → 20 s: relay congestion should be detected
-      //   WiFi/direct P2P  → 30 s: large local buffers can legitimately be slow
-      final Duration drainTimeout =
-          isMobile ? _mobileWindowTimeout : _wifiWindowTimeout;
 
       // ── Inner send loop — Pipeline + Adaptive Backpressure ────────────────
       // KEY DESIGN CHANGE vs old code:
@@ -465,10 +429,10 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
           }
 
           // ── Guard 3: bufferedAmount backpressure (Real speed control) ──
-          // This prevents the WebRTC internal buffer from overflowing and ensures 
-          // the sender's progress bar stays in sync with the actual network speed, 
+          // This prevents the WebRTC internal buffer from overflowing and ensures
+          // the sender's progress bar stays in sync with the actual network speed,
           // instead of instantly jumping to 8MB and causing fake stall warnings.
-          final buffered = _webrtcClient.bufferedAmount ?? 0;
+          final buffered = _webrtcClient.bufferedAmount;
           if (buffered > 1048576) { // 1 MB buffer limit
             // Buffer is full — yield 5ms without advancing offset.
             // This is a soft spin: we keep checking until buffer drains.

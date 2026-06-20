@@ -58,7 +58,6 @@ class _QRScannerScreenState extends State<QRScannerScreen> {
         backgroundColor: Colors.transparent,
         elevation: 0,
         iconTheme: const IconThemeData(color: Colors.white),
-        actions: [],
       ),
       extendBodyBehindAppBar: true,
       body: Stack(
