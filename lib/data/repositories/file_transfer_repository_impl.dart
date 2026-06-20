@@ -493,10 +493,13 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
           loopCount++;
 
           // ── Timing & Throttling ─────────────────────────────────────────
-          // Yielding 2ms per chunk (64KB) prevents SCTP congestion control from
-          // aggressively throttling the connection due to buffer overflow.
-          // We apply this for BOTH Mobile and WiFi so the UI doesn't "jump" instantly.
-          await Future.delayed(const Duration(milliseconds: 2));
+          // For mobile (TURN relay), we must delay to prevent buffer overflow.
+          // For WiFi/P2P, we run at maximum speed since UI is now decoupled.
+          if (isMobile) {
+            await Future.delayed(const Duration(milliseconds: 2));
+          } else {
+            if (loopCount % 4 == 0) await Future.delayed(Duration.zero);
+          }
 
           // Calculate and log speed occasionally
           if (loopCount % 8 == 0) {
