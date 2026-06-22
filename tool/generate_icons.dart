@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:image/image.dart' as img;
 
 void main() async {
@@ -13,32 +14,32 @@ void main() async {
   final fav = img.copyResize(masked, width: 32, height: 32,
       interpolation: img.Interpolation.cubic);
   await File('web/favicon.png').writeAsBytes(img.encodePng(fav));
-  print('✅ web/favicon.png');
+  debugPrint('✅ web/favicon.png');
 
   // Generate Icon-192.png (standard)
   final icon192 = img.copyResize(masked, width: 192, height: 192,
       interpolation: img.Interpolation.cubic);
   await File('web/icons/Icon-192.png').writeAsBytes(img.encodePng(icon192));
-  print('✅ web/icons/Icon-192.png');
+  debugPrint('✅ web/icons/Icon-192.png');
 
   // Generate Icon-512.png (standard)
   final icon512 = img.copyResize(masked, width: 512, height: 512,
       interpolation: img.Interpolation.cubic);
   await File('web/icons/Icon-512.png').writeAsBytes(img.encodePng(icon512));
-  print('✅ web/icons/Icon-512.png');
+  debugPrint('✅ web/icons/Icon-512.png');
 
   // Maskable icons: add 20% padding so the icon fills the safe zone
   // The safe zone is an 80%-diameter inscribed circle of the full image.
   // To fill the safe zone fully, the logo should cover ~80% of the square.
   final maskable192 = _makeMaskable(masked, 192);
   await File('web/icons/Icon-maskable-192.png').writeAsBytes(img.encodePng(maskable192));
-  print('✅ web/icons/Icon-maskable-192.png');
+  debugPrint('✅ web/icons/Icon-maskable-192.png');
 
   final maskable512 = _makeMaskable(masked, 512);
   await File('web/icons/Icon-maskable-512.png').writeAsBytes(img.encodePng(maskable512));
-  print('✅ web/icons/Icon-maskable-512.png');
+  debugPrint('✅ web/icons/Icon-maskable-512.png');
 
-  print('\nDone! All icons updated.');
+  debugPrint('\nDone! All icons updated.');
 }
 
 /// Apply a circular mask to make corners transparent.

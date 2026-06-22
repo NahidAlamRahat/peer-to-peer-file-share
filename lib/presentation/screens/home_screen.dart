@@ -196,17 +196,16 @@ class HomeScreen extends StatelessWidget {
               const Spacer(
                 flex: 1,
               ), // Pushes action panel up and pins ad banner to the bottom
-              // ── Banner Ad ────────────────────────────────────────────────────
-              const AdBannerWidget(),
               if (kIsWeb) ...[
-                AppSpacing.gapH12,
                 _buildSpeedTip(context),
                 AppSpacing.gapH12,
                 _buildAppDownloadBanner(context),
               ] else ...[
-                AppSpacing.gapH12,
                 _buildSpeedTip(context),
               ],
+              AppSpacing.gapH12,
+              // ── Banner Ad ────────────────────────────────────────────────────
+              const AdBannerWidget(),
             ],
           ),
         ),
@@ -401,17 +400,16 @@ class HomeScreen extends StatelessWidget {
                     AppSpacing.gapH48,
                     _buildActionPanel(context),
                     AppSpacing.gapH16,
-                    // ── Banner Ad ─────────────────────────────────────────
-                    const AdBannerWidget(),
                     if (kIsWeb) ...[
-                      AppSpacing.gapH16,
                       _buildSpeedTip(context),
                       AppSpacing.gapH12,
                       _buildAppDownloadBanner(context),
                     ] else ...[
-                      AppSpacing.gapH16,
                       _buildSpeedTip(context),
                     ],
+                    AppSpacing.gapH16,
+                    // ── Banner Ad ─────────────────────────────────────────
+                    const AdBannerWidget(),
                   ],
                 ),
               ),

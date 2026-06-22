@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:marquee/marquee.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import '../../core/di/injection_container.dart';
@@ -183,7 +184,38 @@ class _ShareLinkScreenState extends State<ShareLinkScreen> {
           title: const Text('Share File'),
           elevation: 0,
         ),
-        body: BlocConsumer<ConnectionBloc, ConnectionStateBloc>(
+        body: Column(
+          children: [
+            if (kIsWeb)
+              Container(
+                height: 40,
+                decoration: BoxDecoration(
+                  color: Colors.purple.withValues(alpha: 0.1),
+                  border: Border(
+                    bottom: BorderSide(color: Colors.purple.withValues(alpha: 0.3)),
+                  ),
+                ),
+                child: Marquee(
+                  text: '🚀 Even Better with the App: Install the PeerTransfer app for a smoother, faster experience — background transfers, no browser limits, and instant sharing at your fingertips.',
+                  style: const TextStyle(
+                    color: Colors.purpleAccent,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w500,
+                  ),
+                  scrollAxis: Axis.horizontal,
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  blankSpace: 50.0,
+                  velocity: 50.0,
+                  pauseAfterRound: const Duration(seconds: 1),
+                  startPadding: 10.0,
+                  accelerationDuration: const Duration(seconds: 1),
+                  accelerationCurve: Curves.linear,
+                  decelerationDuration: const Duration(milliseconds: 500),
+                  decelerationCurve: Curves.easeOut,
+                ),
+              ),
+            Expanded(
+              child: BlocConsumer<ConnectionBloc, ConnectionStateBloc>(
         listener: (context, state) async {
           if (state is ConnectionCreated && _selectedFiles.isNotEmpty) {
             debugPrint('✅ [UI] Link generated! Session ID: ${state.sessionId}');
@@ -259,6 +291,9 @@ class _ShareLinkScreenState extends State<ShareLinkScreen> {
           );
         },
       ),
+            ),
+          ],
+        ),
     ));
   }
 
