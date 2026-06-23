@@ -9,7 +9,7 @@ class PrivacyPolicyScreen extends StatelessWidget {
   static const String _appName = 'PeerTransfer';
   static const String _contactEmail = 'nahidrahat007@gmail.com';
   static const String _contactNumber = '+880 1642-743187';
-  static const String _lastUpdated = 'June 16, 2026';
+  static const String _lastUpdated = 'June 23, 2026';
 
   @override
   Widget build(BuildContext context) {
@@ -93,6 +93,7 @@ class PrivacyPolicyScreen extends StatelessWidget {
                 '• **Camera:** We use the camera solely for scanning QR codes locally to connect devices. No images are saved or transmitted to any server.\n\n'
                 '• **Storage and Media:** We require read/write access to your device storage (including granular media permissions on Android 13+) to let you select and save files.\n\n'
                 '• **All Files Access:** On Android 11+, we require "All Files Access" to let you browse and transfer files of any format across your entire storage. This is necessary for the core functionality of a file-sharing app.\n\n'
+                '• **Foreground Service (Data Sync):** We utilize Android foreground services to keep file transfers running continuously in the background. This ensures your active peer-to-peer data sync is not interrupted when you minimize the app. This service does not upload any data to our servers.\n\n'
                 '• **No file uploading:** Files are transferred directly between devices via WebRTC. We do not store or access your files on our servers.\n\n'
                 '• **Signaling server:** A minimal signaling server is used only to help establish the WebRTC connection between peers. It does not receive or store your actual file data.',
           ),
