@@ -1,3 +1,6 @@
+import 'dart:async';
+
+import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -10,6 +13,7 @@ import '../../core/theme/spacing.dart';
 import '../../domain/entities/peer_session.dart';
 import '../../domain/repositories/file_transfer_repository.dart';
 import '../blocs/connection/connection_bloc.dart';
+import '../blocs/connection/connection_event.dart';
 import '../blocs/connection/connection_state.dart';
 import '../blocs/transfer/transfer_bloc.dart';
 import '../blocs/transfer/transfer_event.dart';
@@ -23,8 +27,35 @@ import 'settings_screen.dart';
 import 'share_link_screen.dart';
 import 'transfer_screen.dart';
 
-class HomeScreen extends StatelessWidget {
+class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
+
+  @override
+  State<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends State<HomeScreen> {
+  StreamSubscription<List<ConnectivityResult>>? _connectivitySubscription;
+
+  @override
+  void initState() {
+    super.initState();
+    _connectivitySubscription = Connectivity().onConnectivityChanged.listen((List<ConnectivityResult> results) {
+      if (results.isNotEmpty && !results.contains(ConnectivityResult.none)) {
+        if (!mounted) return;
+        final state = context.read<ConnectionBloc>().state;
+        if (state is ConnectionServerError || state is ConnectionFailed || state is ConnectionOffline) {
+          context.read<ConnectionBloc>().add(ResetConnectionEvent());
+        }
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _connectivitySubscription?.cancel();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -92,6 +123,15 @@ class HomeScreen extends StatelessWidget {
                     ),
                     textAlign: TextAlign.center,
                   ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.refresh_rounded, size: 18, color: Colors.red),
+                  onPressed: () {
+                    context.read<ConnectionBloc>().add(ResetConnectionEvent());
+                  },
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(),
+                  tooltip: 'Retry Connection',
                 ),
               ],
             ),
