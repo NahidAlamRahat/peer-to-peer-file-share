@@ -86,22 +86,52 @@ class _ShareLinkScreenState extends State<ShareLinkScreen> {
     setState(() => _isPicking = true);
 
     try {
-      // Enable withReadStream to stream large files directly without copying them to cache
-      // ignore: deprecated_member_use
-      FilePickerResult? result = await FilePicker.pickFiles(
-        allowMultiple: true,
-        withReadStream: true,
-      );
+      FilePickerResult? result;
+
+      if (kIsWeb) {
+        // On Web: use bytes mode. readAsByteStream() is deprecated and unreliable on web.
+        // bytes are loaded into memory for each file, then streamed over WebRTC.
+        result = await FilePicker.pickFiles(
+          allowMultiple: true,
+          withData: true,   // load bytes into memory on web
+        );
+      } else {
+        // On native (Android/iOS): use read stream to avoid loading large files into RAM
+        // ignore: deprecated_member_use
+        result = await FilePicker.pickFiles(
+          allowMultiple: true,
+          withReadStream: true,
+        );
+      }
+
       if (result != null && result.files.isNotEmpty) {
         final List<ShareFile> shareFiles = [];
         for (final pf in result.files) {
-          // readAsByteStream() streams the file without loading all bytes to RAM
-          final Stream<List<int>> stream = pf.readAsByteStream();
-          shareFiles.add(ShareFile(
-            name: pf.name,
-            size: pf.size,
-            readStream: stream,
-          ));
+          if (kIsWeb) {
+            // Web: use bytes (already in memory from withData: true)
+            final bytes = pf.bytes;
+            if (bytes == null || bytes.isEmpty) {
+              debugPrint('⚠️ [UI] Skipping ${pf.name} — bytes is null on web.');
+              continue;
+            }
+            shareFiles.add(ShareFile(
+              name: pf.name,
+              size: pf.size,
+              bytes: bytes,
+            ));
+          } else {
+            // Native: use readStream for memory-safe streaming of large files
+            final stream = pf.readStream;
+            if (stream == null) {
+              debugPrint('⚠️ [UI] Skipping ${pf.name} — readStream is null on native.');
+              continue;
+            }
+            shareFiles.add(ShareFile(
+              name: pf.name,
+              size: pf.size,
+              readStream: stream,
+            ));
+          }
         }
 
         if (shareFiles.isNotEmpty) {
@@ -114,6 +144,16 @@ class _ShareLinkScreenState extends State<ShareLinkScreen> {
           });
           if (mounted) {
             context.read<ConnectionBloc>().add(CreateSessionEvent());
+          }
+        } else {
+          // All files were skipped due to errors
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Could not read the selected files. Please try again.'),
+                backgroundColor: Colors.orange,
+              ),
+            );
           }
         }
       }
