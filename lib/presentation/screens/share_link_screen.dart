@@ -12,6 +12,7 @@ import '../../core/theme/app_sizes.dart';
 import '../../core/theme/spacing.dart';
 import '../../domain/entities/peer_session.dart';
 import '../../domain/entities/share_file.dart';
+import '../../core/utils/platform_file_picker.dart';
 import '../../domain/repositories/file_transfer_repository.dart';
 import '../blocs/connection/connection_bloc.dart';
 import '../blocs/connection/connection_event.dart';
@@ -69,69 +70,21 @@ class _ShareLinkScreenState extends State<ShareLinkScreen> {
 
   void _pickFile() async {
     if (_isPicking) return;
-
-    if (!kIsWeb && Platform.isAndroid) {
-      // Request gallery and storage permissions before picking
-      await [
-        Permission.storage,
-        Permission.photos,
-        Permission.videos,
-      ].request();
-      
-      // We don't strictly block if denied here, because SAF (FilePicker) 
-      // often bypasses strict permission requirements anyway, 
-      // but asking ensures we cover all bases for older devices.
-    }
-
     setState(() => _isPicking = true);
 
     try {
-      // withReadStream: true → populates pf.readStream lazily (memory-safe for any file count).
-      // Do NOT use withData: true — that loads ALL bytes at once into RAM, causing crashes
-      // when selecting hundreds of files.
-      // Do NOT use pf.readAsByteStream() — that is deprecated and unreliable.
-      // Use pf.readStream (the property) instead.
-      // ignore: deprecated_member_use
-      final result = await FilePicker.pickFiles(
-        allowMultiple: true,
-        withReadStream: true,
-      );
+      final shareFiles = await pickFilesLocally();
 
-      if (result != null && result.files.isNotEmpty) {
-        final List<ShareFile> shareFiles = [];
-        for (final pf in result.files) {
-          final stream = pf.readStream;
-          if (stream == null) {
-            debugPrint('⚠️ [UI] Skipping ${pf.name} — readStream is null.');
-            continue;
-          }
-          shareFiles.add(ShareFile(
-            name: pf.name,
-            size: pf.size,
-            readStream: stream,
-          ));
-        }
+      if (shareFiles != null && shareFiles.isNotEmpty) {
+        final totalSize = shareFiles.fold<int>(0, (sum, f) => sum + f.size);
+        final sizeMB = (totalSize / (1024 * 1024)).toStringAsFixed(2);
+        debugPrint('📂 [UI] Selected ${shareFiles.length} files ($sizeMB MB total)');
 
-        if (shareFiles.isNotEmpty) {
-          final totalSize = shareFiles.fold<int>(0, (sum, f) => sum + f.size);
-          final sizeMB = (totalSize / (1024 * 1024)).toStringAsFixed(2);
-          debugPrint('📂 [UI] Selected ${shareFiles.length} files ($sizeMB MB total)');
-
-          setState(() {
-            _selectedFiles = shareFiles;
-          });
-          if (mounted) {
-            context.read<ConnectionBloc>().add(CreateSessionEvent());
-          }
-        } else {
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('Could not read the selected files. Please try again.'),
-                backgroundColor: Colors.orange,
-              ),
-            );
-          }
+        setState(() {
+          _selectedFiles = shareFiles;
+        });
+        if (mounted) {
+          context.read<ConnectionBloc>().add(CreateSessionEvent());
         }
       }
     } catch (e, stacktrace) {
