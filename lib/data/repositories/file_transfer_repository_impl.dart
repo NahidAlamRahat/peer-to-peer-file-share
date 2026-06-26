@@ -17,28 +17,23 @@ import 'file_transfer_web.dart'
     if (dart.library.io) 'file_transfer_mobile.dart';
 
 // ── Chunk sizes ──────────────────────────────────────────────────────────────
-/// WiFi chunk size (256 KB).
-/// Larger chunks drastically reduce per-chunk overhead on fast links.
-/// Still below SCTP max message size — no fragmentation issues.
-const int _wifiChunkSize = 262144; // 256 KB
+/// WiFi chunk size (16 KB).
+/// Smaller chunks give the receiver more frequent ack_window opportunities,
+/// preventing the Window ACK deadlock where the sender fills the window
+/// and blocks because the receiver's browser stream paused.
+const int _wifiChunkSize = 16384; // 16 KB
 
-/// Mobile data / TURN relay chunk size (64 KB).
-const int _mobileChunkSize = 65536; // 64 KB
+/// Mobile data / TURN relay chunk size (8 KB).
+const int _mobileChunkSize = 8192; // 8 KB
 
-// ── Window sizes (memory safety guard only — NOT speed controller) ───────────
-/// Large window size (4MB) was causing the native WebRTC buffer on Android to overflow
-/// and drop the connection halfway through transfers. Reduced to 1MB.
-const int _wifiWindowSize =
-    1048576; // 1 MB (Safe limit for Android WebRTC native buffer)
+// ── Window sizes ─────────────────────────────────────────────────────────────
+/// WiFi window: 256KB — receiver sends ack_window every 256KB.
+/// Small enough that the browser's WritableStream never stalls longer than
+/// the time to flush 256KB (~25ms on WiFi), preventing the Window ACK deadlock.
+const int _wifiWindowSize = 262144; // 256 KB
 
-/// Window size for Mobile Data (TURN relay)
-const int _mobileWindowSize =
-    524288; // 512 KB (Prevents TURN server buffer bloat)
-
-// ── bufferedAmount thresholds (real speed controller for Web) ────────────────
-/// Resume sending on Web once buffer drains below 64 KB.
-// ignore: unused_element
-const int _resumeBufferedAmount = 65536; // 64 KB
+/// Mobile window: 64KB — smaller window for TURN relay / slow connections.
+const int _mobileWindowSize = 65536; // 64 KB
 
 int _lastEmitTime = 0;
 
@@ -372,8 +367,6 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
       final int chunkSize = isMobile ? _mobileChunkSize : _wifiChunkSize;
 
       // ── Inner send loop — Pipeline + Adaptive Backpressure ────────────────
-      int bytesSinceLastDelay = 0;
-
       Future<void> sendChunks(Uint8List bytes, int start, int end) async {
         int offset = start;
 
@@ -430,17 +423,6 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
             }
           }
 
-          // ── Guard 3: bufferedAmount backpressure (Real speed control) ──
-          final buffered = _webrtcClient.bufferedAmount;
-          if (buffered > 262144) {
-            // 256 KB buffer limit (Down from 1MB)
-            // Android OS UDP buffers are typically 256KB-512KB. If we allow WebRTC's
-            // SCTP queue to hold 1MB, it will flush into the OS UDP socket, saturate it,
-            // drop STUN keepalives, and cause 'Connection to peer was lost'.
-            await Future.delayed(const Duration(milliseconds: 5));
-            continue; 
-          }
-
           if (_isCancelled) return;
 
           // ── Send chunk ──────────────────────────────────────────────────
@@ -452,22 +434,20 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
 
           bytesSent += slice.length;
           bytesSinceLastAck += slice.length;
-          bytesSinceLastDelay += slice.length;
           offset = sliceEnd;
           loopCount++;
 
           // ── Timing & Throttling ─────────────────────────────────────────
-          if (isMobile) {
-            if (bytesSinceLastDelay >= _mobileChunkSize) {
-              await Future.delayed(const Duration(milliseconds: 2));
-              bytesSinceLastDelay = 0;
-            }
-          } else {
-            if (bytesSinceLastDelay >= 524288) { // 512 KB
-              await Future.delayed(const Duration(milliseconds: 1));
-              bytesSinceLastDelay = 0;
-            }
-          }
+          // Always yield every chunk to the Dart event loop.
+          // This ensures:
+          //  1. ICE keepalive (STUN ping) packets are never blocked.
+          //  2. ack_window messages from receiver are processed promptly.
+          //  3. Android OS networking stack has time to flush UDP buffers.
+          // Note: bufferedAmount is NOT used here because Android Chrome
+          // incorrectly returns 0 for this property, making it useless.
+          await Future.delayed(isMobile
+              ? const Duration(milliseconds: 4)   // ~2 MB/s on TURN relay
+              : const Duration(milliseconds: 1)); // ~16 MB/s on Direct P2P
 
           // Calculate and log speed occasionally
           if (loopCount % 8 == 0) {
