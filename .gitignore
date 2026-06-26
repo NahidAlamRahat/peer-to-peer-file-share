@@ -43,3 +43,13 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# Kotlin compiler / Gradle caches (should never be committed)
+**/.kotlin/
+**/kotlin-compiler-*.txt
+**/kotlin-compiler-*/
+.kotlin/
+android/.kotlin/
+android/app/.kotlin/
+android/**/.kotlin/
+**/*.kotlin_module
