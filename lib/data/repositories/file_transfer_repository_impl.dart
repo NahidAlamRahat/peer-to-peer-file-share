@@ -229,7 +229,7 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
     _receiveWatchdog?.cancel();
     _receiveWatchdog = null;
     // Drain the serial queue — any in-flight messages after cancel are irrelevant.
-    _msgQueue.clear();
+    // _msgQueue.clear(); // REMOVED: This causes chunks of the next file to be deleted if they arrive back-to-back with metadata!
     // NOTE: _isProcessingMsg is intentionally NOT reset here.
     // If a message is mid-processing it will see _isCancelled=true and exit early.
   }
