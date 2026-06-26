@@ -542,60 +542,69 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
     if (_isCancelled) return;
 
     if (message.isBinary) {
-      // If fileSaver is still initializing (await init() hasn't returned yet),
-      // queue the chunk so it is NOT silently dropped.
-      // ✅ Do NOT increment _receivedBytes here — only during drain to avoid double-count.
-      if (_isInitializing) {
-        _initQueue.add(message.binary);
-        // Watchdog not needed during init — data IS arriving, just queued.
-        return;
-      }
+      try {
+        // If fileSaver is still initializing (await init() hasn't returned yet),
+        // queue the chunk so it is NOT silently dropped.
+        // ✅ Do NOT increment _receivedBytes here — only during drain to avoid double-count.
+        if (_isInitializing) {
+          _initQueue.add(message.binary);
+          // Watchdog not needed during init — data IS arriving, just queued.
+          return;
+        }
 
-      // Binary chunk — write to file saver
-      _fileSaver?.addChunk(message.binary);
-      _receivedBytes += message.binary.length;
-      _windowBytesReceived += message.binary.length;
+        // Apply backpressure if receiving on Web (Service Worker pause signal)
+        if (kIsWeb) await _fileSaver?.waitForReady();
 
-      // Send window ACK back to sender to unblock their Guard 2
-      if (_windowBytesReceived >= _remoteWindowSize) {
-        _windowBytesReceived = 0;
-        _webrtcClient.sendDataMessage(
-          RTCDataChannelMessage(jsonEncode({'type': 'ack_window'})),
+        // Binary chunk — write to file saver
+        _fileSaver?.addChunk(message.binary);
+        _receivedBytes += message.binary.length;
+        _windowBytesReceived += message.binary.length;
+
+        // Send window ACK back to sender to unblock their Guard 2
+        if (_windowBytesReceived >= _remoteWindowSize) {
+          _windowBytesReceived = 0;
+          _webrtcClient.sendDataMessage(
+            RTCDataChannelMessage(jsonEncode({'type': 'ack_window'})),
+          );
+          debugPrint(
+            '📨 [P2P-RX] Sent ack_window (received ${_receivedBytes ~/ 1024} KB total)',
+          );
+        }
+
+        // Send progress update to sender every ~200ms so sender UI stays perfectly in sync
+        final nowMs = DateTime.now().millisecondsSinceEpoch;
+        if (nowMs - _lastRxProgressPingMs > 200) {
+          _lastRxProgressPingMs = nowMs;
+          _webrtcClient.sendDataMessage(
+            RTCDataChannelMessage(
+              jsonEncode({
+                'type': 'rx_progress',
+                'bytes': _receivedBytes,
+                'fileId': _receivingFileId,
+                'fileName': _receivingFileName,
+                'totalSize': _receivingTotalSize,
+                'fileIndex': _receivingFileIndex,
+                'totalFiles': _receivingTotalFiles,
+              }),
+            ),
+          );
+        }
+
+        // Emit receiver progress
+        _emitProgress(
+          controller: _progressController,
+          fileId: _receivingFileId ?? '',
+          fileName: _receivingFileName ?? '',
+          totalSize: _receivingTotalSize,
+          bytesTransferred: _receivedBytes,
+          fileIndex: _receivingFileIndex,
+          totalFiles: _receivingTotalFiles,
         );
-        debugPrint(
-          '📨 [P2P-RX] Sent ack_window (received ${_receivedBytes ~/ 1024} KB total)',
-        );
+      } catch (e) {
+        debugPrint('❌ [P2P-RX] Error processing binary chunk: $e');
+        _progressController.addError('Storage Error: $e');
+        cancelTransfer(myRole: 'receiver');
       }
-
-      // Send progress update to sender every ~200ms so sender UI stays perfectly in sync
-      final nowMs = DateTime.now().millisecondsSinceEpoch;
-      if (nowMs - _lastRxProgressPingMs > 200) {
-        _lastRxProgressPingMs = nowMs;
-        _webrtcClient.sendDataMessage(
-          RTCDataChannelMessage(
-            jsonEncode({
-              'type': 'rx_progress',
-              'bytes': _receivedBytes,
-              'fileId': _receivingFileId,
-              'fileName': _receivingFileName,
-              'totalSize': _receivingTotalSize,
-              'fileIndex': _receivingFileIndex,
-              'totalFiles': _receivingTotalFiles,
-            }),
-          ),
-        );
-      }
-
-      // Emit receiver progress
-      _emitProgress(
-        controller: _progressController,
-        fileId: _receivingFileId ?? '',
-        fileName: _receivingFileName ?? '',
-        totalSize: _receivingTotalSize,
-        bytesTransferred: _receivedBytes,
-        fileIndex: _receivingFileIndex,
-        totalFiles: _receivingTotalFiles,
-      );
     } else {
       try {
         final decoded = jsonDecode(message.text) as Map<String, dynamic>;
