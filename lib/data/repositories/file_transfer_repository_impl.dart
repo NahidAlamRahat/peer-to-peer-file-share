@@ -362,8 +362,8 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
       _windowAckCompleter = Completer<void>();
 
       // Choose chunk size based on connection type:
-      // WiFi/direct P2P → 256 KB chunks for maximum throughput.
-      // Mobile/TURN relay → 16 KB chunks to avoid relay buffer overflow.
+      // WiFi/direct P2P → 16 KB chunks (small so ack_window is processed frequently).
+      // Mobile/TURN relay → 8 KB chunks (avoids relay buffer overflow).
       final int chunkSize = isMobile ? _mobileChunkSize : _wifiChunkSize;
 
       // ── Inner send loop — Pipeline + Adaptive Backpressure ────────────────
