@@ -370,11 +370,8 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
       final int chunkSize = isMobile ? _mobileChunkSize : _wifiChunkSize;
 
       // ── Inner send loop — Pipeline + Adaptive Backpressure ────────────────
-      // KEY DESIGN CHANGE vs old code:
-      //   OLD: Window-and-Wait — send 512 KB, block for ACK (~200–400ms dead time)
-      //   NEW: Continuous Pipeline — send chunk, 2ms yield (mobile), check guards
-      //        Window ACK is now memory safety guard (every 2 MB), not speed limiter.
-      //        Real throttling = _mobileChunkDelay + bufferedAmount (web only).
+      int bytesSinceLastDelay = 0;
+
       Future<void> sendChunks(Uint8List bytes, int start, int end) async {
         int offset = start;
 
@@ -397,8 +394,6 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
           }
 
           // ── Guard 2: Window ACK (memory safety — blocks only if receiver is 2MB+ behind) ──
-          // This is NOT the speed controller. It prevents OOM if receiver is very slow.
-          // Real speed control is done by _mobileChunkDelay and bufferedAmount.
           final int windowSize = isMobile ? _mobileWindowSize : _wifiWindowSize;
           if (bytesSinceLastAck >= windowSize) {
             debugPrint(
@@ -406,8 +401,6 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
             );
 
             try {
-              // Wait for receiver to send 'ack_window' — ack_window handler
-              // creates the NEXT completer, so no race condition here.
               await _windowAckCompleter!.future;
             } catch (e) {
               if (!_isCancelled) {
@@ -420,14 +413,9 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
               return;
             }
 
-            // ✅ Full reset — no boundary mismatch bugs from subtract approach
             bytesSinceLastAck = 0;
-
-            // ✅ Create the new completer for the NEXT window AFTER awaiting.
-            //    This guarantees we don't drop an early ACK while yielding.
             _windowAckCompleter = Completer<void>();
 
-            // Double-check channel after awaiting
             if (_webrtcClient.dataChannelState !=
                 RTCDataChannelState.RTCDataChannelOpen) {
               if (!_isCancelled) {
@@ -441,16 +429,10 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
           }
 
           // ── Guard 3: bufferedAmount backpressure (Real speed control) ──
-          // This prevents the WebRTC internal buffer from overflowing and ensures
-          // the sender's progress bar stays in sync with the actual network speed,
-          // instead of instantly jumping to 8MB and causing fake stall warnings.
           final buffered = _webrtcClient.bufferedAmount;
           if (buffered > 1048576) {
-            // 1 MB buffer limit
-            // Buffer is full — yield 5ms without advancing offset.
-            // This is a soft spin: we keep checking until buffer drains.
             await Future.delayed(const Duration(milliseconds: 5));
-            continue; // Re-check all guards without advancing
+            continue; 
           }
 
           if (_isCancelled) return;
@@ -464,19 +446,20 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
 
           bytesSent += slice.length;
           bytesSinceLastAck += slice.length;
+          bytesSinceLastDelay += slice.length;
           offset = sliceEnd;
           loopCount++;
 
           // ── Timing & Throttling ─────────────────────────────────────────
-          // For mobile (TURN relay), we must delay to prevent buffer overflow.
-          // For WiFi/P2P, we add a tiny 1ms delay every 2 chunks (512KB) to 
-          // allow the OS networking stack to flush UDP buffers and process ICE 
-          // keepalives. Without this, STUN packets drop and WebRTC kills the connection.
           if (isMobile) {
-            await Future.delayed(const Duration(milliseconds: 2));
+            if (bytesSinceLastDelay >= _mobileChunkSize) {
+              await Future.delayed(const Duration(milliseconds: 2));
+              bytesSinceLastDelay = 0;
+            }
           } else {
-            if (loopCount % 2 == 0) {
+            if (bytesSinceLastDelay >= 524288) { // 512 KB
               await Future.delayed(const Duration(milliseconds: 1));
+              bytesSinceLastDelay = 0;
             }
           }
 
