@@ -117,8 +117,17 @@ class _ShareLinkScreenState extends State<ShareLinkScreen> {
           }
         }
       }
-    } catch (e) {
+    } catch (e, stacktrace) {
       debugPrint("File picker error: $e");
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to select files: $e'),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 5),
+          ),
+        );
+      }
     } finally {
       if (mounted) {
         setState(() => _isPicking = false);
