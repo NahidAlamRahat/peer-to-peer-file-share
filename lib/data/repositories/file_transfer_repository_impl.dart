@@ -295,7 +295,8 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
       } else {
         // Stats not available — fall back to connectivity_plus as best-effort
         final connectivityResult = await Connectivity().checkConnectivity();
-        isMobile = connectivityResult.contains(ConnectivityResult.mobile);
+        isMobile = !connectivityResult.contains(ConnectivityResult.wifi) && 
+                   connectivityResult.contains(ConnectivityResult.mobile);
         debugPrint(
           isMobile
               ? '📱 [P2P] Mobile data (connectivity fallback) → Pipeline mode'
@@ -309,7 +310,8 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
       );
       try {
         final connectivityResult = await Connectivity().checkConnectivity();
-        isMobile = connectivityResult.contains(ConnectivityResult.mobile);
+        isMobile = !connectivityResult.contains(ConnectivityResult.wifi) && 
+                   connectivityResult.contains(ConnectivityResult.mobile);
       } catch (_) {
         isMobile = false; // Last resort: assume WiFi mode
       }
@@ -430,7 +432,11 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
 
           // ── Guard 3: bufferedAmount backpressure (Real speed control) ──
           final buffered = _webrtcClient.bufferedAmount;
-          if (buffered > 1048576) {
+          if (buffered > 262144) {
+            // 256 KB buffer limit (Down from 1MB)
+            // Android OS UDP buffers are typically 256KB-512KB. If we allow WebRTC's
+            // SCTP queue to hold 1MB, it will flush into the OS UDP socket, saturate it,
+            // drop STUN keepalives, and cause 'Connection to peer was lost'.
             await Future.delayed(const Duration(milliseconds: 5));
             continue; 
           }
