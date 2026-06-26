@@ -469,11 +469,15 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
 
           // ── Timing & Throttling ─────────────────────────────────────────
           // For mobile (TURN relay), we must delay to prevent buffer overflow.
-          // For WiFi/P2P, we run at maximum speed since UI is now decoupled.
+          // For WiFi/P2P, we add a tiny 1ms delay every 2 chunks (512KB) to 
+          // allow the OS networking stack to flush UDP buffers and process ICE 
+          // keepalives. Without this, STUN packets drop and WebRTC kills the connection.
           if (isMobile) {
             await Future.delayed(const Duration(milliseconds: 2));
           } else {
-            if (loopCount % 4 == 0) await Future.delayed(Duration.zero);
+            if (loopCount % 2 == 0) {
+              await Future.delayed(const Duration(milliseconds: 1));
+            }
           }
 
           // Calculate and log speed occasionally

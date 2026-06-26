@@ -14,23 +14,13 @@ class WebRTCClient {
       // STUN servers (works on WiFi & simple NAT)
       {'urls': 'stun:stun.l.google.com:19302'},
       {'urls': 'stun:stun1.l.google.com:19302'},
-      // TURN servers — required for mobile data (Symmetric NAT / 4G)
-      // ExpressTURN credentials — free tier
-      //
-      // ORDER MATTERS: WebRTC tries candidates top-to-bottom.
-      // TCP listed first because:
-      //   • Mobile carriers often block/throttle UDP
-      //   • TCP is more reliable on congested 4G networks
-      {
-        'urls': 'turn:free.expressturn.com:3478?transport=tcp',  // TCP — reliable on mobile
-        'username': '000000002097160514',
-        'credential': 'KCpw2nCpdk4icI0EcwEPujIJpJ0=',
-      },
-      {
-        'urls': 'turn:free.expressturn.com:3478',  // UDP — faster when available
-        'username': '000000002097160514',
-        'credential': 'KCpw2nCpdk4icI0EcwEPujIJpJ0=',
-      },
+      {'urls': 'stun:stun2.l.google.com:19302'},
+      {'urls': 'stun:stun3.l.google.com:19302'},
+      {'urls': 'stun:stun4.l.google.com:19302'},
+      // Note: We removed the free ExpressTURN server here because free TURN servers 
+      // strictly limit transfer sizes (often killing the connection after 10-20MB).
+      // This was causing transfers to drop exactly "halfway" when devices couldn't 
+      // connect directly via Local IP or STUN and fell back to the TURN relay.
     ],
     'sdpSemantics': 'unified-plan',
     'iceTransportPolicy': 'all',
