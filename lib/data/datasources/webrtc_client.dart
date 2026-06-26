@@ -8,23 +8,42 @@ class WebRTCClient {
 
   // Configuration for WebRTC with robust NAT traversal (Global STUN + TURN)
   // TURN servers are required for mobile data (Symmetric NAT) connections.
-  // Using ExpressTURN free TURN server credentials
+  // Using Metered.ca Open Relay — free public TURN, no account needed,
+  // no bandwidth kill (unlike ExpressTURN which cut connections after 10-20MB).
   final Map<String, dynamic> _configuration = {
     'iceServers': [
-      // STUN servers (works on WiFi & simple NAT)
+      // ── STUN servers ────────────────────────────────────────────────────────
+      // Used for WiFi→WiFi and simple NAT traversal (no relay needed).
       {'urls': 'stun:stun.l.google.com:19302'},
       {'urls': 'stun:stun1.l.google.com:19302'},
-      {'urls': 'stun:stun2.l.google.com:19302'},
-      {'urls': 'stun:stun3.l.google.com:19302'},
-      {'urls': 'stun:stun4.l.google.com:19302'},
-      // Note: We removed the free ExpressTURN server here because free TURN servers 
-      // strictly limit transfer sizes (often killing the connection after 10-20MB).
-      // This was causing transfers to drop exactly "halfway" when devices couldn't 
-      // connect directly via Local IP or STUN and fell back to the TURN relay.
+
+      // ── TURN servers (Metered.ca Open Relay) ────────────────────────────────
+      // Required for 4G→4G, 5G→5G, and any Symmetric NAT connection.
+      // Open Relay is a free public service — no account, no connection kill.
+      // Multiple ports/protocols for maximum compatibility across all carriers.
+      {
+        'urls': 'turn:openrelay.metered.ca:80',
+        'username': 'openrelayproject',
+        'credential': 'openrelayproject',
+      },
+      {
+        'urls': 'turn:openrelay.metered.ca:443',
+        'username': 'openrelayproject',
+        'credential': 'openrelayproject',
+      },
+      {
+        'urls': 'turn:openrelay.metered.ca:443?transport=tcp',
+        'username': 'openrelayproject',
+        'credential': 'openrelayproject',
+      },
+      {
+        'urls': 'turn:openrelay.metered.ca:80?transport=tcp',
+        'username': 'openrelayproject',
+        'credential': 'openrelayproject',
+      },
     ],
     'sdpSemantics': 'unified-plan',
     'iceTransportPolicy': 'all',
-    // Aggressive ICE restart on connection drop
     'iceCandidatePoolSize': 10,
   };
 
