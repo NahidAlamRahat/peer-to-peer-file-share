@@ -1,11 +1,9 @@
-import 'dart:io';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:marquee/marquee.dart';
-import 'package:permission_handler/permission_handler.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import '../../core/di/injection_container.dart';
 import '../../core/theme/app_sizes.dart';
@@ -87,7 +85,7 @@ class _ShareLinkScreenState extends State<ShareLinkScreen> {
           context.read<ConnectionBloc>().add(CreateSessionEvent());
         }
       }
-    } catch (e, stacktrace) {
+    } catch (e) {
       debugPrint("File picker error: $e");
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

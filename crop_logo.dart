@@ -3,10 +3,8 @@ import 'package:flutter/foundation.dart';
 import 'package:image/image.dart' as img;
 
 void main() {
-  final padded = img.decodeImage(File('assets/logo_padded.png').readAsBytesSync());
   final unpadded = img.decodeImage(File('assets/peertransfer.jpg').readAsBytesSync());
 
-  debugPrint('Padded size: \${padded?.width} x \${padded?.height}');
   debugPrint('Unpadded size: \${unpadded?.width} x \${unpadded?.height}');
 
   // Save the unpadded version as the favicon

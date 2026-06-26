@@ -285,7 +285,7 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
         // Direct P2P path: use large window for maximum throughput
         isMobile = false;
         debugPrint(
-          '📶 [P2P] Direct P2P ($candidateType) → WiFi mode (${_wifiWindowSize ~/ (1024 * 1024)} MB window, ${_wifiChunkSize ~/ 1024} KB chunks)',
+          '📶 [P2P] Direct P2P ($candidateType) → WiFi mode (${_wifiWindowSize ~/ 1024} KB window, ${_wifiChunkSize ~/ 1024} KB chunks)',
         );
       } else {
         // Stats not available — fall back to connectivity_plus as best-effort
