@@ -88,7 +88,10 @@ class _ShareLinkScreenState extends State<ShareLinkScreen> {
     try {
       // Enable withReadStream to stream large files directly without copying them to cache
       // ignore: deprecated_member_use
-      FilePickerResult? result = await FilePicker.pickFiles(withReadStream: true);
+      FilePickerResult? result = await FilePicker.pickFiles(
+        allowMultiple: true,
+        withReadStream: true,
+      );
       if (result != null && result.files.isNotEmpty) {
         final List<ShareFile> shareFiles = [];
         for (final pf in result.files) {
