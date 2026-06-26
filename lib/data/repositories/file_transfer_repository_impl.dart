@@ -26,13 +26,14 @@ const int _wifiChunkSize = 262144; // 256 KB
 const int _mobileChunkSize = 65536; // 64 KB
 
 // ── Window sizes (memory safety guard only — NOT speed controller) ───────────
-/// Large window so ACK almost never blocks the sender on WiFi.
+/// Large window size (4MB) was causing the native WebRTC buffer on Android to overflow
+/// and drop the connection halfway through transfers. Reduced to 1MB.
 const int _wifiWindowSize =
-    4194304; // 4 MB (Sweet spot for max speed without choking routers)
+    1048576; // 1 MB (Safe limit for Android WebRTC native buffer)
 
 /// Window size for Mobile Data (TURN relay)
 const int _mobileWindowSize =
-    2097152; // 2 MB (Prevents TURN server buffer bloat)
+    524288; // 512 KB (Prevents TURN server buffer bloat)
 
 // ── bufferedAmount thresholds (real speed controller for Web) ────────────────
 /// Resume sending on Web once buffer drains below 64 KB.
