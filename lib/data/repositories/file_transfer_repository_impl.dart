@@ -17,23 +17,15 @@ import 'file_transfer_web.dart'
     if (dart.library.io) 'file_transfer_mobile.dart';
 
 // ── Chunk sizes ──────────────────────────────────────────────────────────────
-/// WiFi chunk size (16 KB).
-/// Smaller chunks give the receiver more frequent ack_window opportunities,
-/// preventing the Window ACK deadlock where the sender fills the window
-/// and blocks because the receiver's browser stream paused.
-const int _wifiChunkSize = 16384; // 16 KB
-
-/// Mobile data / TURN relay chunk size (8 KB).
-const int _mobileChunkSize = 8192; // 8 KB
+/// We now use a single chunk size (16 KB) for all transfers to balance overhead and speed.
+const int _chunkSize = 16384; // 16 KB
 
 // ── Window sizes ─────────────────────────────────────────────────────────────
-/// WiFi window: 256KB — receiver sends ack_window every 256KB.
-/// Small enough that the browser's WritableStream never stalls longer than
-/// the time to flush 256KB (~25ms on WiFi), preventing the Window ACK deadlock.
-const int _wifiWindowSize = 262144; // 256 KB
-
-/// Mobile window: 64KB — smaller window for TURN relay / slow connections.
-const int _mobileWindowSize = 65536; // 64 KB
+/// Unified Window: 64KB. To prevent Android WebRTC receivers from crashing due
+/// to OS UDP buffer overflows (limit ~212KB), ALL senders (including Web/PC) 
+/// must use a conservative 64KB window. This ensures 100% stability across all
+/// platforms (Web-to-App, App-to-App).
+const int _unifiedWindowSize = 65536; // 64 KB
 
 int _lastEmitTime = 0;
 
@@ -272,32 +264,18 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
         if (i < 4) await Future.delayed(const Duration(milliseconds: 400));
       }
 
-      if (candidateType == 'relay' || candidateType == 'srflx') {
-        // TURN relay or STUN direct path (public internet): 
-        // Both are limited by ISP/cellular bandwidth. Use smaller window and chunks.
-        isMobile = true;
-        debugPrint(
-          '📡 [P2P] Internet path ($candidateType) → Window-and-Wait '
-          '(${_mobileWindowSize ~/ 1024} KB window, '
-          '${_mobileChunkSize ~/ 1024} KB chunks)',
-        );
-      } else if (candidateType == 'host') {
-        // Direct local LAN path: use large window for maximum throughput
-        isMobile = false;
-        debugPrint(
-          '📶 [P2P] Local LAN ($candidateType) → WiFi mode (${_wifiWindowSize ~/ 1024} KB window, ${_wifiChunkSize ~/ 1024} KB chunks)',
-        );
-      } else {
-        // Stats not available — fall back to connectivity_plus as best-effort
-        final connectivityResult = await Connectivity().checkConnectivity();
-        isMobile = !connectivityResult.contains(ConnectivityResult.wifi) && 
-                   connectivityResult.contains(ConnectivityResult.mobile);
-        debugPrint(
-          isMobile
-              ? '📱 [P2P] Mobile data (connectivity fallback) → Pipeline mode'
-              : '📶 [P2P] WiFi (connectivity fallback) → Window mode',
-        );
-      }
+      final connectivityResult = await Connectivity().checkConnectivity();
+      final bool onMobileNetwork = !connectivityResult.contains(ConnectivityResult.wifi) && 
+                                   connectivityResult.contains(ConnectivityResult.mobile);
+
+      // To maximize stability on Mobile-to-Mobile transfers, we ALWAYS use
+      // the mobile window (64 KB). The Android WebRTC stack often drops connections
+      // if we push 256 KB bursts, even on fast WiFi.
+      isMobile = !kIsWeb; // If it's a mobile app, always use the safer profile.
+
+      debugPrint(
+        '📱 [P2P] Platform Detected → Safe Profile (${_unifiedWindowSize ~/ 1024} KB window)',
+      );
     } catch (e) {
       // Any error → safe fallback using connectivity_plus
       debugPrint(
@@ -330,8 +308,8 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
             'totalSize': totalSize,
             'fileIndex': i + 1,
             'totalFiles': files.length,
-            'transferMode': isMobile ? 'mobile' : 'wifi',
-            'windowSize': isMobile ? _mobileWindowSize : _wifiWindowSize,
+            'transferMode': 'safe',
+            'windowSize': _unifiedWindowSize,
           }),
         ),
       );
@@ -361,10 +339,7 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
       // ack_window handler will create the NEXT completer — no race condition.
       _windowAckCompleter = Completer<void>();
 
-      // Choose chunk size based on connection type:
-      // WiFi/direct P2P → 16 KB chunks (small so ack_window is processed frequently).
-      // Mobile/TURN relay → 8 KB chunks (avoids relay buffer overflow).
-      final int chunkSize = isMobile ? _mobileChunkSize : _wifiChunkSize;
+      final int chunkSize = _chunkSize;
 
       // ── Inner send loop — Pipeline + Adaptive Backpressure ────────────────
       Future<void> sendChunks(Uint8List bytes, int start, int end) async {
@@ -388,8 +363,7 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
             return;
           }
 
-          // ── Guard 2: Window ACK (memory safety — blocks only if receiver is 2MB+ behind) ──
-          final int windowSize = isMobile ? _mobileWindowSize : _wifiWindowSize;
+          final int windowSize = _unifiedWindowSize;
           if (bytesSinceLastAck >= windowSize) {
             debugPrint(
               '⏸ [P2P-TX] Window full — sent ${bytesSinceLastAck ~/ 1024} KB, waiting for ack_window...',
@@ -426,8 +400,8 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
           if (_isCancelled) return;
 
           // ── Send chunk ──────────────────────────────────────────────────
-          final sliceEnd = (offset + chunkSize < end)
-              ? offset + chunkSize
+          final sliceEnd = (offset + _chunkSize < end)
+              ? offset + _chunkSize
               : end;
           final slice = bytes.sublist(offset, sliceEnd);
 
@@ -457,11 +431,8 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
           //  1. ICE keepalive (STUN ping) packets are never blocked.
           //  2. ack_window messages from receiver are processed promptly.
           //  3. Android OS networking stack has time to flush UDP buffers.
-          // WiFi: 2ms → max ~8 MB/s (safe for Android SCTP buffer limits)
-          // Mobile/TURN: 4ms → ~2 MB/s (relay server bandwidth safe)
-          await Future.delayed(isMobile
-              ? const Duration(milliseconds: 4)   // ~2 MB/s on TURN relay
-              : const Duration(milliseconds: 2)); // ~8 MB/s on Direct P2P
+          // Unified 4ms delay + 16KB chunk = ~4 MB/s. Safe for ALL platforms.
+          await Future.delayed(const Duration(milliseconds: 4));
 
           // Calculate and log speed occasionally
           if (loopCount % 8 == 0) {
@@ -499,9 +470,7 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
       // If the final window didn't reach the threshold, the completer is still
       // pending. Complete it so cleanup is clean (ack_window may never arrive
       // if the last window was partial).
-      if (bytesSinceLastAck > 0 &&
-          bytesSinceLastAck <
-              (isMobile ? _mobileWindowSize : _wifiWindowSize)) {
+      if (bytesSinceLastAck > 0 && bytesSinceLastAck < _unifiedWindowSize) {
         if (_windowAckCompleter != null && !_windowAckCompleter!.isCompleted) {
           _windowAckCompleter!.complete();
         }
@@ -642,9 +611,7 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
             if (decoded['windowSize'] != null) {
               _remoteWindowSize = decoded['windowSize'] as int;
             } else {
-              _remoteWindowSize = _remoteTransferMode == 'mobile'
-                  ? _mobileWindowSize
-                  : _wifiWindowSize;
+              _remoteWindowSize = _unifiedWindowSize;
             }
 
             _fileSaver = getFileSaver();
