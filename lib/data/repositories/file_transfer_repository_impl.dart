@@ -370,7 +370,18 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
             );
 
             try {
-              await _windowAckCompleter!.future;
+              // 30-second timeout — if receiver never acks, it's dead (browser closed, etc.)
+              await _windowAckCompleter!.future
+                  .timeout(const Duration(seconds: 30));
+            } on TimeoutException {
+              if (!_isCancelled) {
+                debugPrint('⏰ [P2P-TX] ack_window timeout — receiver unresponsive.');
+                _progressController.addError(
+                  'Receiver stopped responding. Please try again.',
+                );
+                haltTransfer();
+              }
+              return;
             } catch (e) {
               if (!_isCancelled) {
                 _progressController.addError(
@@ -535,18 +546,18 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
           return;
         }
 
-        // Apply backpressure if receiving on Web (Service Worker pause signal)
-        if (kIsWeb) await _fileSaver?.waitForReady();
-
         // Binary chunk — write to file saver
-        _fileSaver?.addChunk(message.binary);
+        // IMPORTANT: Do NOT await waitForReady() BEFORE counting/ACKing the window.
+        // If the browser download bar pauses, waitForReady() blocks indefinitely,
+        // which delays the ack_window back to the sender, causing a deadlock.
+        // Instead: count the bytes and send the ack_window FIRST, then write.
+        // The Service Worker buffers chunks internally if the download is paused.
         _receivedBytes += message.binary.length;
         _windowBytesReceived += message.binary.length;
 
-        // Send window ACK back to sender to unblock their Guard 2
+        // Send window ACK back to sender to unblock their Guard 2 FIRST
         if (_windowBytesReceived >= _remoteWindowSize) {
           _windowBytesReceived = 0;
-          // Apply true disk-level backpressure before asking for more data
           if (!kIsWeb) {
             await _fileSaver?.flush();
           }
@@ -557,6 +568,10 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
             '📨 [P2P-RX] Sent ack_window (received ${_receivedBytes ~/ 1024} KB total)',
           );
         }
+
+        // NOW write to disk (web: after acking, so browser pause doesn't deadlock sender)
+        if (kIsWeb) await _fileSaver?.waitForReady();
+        _fileSaver?.addChunk(message.binary);
 
         // Send progress update to sender every ~200ms so sender UI stays perfectly in sync
         final nowMs = DateTime.now().millisecondsSinceEpoch;
