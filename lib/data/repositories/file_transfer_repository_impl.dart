@@ -272,20 +272,20 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
         if (i < 4) await Future.delayed(const Duration(milliseconds: 400));
       }
 
-      if (candidateType == 'relay') {
-        // TURN relay path: same protocol as mobile data mode
+      if (candidateType == 'relay' || candidateType == 'srflx') {
+        // TURN relay or STUN direct path (public internet): 
+        // Both are limited by ISP/cellular bandwidth. Use smaller window and chunks.
         isMobile = true;
         debugPrint(
-          '📡 [P2P] TURN relay → Window-and-Wait '
+          '📡 [P2P] Internet path ($candidateType) → Window-and-Wait '
           '(${_mobileWindowSize ~/ 1024} KB window, '
-          '${_mobileChunkSize ~/ 1024} KB chunks, '
-          'ACK timeout: 300s)',
+          '${_mobileChunkSize ~/ 1024} KB chunks)',
         );
-      } else if (candidateType == 'host' || candidateType == 'srflx') {
-        // Direct P2P path: use large window for maximum throughput
+      } else if (candidateType == 'host') {
+        // Direct local LAN path: use large window for maximum throughput
         isMobile = false;
         debugPrint(
-          '📶 [P2P] Direct P2P ($candidateType) → WiFi mode (${_wifiWindowSize ~/ 1024} KB window, ${_wifiChunkSize ~/ 1024} KB chunks)',
+          '📶 [P2P] Local LAN ($candidateType) → WiFi mode (${_wifiWindowSize ~/ 1024} KB window, ${_wifiChunkSize ~/ 1024} KB chunks)',
         );
       } else {
         // Stats not available — fall back to connectivity_plus as best-effort
