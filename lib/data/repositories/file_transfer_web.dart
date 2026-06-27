@@ -259,5 +259,11 @@ class WebFileSaver implements P2PFileSaver {
     }
     _chunks.clear();
   }
+
+  @override
+  Future<void> flush() async {
+    // Web File System API flushes automatically through the stream
+    // or accumulates blobs, no manual flush needed.
+  }
 }
 

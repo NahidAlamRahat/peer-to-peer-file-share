@@ -430,6 +430,20 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
               ? offset + chunkSize
               : end;
           final slice = bytes.sublist(offset, sliceEnd);
+
+          // Wait for SCTP send buffer to drain if it's filling up.
+          // Without this, Android WebRTC overflows its 16MB SCTP buffer
+          // and crashes the data channel mid-transfer.
+          // Note: on Web, bufferedAmount is reliable; on Android it may return 0,
+          // so this is a best-effort guard that still helps when the value is reported.
+          try {
+            await _webrtcClient.waitForBufferDrain();
+          } catch (_) {
+            // Disposed or cancelled — exit immediately
+            return;
+          }
+          if (_isCancelled) return;
+
           _webrtcClient.sendDataMessageBinary(slice);
 
           bytesSent += slice.length;
@@ -443,11 +457,11 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
           //  1. ICE keepalive (STUN ping) packets are never blocked.
           //  2. ack_window messages from receiver are processed promptly.
           //  3. Android OS networking stack has time to flush UDP buffers.
-          // Note: bufferedAmount is NOT used here because Android Chrome
-          // incorrectly returns 0 for this property, making it useless.
+          // WiFi: 2ms → max ~8 MB/s (safe for Android SCTP buffer limits)
+          // Mobile/TURN: 4ms → ~2 MB/s (relay server bandwidth safe)
           await Future.delayed(isMobile
               ? const Duration(milliseconds: 4)   // ~2 MB/s on TURN relay
-              : const Duration(milliseconds: 1)); // ~16 MB/s on Direct P2P
+              : const Duration(milliseconds: 2)); // ~8 MB/s on Direct P2P
 
           // Calculate and log speed occasionally
           if (loopCount % 8 == 0) {
@@ -563,6 +577,10 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
         // Send window ACK back to sender to unblock their Guard 2
         if (_windowBytesReceived >= _remoteWindowSize) {
           _windowBytesReceived = 0;
+          // Apply true disk-level backpressure before asking for more data
+          if (!kIsWeb) {
+            await _fileSaver?.flush();
+          }
           _webrtcClient.sendDataMessage(
             RTCDataChannelMessage(jsonEncode({'type': 'ack_window'})),
           );
@@ -668,6 +686,10 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
                 _windowBytesReceived += queued.length;
                 if (_windowBytesReceived >= _remoteWindowSize) {
                   _windowBytesReceived = 0;
+                  // Apply true disk-level backpressure before asking for more data
+                  if (!kIsWeb) {
+                    await _fileSaver?.flush();
+                  }
                   _webrtcClient.sendDataMessage(
                     RTCDataChannelMessage(jsonEncode({'type': 'ack_window'})),
                   );

@@ -13,4 +13,5 @@ abstract class P2PFileSaver {
   void setOnCancel(void Function() onCancel);
   void setOnIncognitoDetected(void Function() onIncognito) {} // no-op by default
   Future<void> waitForReady();
+  Future<void> flush();
 }

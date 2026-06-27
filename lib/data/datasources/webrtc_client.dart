@@ -54,6 +54,14 @@ class WebRTCClient {
   Function(RTCPeerConnectionState state)? onConnectionState;
   Function(int amount)? onBufferedAmountLow;
 
+  // Buffer drain completer — resolves when bufferedAmount drops below threshold
+  Completer<void>? _bufferDrainCompleter;
+
+  // High-water mark: if bufferedAmount exceeds this, block sending
+  // 256 KB is safe — Android SCTP limit is 16 MB but we stay far below
+  static const int _bufferHighWaterMark = 262144; // 256 KB
+  static const int _bufferLowWaterMark  = 65536;  //  64 KB
+
   bool _initialized = false;
 
   Future<void> initialize() async {
@@ -116,6 +124,10 @@ class WebRTCClient {
     };
 
     _dataChannel?.onBufferedAmountLow = (int amount) {
+      // Unblock any sender waiting for buffer to drain
+      if (_bufferDrainCompleter != null && !_bufferDrainCompleter!.isCompleted) {
+        _bufferDrainCompleter!.complete();
+      }
       if (onBufferedAmountLow != null) {
         onBufferedAmountLow!(amount);
       }
@@ -127,6 +139,23 @@ class WebRTCClient {
 
   void setBufferedAmountLowThreshold(int threshold) {
     _dataChannel?.bufferedAmountLowThreshold = threshold;
+  }
+
+  /// Blocks until the DataChannel's send buffer drains below [_bufferLowWaterMark].
+  /// This prevents SCTP buffer overflow which crashes the data channel on Android.
+  /// Call this before every sendDataMessageBinary() call.
+  Future<void> waitForBufferDrain() async {
+    if (_dataChannel == null) return;
+    // If buffer is already below high water mark, send immediately
+    if ((_dataChannel?.bufferedAmount ?? 0) < _bufferHighWaterMark) return;
+
+    // Set low-water threshold so onBufferedAmountLow fires when safe
+    _dataChannel?.bufferedAmountLowThreshold = _bufferLowWaterMark;
+
+    // Wait for the low event
+    _bufferDrainCompleter ??= Completer<void>();
+    await _bufferDrainCompleter!.future;
+    _bufferDrainCompleter = null;
   }
 
   Future<RTCSessionDescription> createOffer() async {
@@ -220,6 +249,11 @@ class WebRTCClient {
   }
 
   void dispose() {
+    // Unblock any pending waitForBufferDrain() so the send loop exits cleanly
+    if (_bufferDrainCompleter != null && !_bufferDrainCompleter!.isCompleted) {
+      _bufferDrainCompleter!.completeError(Exception('Disposed'));
+    }
+    _bufferDrainCompleter = null;
     _dataChannel?.close();
     _peerConnection?.close();
     _dataChannel = null;

@@ -59,12 +59,13 @@ class MobileFileSaver implements P2PFileSaver {
 
   @override
   void triggerManualDownload(String path) {
-    // No-op for mobile. The file is already safely on disk.
+    // Mobile doesn't need a manual download trigger, 
+    // it's already saved in the Download directory.
   }
 
   @override
   void setOnCancel(void Function() onCancel) {
-    // Mobile file saver doesn't have a native cancel callback
+    // Not used on mobile.
   }
 
   @override
@@ -75,5 +76,10 @@ class MobileFileSaver implements P2PFileSaver {
   @override
   Future<void> waitForReady() async {
     // Mobile writes directly to disk, no backpressure waiting needed
+  }
+
+  @override
+  Future<void> flush() async {
+    await _sink?.flush();
   }
 }
