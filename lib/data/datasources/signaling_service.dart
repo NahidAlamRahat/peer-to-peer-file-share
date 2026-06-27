@@ -71,11 +71,9 @@ class SignalingService {
           _isConnected = false;
           _isRegistered = false; // Must re-register on reconnect
           _heartbeatTimer?.cancel();
-          final errMsg = _friendlyError(error);
-          onConnectionError?.call(errMsg);
-          if (onSessionError != null) {
-            onSessionError!({'message': errMsg});
-          }
+          // Do NOT emit fatal onConnectionError/onSessionError here.
+          // This is a temporary connection issue, and the reconnect loop will handle it.
+          // The UI will wait up to 60s for registration before giving up.
           if (!_disposed) _scheduleReconnect();
         },
         cancelOnError: false,
@@ -95,21 +93,13 @@ class SignalingService {
         _isRegistered = false;
         _heartbeatTimer?.cancel();
         debugPrint('❌ [WS-ERR] WebSocket ready error: $error');
-        final errMsg = _friendlyError(error);
-        onConnectionError?.call(errMsg);
-        if (onSessionError != null) {
-          onSessionError!({'message': errMsg});
-        }
+        // Temporary connection issue — schedule reconnect
         _scheduleReconnect();
       });
     } catch (e) {
       _isConnected = false;
       debugPrint('❌ [WS-ERR] Error connecting to signaling server: $e');
-      final errMsg = _friendlyError(e);
-      onConnectionError?.call(errMsg);
-      if (onSessionError != null) {
-        onSessionError!({'message': errMsg});
-      }
+      // Temporary connection issue — schedule reconnect
       if (!_disposed) _scheduleReconnect();
     }
   }

@@ -202,8 +202,11 @@ class PeerRepositoryImpl implements PeerRepository {
       if (!_signalingService.isConnected) {
         _signalingService.connect();
       }
-      const maxWait = Duration(seconds: 20);
-      const checkInterval = Duration(milliseconds: 300);
+      // Render free tier servers go to sleep after 15m of inactivity.
+      // Waking up can take up to 50-60 seconds.
+      _statusMessageController.add('Waking up server (can take up to 60s)...');
+      const maxWait = Duration(seconds: 60);
+      const checkInterval = Duration(milliseconds: 500);
       final deadline = DateTime.now().add(maxWait);
       while (!_signalingService.isRegistered &&
           DateTime.now().isBefore(deadline)) {
@@ -245,8 +248,11 @@ class PeerRepositoryImpl implements PeerRepository {
       if (!_signalingService.isConnected) {
         _signalingService.connect();
       }
-      const maxWait = Duration(seconds: 20);
-      const checkInterval = Duration(milliseconds: 300);
+      // Render free tier servers go to sleep after 15m of inactivity.
+      // Waking up can take up to 50-60 seconds.
+      _statusMessageController.add('Waking up server (can take up to 60s)...');
+      const maxWait = Duration(seconds: 60);
+      const checkInterval = Duration(milliseconds: 500);
       final deadline = DateTime.now().add(maxWait);
       while (!_signalingService.isRegistered &&
           DateTime.now().isBefore(deadline)) {
