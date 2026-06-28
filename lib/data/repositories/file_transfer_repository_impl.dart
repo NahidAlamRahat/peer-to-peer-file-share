@@ -701,6 +701,12 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
             // All data received — cancel watchdog, save file, notify sender
             _receiveWatchdog?.cancel();
             _receiveWatchdog = null;
+            // ✅ Reset byte counters NOW, before the next file's metadata/chunks arrive.
+            // Without this, if next-file binary chunks arrive before 'metadata',
+            // they get added to the stale counter from this file, causing
+            // receiver to show MORE bytes than sender has sent.
+            _receivedBytes = 0;
+            _windowBytesReceived = 0;
             if (_fileSaver != null) {
               final savedPath = await _fileSaver!.closeAndSave();
 
