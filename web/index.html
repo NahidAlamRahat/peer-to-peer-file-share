@@ -134,27 +134,6 @@
       }
 
       // 2. Normal Flutter Initialization
-      function injectAdsterraAds() {
-        // Social Bar
-        var sBar = document.createElement('script');
-        sBar.src = 'https://pl29583442.effectivecpmnetwork.com/a1/06/ed/a106edc96e107a31cce7dce81eb16742.js';
-        document.body.appendChild(sBar);
-
-        // Popunder
-        try {
-          var KEY = 'pt_pop_ts';
-          var INTERVAL = 6 * 60 * 60 * 1000;
-          var last = localStorage.getItem(KEY);
-          var now = Date.now();
-          if (!last || (now - parseInt(last, 10)) > INTERVAL) {
-            localStorage.setItem(KEY, now);
-            var pScript = document.createElement('script');
-            pScript.src = 'https://pl29583440.effectivecpmnetwork.com/d3/72/3b/d3723b40affae7bdf83b03e797bc5d14.js';
-            document.head.appendChild(pScript);
-          }
-        } catch (e) {}
-      }
-
       const observer = new MutationObserver(function (mutations) {
         mutations.forEach(function (mutation) {
           if (mutation.addedNodes.length > 0) {
@@ -167,8 +146,6 @@
                 }
                 observer.disconnect();
 
-                // Delay Adsterra injection until Splash Screen is done (~3.5 seconds)
-                setTimeout(injectAdsterraAds, 3500);
               }
             }
           }
