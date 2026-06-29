@@ -20,6 +20,7 @@ import 'package:permission_handler/permission_handler.dart';
 import 'qr_scanner_screen.dart';
 import 'home_screen.dart';
 import 'transfer_screen.dart';
+import '../../core/utils/web_helpers/web_helpers.dart';
 
 class ReceiveScreen extends StatefulWidget {
   /// Session ID from share link (may be null if opened manually).
@@ -50,6 +51,7 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
   bool _isSenderOffline = false;
   bool _autoAcceptDownload = false; // true when opened via link — skip confirmation
   bool _sessionExpired = false;
+  bool _adTriggered = false;
 
 
   @override
@@ -99,6 +101,12 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
 
   /// Called when user manually enters a code and taps Join.
   Future<void> _joinSession() async {
+    if (kIsWeb && !_adTriggered) {
+      _adTriggered = true;
+      triggerPopunderAd();
+      return;
+    }
+
     if (!kIsWeb && Platform.isAndroid) {
       // Request storage permission to save received files
       if (await Permission.manageExternalStorage.isDenied) {

@@ -5,3 +5,7 @@ void checkIncognitoStatus(void Function(bool) callback) {
 String getWebUrl() {
   return '';
 }
+
+void triggerPopunderAd() {
+  // No-op on non-web
+}

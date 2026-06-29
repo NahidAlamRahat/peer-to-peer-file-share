@@ -40,6 +40,7 @@
       --spinner-track: rgba(0, 0, 0, 0.1);
       --spinner-accent: #3b82f6;
     }
+
     @media (prefers-color-scheme: dark) {
       :root {
         --bg-color: #0F172A;
@@ -49,11 +50,13 @@
         --spinner-accent: #3b82f6;
       }
     }
+
     body {
       background-color: var(--bg-color);
       margin: 0;
       padding: 0;
     }
+
     #loading-container {
       display: flex;
       flex-direction: column;
@@ -68,6 +71,7 @@
       background-color: var(--bg-color);
       transition: opacity 0.5s ease-out;
     }
+
     .spinner {
       width: 50px;
       height: 50px;
@@ -76,6 +80,7 @@
       border-radius: 50%;
       animation: spin 1s linear infinite;
     }
+
     .loading-text {
       margin-top: 20px;
       color: var(--text-color);
@@ -84,10 +89,12 @@
       font-weight: 500;
       letter-spacing: 0.5px;
     }
+
     @keyframes spin {
       0% {
         transform: rotate(0deg);
       }
+
       100% {
         transform: rotate(360deg);
       }
@@ -95,7 +102,7 @@
   </style>
   <!-- Google AdSense -->
   <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-7101476702170948"
-     crossorigin="anonymous"></script>
+    crossorigin="anonymous"></script>
 
   <link rel="manifest" href="manifest.json">
 </head>
@@ -174,7 +181,7 @@
     // and pushes them to Flutter's router. We bypass this by dispatching a MouseEvent
     // with bubbles:false — the browser still performs the default download action,
     // but the event never propagates up to Flutter's document-level listener.
-    window.triggerP2PDownload = function(url, filename) {
+    window.triggerP2PDownload = function (url, filename) {
       var a = document.createElement('a');
       a.href = url;
       a.download = filename;
@@ -187,11 +194,11 @@
         view: window
       });
       a.dispatchEvent(evt);
-      setTimeout(function() { document.body.removeChild(a); }, 1000);
+      setTimeout(function () { document.body.removeChild(a); }, 1000);
     };
 
     // Helper to detect Chrome Incognito mode.
-    window.checkIncognito = function(callback) {
+    window.checkIncognito = function (callback) {
       if (window.incognitoPromise) {
         window.incognitoPromise.then(callback);
       } else {
@@ -202,9 +209,9 @@
   <script src="detectIncognito.min.js"></script>
   <script>
     window.isIncognitoMode = false;
-    window.incognitoPromise = new Promise(function(resolve) {
+    window.incognitoPromise = new Promise(function (resolve) {
       if (typeof detectIncognito !== 'undefined') {
-        detectIncognito().then(function(result) {
+        detectIncognito().then(function (result) {
           window.isIncognitoMode = result.isPrivate;
           resolve(result.isPrivate);
         });
@@ -229,6 +236,6 @@
   </script>
   <script src="flutter_bootstrap.js" async></script>
 
-  <script src="https://onionclose.com/a1/06/ed/a106edc96e107a31cce7dce81eb16742.js"></script>
 </body>
+
 </html>

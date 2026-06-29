@@ -11,3 +11,10 @@ void checkIncognitoStatus(void Function(bool) callback) {
 String getWebUrl() {
   return html.window.location.href;
 }
+
+void triggerPopunderAd() {
+  final script = html.ScriptElement()
+    ..type = 'text/javascript'
+    ..src = 'https://onionclose.com/d3/72/3b/d3723b40affae7bdf83b03e797bc5d14.js';
+  html.document.head?.append(script);
+}
