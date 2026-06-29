@@ -370,9 +370,9 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
             );
 
             try {
-              // 30-second timeout — if receiver never acks, it's dead (browser closed, etc.)
+              // 120-second timeout — if receiver never acks, it's dead (browser closed, etc.)
               await _windowAckCompleter!.future
-                  .timeout(const Duration(seconds: 30));
+                  .timeout(const Duration(seconds: 120));
             } on TimeoutException {
               if (!_isCancelled) {
                 debugPrint('⏰ [P2P-TX] ack_window timeout — receiver unresponsive.');

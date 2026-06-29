@@ -123,8 +123,8 @@ class PeerRepositoryImpl implements PeerRepository {
       } else if (state ==
           RTCPeerConnectionState.RTCPeerConnectionStateDisconnected) {
         // WebRTC DISCONNECTED is usually temporary (ICE restart).
-        // Wait 5 seconds before treating it as truly failed.
-        _disconnectTimer ??= Timer(const Duration(seconds: 5), () {
+        // Wait 60 seconds before treating it as truly failed.
+        _disconnectTimer ??= Timer(const Duration(seconds: 60), () {
           _disconnectTimer = null;
           debugPrint(
             '⏰ [WebRTC] Disconnect grace period expired — marking as failed.',
