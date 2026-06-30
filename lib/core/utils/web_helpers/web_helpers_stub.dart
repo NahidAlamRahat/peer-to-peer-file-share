@@ -6,6 +6,6 @@ String getWebUrl() {
   return '';
 }
 
-void triggerPopunderAd() {
+void triggerSmartlinkAd() {
   // No-op on non-web
 }

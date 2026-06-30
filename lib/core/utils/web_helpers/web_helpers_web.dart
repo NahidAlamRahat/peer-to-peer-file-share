@@ -12,9 +12,6 @@ String getWebUrl() {
   return html.window.location.href;
 }
 
-void triggerPopunderAd() {
-  final script = html.ScriptElement()
-    ..type = 'text/javascript'
-    ..src = 'https://onionclose.com/d3/72/3b/d3723b40affae7bdf83b03e797bc5d14.js';
-  html.document.head?.append(script);
+void triggerSmartlinkAd() {
+  html.window.open('https://onionclose.com/xi5is7dew0?key=f892ea74716f32230fa66a11f6354dcc', '_blank');
 }

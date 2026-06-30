@@ -51,7 +51,7 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
   bool _isSenderOffline = false;
   bool _autoAcceptDownload = false; // true when opened via link — skip confirmation
   bool _sessionExpired = false;
-  bool _adTriggered = false;
+  DateTime? _lastAdTime;
 
 
   @override
@@ -101,10 +101,13 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
 
   /// Called when user manually enters a code and taps Join.
   Future<void> _joinSession() async {
-    if (kIsWeb && !_adTriggered) {
-      _adTriggered = true;
-      triggerPopunderAd();
-      return;
+    if (kIsWeb) {
+      final now = DateTime.now();
+      if (_lastAdTime == null || now.difference(_lastAdTime!).inSeconds >= 5) {
+        _lastAdTime = now;
+        triggerSmartlinkAd();
+        return;
+      }
     }
 
     if (!kIsWeb && Platform.isAndroid) {
