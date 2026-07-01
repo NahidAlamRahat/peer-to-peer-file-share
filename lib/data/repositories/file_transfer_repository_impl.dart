@@ -21,11 +21,9 @@ import 'file_transfer_web.dart'
 const int _chunkSize = 16384; // 16 KB
 
 // ── Window sizes ─────────────────────────────────────────────────────────────
-/// Unified Window: 64KB. To prevent Android WebRTC receivers from crashing due
-/// to OS UDP buffer overflows (limit ~212KB), ALL senders (including Web/PC) 
-/// must use a conservative 64KB window. This ensures 100% stability across all
-/// platforms (Web-to-App, App-to-App).
-const int _unifiedWindowSize = 65536; // 64 KB
+/// Unified Window: 1 MB. Increased to allow much faster speeds on Wi-Fi and mobile networks
+/// by reducing the frequency of ACK waits.
+const int _unifiedWindowSize = 1048576; // 1 MB
 
 int _lastEmitTime = 0;
 
@@ -437,13 +435,9 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
           loopCount++;
 
           // ── Timing & Throttling ─────────────────────────────────────────
-          // Always yield every chunk to the Dart event loop.
-          // This ensures:
-          //  1. ICE keepalive (STUN ping) packets are never blocked.
-          //  2. ack_window messages from receiver are processed promptly.
-          //  3. Android OS networking stack has time to flush UDP buffers.
-          // Unified 4ms delay + 16KB chunk = ~4 MB/s. Safe for ALL platforms.
-          await Future.delayed(const Duration(milliseconds: 4));
+          // Yield the event loop to ensure ICE keepalives and ACKs are processed.
+          // Reduced delay to 1ms to allow faster throughput.
+          await Future.delayed(const Duration(milliseconds: 1));
 
           // Calculate and log speed occasionally
           if (loopCount % 8 == 0) {
