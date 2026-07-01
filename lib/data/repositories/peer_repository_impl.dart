@@ -38,17 +38,20 @@ class PeerRepositoryImpl implements PeerRepository {
 
   @override
   Future<void> initialize() async {
-    // Connect the WebSocket
-    if (!_signalingService.isConnected) {
-      _signalingService.connect();
-    }
-    // Initialize WebRTC early in the background so it's ready instantly when creating a session
-    _webrtcClient.initialize();
-
+    // Always re-register callbacks after a dispose() — callbacks were cleared.
+    // This must happen BEFORE connecting so the onRegistered callback is in place.
     if (!_listenersSetup) {
       _setupListeners();
       _listenersSetup = true;
     }
+
+    // Connect the WebSocket (no-op if already connected)
+    if (!_signalingService.isConnected) {
+      _signalingService.connect();
+    }
+
+    // Initialize WebRTC in the background so it's ready when needed
+    _webrtcClient.initialize();
   }
 
   void _setupListeners() {
@@ -302,6 +305,13 @@ class PeerRepositoryImpl implements PeerRepository {
     _currentRole = null;
     _createSessionCompleter = null;
     _pendingJoinSessionId = null; // Clear pending join
+
+    // Dispose signaling (clears all callbacks) and WebRTC.
+    // IMPORTANT: reset _listenersSetup so initialize() re-registers callbacks
+    // on the next session — otherwise all signaling events will be silently dropped.
+    _signalingService.dispose();
+    _listenersSetup = false;
+
     _webrtcClient.dispose();
   }
 }
