@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
 
-import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
 import 'package:uuid/uuid.dart';
@@ -21,9 +20,12 @@ import 'file_transfer_web.dart'
 const int _chunkSize = 16384; // 16 KB
 
 // ── Window sizes ─────────────────────────────────────────────────────────────
-/// Unified Window: 1 MB. Increased to allow much faster speeds on Wi-Fi and mobile networks
-/// by reducing the frequency of ACK waits.
-const int _unifiedWindowSize = 1048576; // 1 MB
+/// Web Window: 1 MB — browser bufferedAmount is reliable, so 1 MB is safe.
+/// Mobile Window: 256 KB — Android bufferedAmount always returns 0 so waitForBufferDrain()
+/// is effectively a no-op. A smaller window reduces in-flight data and prevents
+/// the SCTP stack from being overwhelmed and crashing the DataChannel.
+const int _unifiedWindowSize = 1048576;  // 1 MB  (web)
+const int _mobileWindowSize  = 262144;   // 256 KB (Android/iOS)
 
 int _lastEmitTime = 0;
 
@@ -214,6 +216,10 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
     _initQueue.clear();
     _receiveWatchdog?.cancel();
     _receiveWatchdog = null;
+    // Reset rx_progress timestamp so the FIRST chunk of the new file sends
+    // an immediate progress update to the sender. Without this, the sender
+    // sees stale bytes from the previous file for up to 100ms.
+    _lastRxProgressPingMs = 0;
     // Drain the serial queue — any in-flight messages after cancel are irrelevant.
     // _msgQueue.clear(); // REMOVED: This causes chunks of the next file to be deleted if they arrive back-to-back with metadata!
     // NOTE: _isProcessingMsg is intentionally NOT reset here.
@@ -251,41 +257,26 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
     // ICE often connects via 'relay' instantly but upgrades to 'host' (direct P2P)
     // a second later. We poll up to 2 seconds to allow this upgrade to happen
     // before locking in the mode.
-    bool isMobile = false;
+    // On Android/iOS, bufferedAmount always returns 0, making waitForBufferDrain()
+    // a no-op. We therefore use a smaller application-level window (256 KB) to
+    // keep in-flight data low and avoid SCTP stack overflows that crash the DataChannel.
+    final bool isMobile = !kIsWeb;
+    final int effectiveWindowSize = isMobile ? _mobileWindowSize : _unifiedWindowSize;
+
     try {
-      String candidateType = 'unknown';
+      // Poll up to 2s for ICE upgrade from relay → direct (host/srflx).
       for (int i = 0; i < 5; i++) {
-        candidateType = await _webrtcClient.getSelectedCandidateType();
-        if (candidateType == 'host' || candidateType == 'srflx') {
-          break; // Upgraded to direct connection!
-        }
+        final candidateType = await _webrtcClient.getSelectedCandidateType();
+        if (candidateType == 'host' || candidateType == 'srflx') break;
         if (i < 4) await Future.delayed(const Duration(milliseconds: 400));
       }
-
-      final connectivityResult = await Connectivity().checkConnectivity();
-      final bool onMobileNetwork = !connectivityResult.contains(ConnectivityResult.wifi) && 
-                                   connectivityResult.contains(ConnectivityResult.mobile);
-
-      // To maximize stability on Mobile-to-Mobile transfers, we ALWAYS use
-      // the mobile window (64 KB). The Android WebRTC stack often drops connections
-      // if we push 256 KB bursts, even on fast WiFi.
-      isMobile = !kIsWeb; // If it's a mobile app, always use the safer profile.
-
       debugPrint(
-        '📱 [P2P] Platform Detected → Safe Profile (${_unifiedWindowSize ~/ 1024} KB window)',
+        isMobile
+            ? '📱 [P2P] Mobile platform → using ${_mobileWindowSize ~/ 1024} KB window (safe profile)'
+            : '🌐 [P2P] Web platform → using ${_unifiedWindowSize ~/ 1024} KB window',
       );
     } catch (e) {
-      // Any error → safe fallback using connectivity_plus
-      debugPrint(
-        '⚠️ [P2P] Connection type detection failed, using connectivity fallback: $e',
-      );
-      try {
-        final connectivityResult = await Connectivity().checkConnectivity();
-        isMobile = !connectivityResult.contains(ConnectivityResult.wifi) && 
-                   connectivityResult.contains(ConnectivityResult.mobile);
-      } catch (_) {
-        isMobile = false; // Last resort: assume WiFi mode
-      }
+      debugPrint('⚠️ [P2P] Connection type detection failed: $e');
     }
 
     for (int i = 0; i < files.length; i++) {
@@ -307,7 +298,7 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
             'fileIndex': i + 1,
             'totalFiles': files.length,
             'transferMode': 'safe',
-            'windowSize': _unifiedWindowSize,
+            'windowSize': effectiveWindowSize,
           }),
         ),
       );
@@ -361,8 +352,7 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
             return;
           }
 
-          final int windowSize = _unifiedWindowSize;
-          if (bytesSinceLastAck >= windowSize) {
+          if (bytesSinceLastAck >= effectiveWindowSize) {
             debugPrint(
               '⏸ [P2P-TX] Window full — sent ${bytesSinceLastAck ~/ 1024} KB, waiting for ack_window...',
             );
@@ -415,10 +405,9 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
           final slice = bytes.sublist(offset, sliceEnd);
 
           // Wait for SCTP send buffer to drain if it's filling up.
-          // Without this, Android WebRTC overflows its 16MB SCTP buffer
-          // and crashes the data channel mid-transfer.
-          // Note: on Web, bufferedAmount is reliable; on Android it may return 0,
-          // so this is a best-effort guard that still helps when the value is reported.
+          // On Web, bufferedAmount is reliable. On Android it always returns 0,
+          // so this is a best-effort guard. The smaller mobile window (256 KB) is
+          // the primary safety mechanism on Android.
           try {
             await _webrtcClient.waitForBufferDrain();
           } catch (_) {
@@ -435,9 +424,16 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
           loopCount++;
 
           // ── Timing & Throttling ─────────────────────────────────────────
-          // Yield the event loop to ensure ICE keepalives and ACKs are processed.
-          // Reduced delay to 1ms to allow faster throughput.
-          await Future.delayed(const Duration(milliseconds: 1));
+          // On mobile: yield 5ms every 8 chunks (~128 KB) to give the Android
+          // event loop time to process ICE keepalives, ACKs, and GC.
+          // Android's bufferedAmount is unreliable (returns 0) so a time-based
+          // throttle is the only reliable backpressure mechanism we have.
+          // On web: 1ms is fine — browser JS event loop handles it efficiently.
+          if (isMobile && loopCount % 8 == 0) {
+            await Future.delayed(const Duration(milliseconds: 5));
+          } else {
+            await Future.delayed(const Duration(milliseconds: 1));
+          }
 
           // Calculate and log speed occasionally
           if (loopCount % 8 == 0) {
@@ -567,9 +563,10 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
         if (kIsWeb) await _fileSaver?.waitForReady();
         _fileSaver?.addChunk(message.binary);
 
-        // Send progress update to sender every ~200ms so sender UI stays perfectly in sync
+        // Send progress update to sender every ~100ms so sender UI stays in sync.
+        // 100ms (vs 200ms) reduces the visible lag between receiver and sender display.
         final nowMs = DateTime.now().millisecondsSinceEpoch;
-        if (nowMs - _lastRxProgressPingMs > 200) {
+        if (nowMs - _lastRxProgressPingMs > 100) {
           _lastRxProgressPingMs = nowMs;
           _webrtcClient.sendDataMessage(
             RTCDataChannelMessage(

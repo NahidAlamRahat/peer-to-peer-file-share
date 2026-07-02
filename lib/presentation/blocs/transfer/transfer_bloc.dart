@@ -98,6 +98,21 @@ class TransferBloc extends Bloc<TransferEvent, TransferState> {
     if (state is TransferSuccess || state is TransferCancelledByPeer || state is TransferFailure) return;
 
     final now = DateTime.now();
+
+    // ── File boundary detection ——————————————————————————————
+    // When a new file starts, bytesTransferred resets to 0. If _lastBytes
+    // is still at the previous file's high value, bytesDiff becomes negative
+    // causing incorrect speed and slow-network detection. Reset tracking state.
+    final isNewFile = event.bytesTransferred < _lastBytes;
+    if (isNewFile) {
+      _lastBytes = 0;
+      _lastUpdate = null;
+      _currentSpeed = 0;
+      _isNetworkSlow = false;
+      _slowNetworkTimer?.cancel();
+      _slowNetworkTimer = null;
+    }
+
     if (_lastUpdate != null) {
       final elapsed = now.difference(_lastUpdate!).inMilliseconds;
       if (elapsed > 200) {
