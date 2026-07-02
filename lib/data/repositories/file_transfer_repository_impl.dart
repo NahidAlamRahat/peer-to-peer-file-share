@@ -25,8 +25,7 @@ const int _chunkSize = 16384; // 16 KB
 /// is effectively a no-op. A smaller window reduces in-flight data and prevents
 /// the SCTP stack from being overwhelmed and crashing the DataChannel.
 const int _unifiedWindowSize = 1048576;  // 1 MB  (web)
-const int _mobileWindowSize  = 262144;   // 256 KB (Android/iOS)
-
+const int _mobileWindowSize  = 131072;   // 128 KB (Android/iOS) — strict to prevent silent packet drops
 int _lastEmitTime = 0;
 
 void _emitProgress({
@@ -551,6 +550,14 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
         // which delays the ack_window back to the sender, causing a deadlock.
         // Instead: count the bytes and send the ack_window FIRST, then write.
         // The Service Worker buffers chunks internally if the download is paused.
+
+        // Restart receiver watchdog since data is flowing
+        _receiveWatchdog?.cancel();
+        _receiveWatchdog = Timer(const Duration(seconds: 45), () {
+          debugPrint('⏰ [P2P-RX] Watchdog timeout — no data received for 45s');
+          _progressController.addError('Connection lost or sender stopped responding.');
+          cancelTransfer(myRole: 'receiver');
+        });
         _receivedBytes += message.binary.length;
         _windowBytesReceived += message.binary.length;
 
@@ -690,6 +697,14 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
               fileIndex: _receivingFileIndex,
               totalFiles: _receivingTotalFiles,
             );
+
+            // Start watchdog for the first chunk
+            _receiveWatchdog?.cancel();
+            _receiveWatchdog = Timer(const Duration(seconds: 45), () {
+              debugPrint('⏰ [P2P-RX] Watchdog timeout — no initial data received for 45s');
+              _progressController.addError('Connection lost or sender stopped responding.');
+              cancelTransfer(myRole: 'receiver');
+            });
 
             debugPrint(
               '📥 [P2P-ACK] Receiving $_receivingFileName ($_receivingTotalSize bytes) '
