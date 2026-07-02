@@ -328,8 +328,6 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
       // ack_window handler will create the NEXT completer — no race condition.
       _windowAckCompleter = Completer<void>();
 
-      final int chunkSize = _chunkSize;
-
       // ── Inner send loop — Pipeline + Adaptive Backpressure ────────────────
       Future<void> sendChunks(Uint8List bytes, int start, int end) async {
         int offset = start;
@@ -471,7 +469,9 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
       // If the final window didn't reach the threshold, the completer is still
       // pending. Complete it so cleanup is clean (ack_window may never arrive
       // if the last window was partial).
-      if (bytesSinceLastAck > 0 && bytesSinceLastAck < _unifiedWindowSize) {
+      // NOTE: use effectiveWindowSize (not _unifiedWindowSize) so mobile
+      // transfers with 256 KB window don't deadlock on the last partial window.
+      if (bytesSinceLastAck > 0 && bytesSinceLastAck < effectiveWindowSize) {
         if (_windowAckCompleter != null && !_windowAckCompleter!.isCompleted) {
           _windowAckCompleter!.complete();
         }
@@ -502,6 +502,15 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
         }
       }
       _ackCompleters.remove(fileId);
+
+      // ── Inter-file breathing room (Android only) ──────────────────────────
+      // After each file, yield for 50ms so the Android SCTP/WebRTC stack
+      // and Dart GC can process pending work. Without this, intensive
+      // back-to-back transfers of 60+ files can starve ICE keepalives,
+      // causing RTCPeerConnectionStateFailed at file ~66-68.
+      if (isMobile && !_isCancelled && i < files.length - 1) {
+        await Future.delayed(const Duration(milliseconds: 50));
+      }
     }
 
     if (_isCancelled) return;

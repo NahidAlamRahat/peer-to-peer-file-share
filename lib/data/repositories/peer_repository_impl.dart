@@ -123,8 +123,7 @@ class PeerRepositoryImpl implements PeerRepository {
         _pendingJoinSessionId = null; // Join succeeded — no need to retry
         _sessionStateController.add(SessionState.connected);
         
-      } else if (state ==
-          RTCPeerConnectionState.RTCPeerConnectionStateDisconnected) {
+      } else if (state == RTCPeerConnectionState.RTCPeerConnectionStateDisconnected) {
         // WebRTC DISCONNECTED is usually temporary (ICE restart).
         // Wait 60 seconds before treating it as truly failed.
         _disconnectTimer ??= Timer(const Duration(seconds: 60), () {
@@ -135,9 +134,18 @@ class PeerRepositoryImpl implements PeerRepository {
           _sessionStateController.add(SessionState.failed);
         });
       } else if (state == RTCPeerConnectionState.RTCPeerConnectionStateFailed) {
+        // FAILED can be transient on Android + same-WiFi — especially after
+        // many small files (SCTP stack hiccup). Give it 15 seconds to recover
+        // before giving up. If it reconnects (goes back to CONNECTED), the
+        // onConnectionState handler above will cancel this timer.
         _disconnectTimer?.cancel();
-        _disconnectTimer = null;
-        _sessionStateController.add(SessionState.failed);
+        _disconnectTimer ??= Timer(const Duration(seconds: 15), () {
+          _disconnectTimer = null;
+          debugPrint(
+            '⏰ [WebRTC] Failed grace period expired (15s) — marking as failed.',
+          );
+          _sessionStateController.add(SessionState.failed);
+        });
       }
     };
 
