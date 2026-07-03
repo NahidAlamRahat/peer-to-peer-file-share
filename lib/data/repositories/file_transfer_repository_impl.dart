@@ -131,6 +131,7 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
   ///   timeout = clamp(chunkSize / speed × 4, 20 s, 120 s)
   /// At 10 KB/s → ~26 s. At 50 KB/s → ~20 s. Falls back to 90 s if unknown.
   Timer? _receiveWatchdog;
+  int _lastDataReceivedMs = 0;
 
   FileTransferRepositoryImpl(this._webrtcClient) {
     _webrtcClient.onDataMessage = _handleDataMessage;
@@ -551,13 +552,9 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
         // Instead: count the bytes and send the ack_window FIRST, then write.
         // The Service Worker buffers chunks internally if the download is paused.
 
-        // Restart receiver watchdog since data is flowing
-        _receiveWatchdog?.cancel();
-        _receiveWatchdog = Timer(const Duration(seconds: 45), () {
-          debugPrint('⏰ [P2P-RX] Watchdog timeout — no data received for 45s');
-          _progressController.addError('Connection lost or sender stopped responding.');
-          cancelTransfer(myRole: 'receiver');
-        });
+        // Record the time data was received. The periodic watchdog will check this.
+        _lastDataReceivedMs = DateTime.now().millisecondsSinceEpoch;
+
         _receivedBytes += message.binary.length;
         _windowBytesReceived += message.binary.length;
 
@@ -698,12 +695,21 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
               totalFiles: _receivingTotalFiles,
             );
 
-            // Start watchdog for the first chunk
+            // Start periodic watchdog for the transfer session
+            _lastDataReceivedMs = DateTime.now().millisecondsSinceEpoch;
             _receiveWatchdog?.cancel();
-            _receiveWatchdog = Timer(const Duration(seconds: 45), () {
-              debugPrint('⏰ [P2P-RX] Watchdog timeout — no initial data received for 45s');
-              _progressController.addError('Connection lost or sender stopped responding.');
-              cancelTransfer(myRole: 'receiver');
+            _receiveWatchdog = Timer.periodic(const Duration(seconds: 5), (timer) {
+              if (_isCancelled || _receiveWatchdog == null) {
+                timer.cancel();
+                return;
+              }
+              final elapsed = DateTime.now().millisecondsSinceEpoch - _lastDataReceivedMs;
+              if (elapsed > 45000) {
+                timer.cancel();
+                debugPrint('⏰ [P2P-RX] Watchdog timeout — no data received for 45s (elapsed: ${elapsed}ms)');
+                _progressController.addError('Connection lost or sender stopped responding.');
+                cancelTransfer(myRole: 'receiver');
+              }
             });
 
             debugPrint(
