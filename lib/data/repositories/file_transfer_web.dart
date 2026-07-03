@@ -129,25 +129,42 @@ class WebFileSaver implements P2PFileSaver {
       // Send start signal
       sw.postMessage(msg, [_channel!.port2]);
 
-      // Wait for SW to acknowledge (max 2s). If timeout = incognito or SW not active.
+      // Wait for SW to acknowledge.
+      // IMPORTANT: timeout was 2s which was far too short — when Chrome is juggling
+      // 20-30 concurrent download streams, the SW ACK can take 3-10 seconds.
+      // Hitting this timeout incorrectly called _onIncognitoDetected and CANCELLED
+      // the entire transfer at around file ~30. Fixed: 15s timeout, no false incognito.
       _swAckCompleter = Completer<void>();
       try {
-        await _swAckCompleter!.future.timeout(const Duration(seconds: 2));
+        await _swAckCompleter!.future.timeout(const Duration(seconds: 15));
       } catch (_) {
-        debugPrint('⚠️ [P2P-SW] Service Worker ACK timeout — likely incognito mode.');
+        // SW is slow or unavailable — silently fall back to blob mode.
+        // Do NOT call _onIncognitoDetected here: SW timeout ≠ Incognito.
+        // Incognito is already detected correctly via the JS detectIncognito check above.
+        debugPrint('⚠️ [P2P-SW] Service Worker ACK timeout (15s) — SW may be busy. Falling back to blob mode.');
         _useStream = false;
         _swAckCompleter = null;
-        _onIncognitoDetected?.call();
-        return; // Fall back to blob mode (addChunk will buffer in memory)
+        return; // blob mode: addChunk will buffer in memory
       }
       _swAckCompleter = null;
 
       // Trigger the browser's download manager using a hidden IFrame.
+      // The IFrame makes a fetch request that the SW intercepts and streams.
+      // IMPORTANT: remove the IFrame after load to prevent DOM accumulation.
+      // After 30+ files, 30 hidden IFrames in the DOM overwhelm Chrome's
+      // browsing context limit and cause the SW to become unresponsive.
       final iframe = html.IFrameElement()
         ..id = 'pt-download-$_streamId'
         ..style.display = 'none'
         ..src = '/pt-download-stream/$_streamId';
       html.document.body?.append(iframe);
+      // Auto-remove: once the iframe's request is served (download started),
+      // the iframe has no further purpose. Remove it after a short delay.
+      iframe.onLoad.first.then((_) {
+        Future.delayed(const Duration(seconds: 3), () {
+          try { iframe.remove(); } catch (_) {}
+        });
+      });
     } else {
       // ── No SW available ───────────────────────────────────────────────────
       if (isIncognito) {
