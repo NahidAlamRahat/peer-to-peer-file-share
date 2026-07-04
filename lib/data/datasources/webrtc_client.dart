@@ -144,6 +144,12 @@ class WebRTCClient {
   /// Blocks until the DataChannel's send buffer drains below [_bufferLowWaterMark].
   /// This prevents SCTP buffer overflow which crashes the data channel on Android.
   /// Call this before every sendDataMessageBinary() call.
+  ///
+  /// This intentionally has NO timeout. A temporary 0 KB/s speed (e.g., brief
+  /// WiFi congestion) should NOT cancel the transfer — we must wait for the
+  /// network to recover. True disconnection is detected by the WebRTC state
+  /// machine (DISCONNECTED/FAILED), which calls haltTransfer() →
+  /// unblockBufferDrain() to exit this wait cleanly.
   Future<void> waitForBufferDrain() async {
     if (_dataChannel == null) return;
     // If buffer is already below high water mark, send immediately
@@ -152,9 +158,20 @@ class WebRTCClient {
     // Set low-water threshold so onBufferedAmountLow fires when safe
     _dataChannel?.bufferedAmountLowThreshold = _bufferLowWaterMark;
 
-    // Wait for the low event
+    // Wait for the low event. No timeout — see doc above.
     _bufferDrainCompleter ??= Completer<void>();
     await _bufferDrainCompleter!.future;
+    _bufferDrainCompleter = null;
+  }
+
+  /// Immediately unblocks any pending [waitForBufferDrain] call.
+  /// Called by [haltTransfer] / [cancelTransfer] so the send loop can exit
+  /// cleanly as soon as the transfer is stopped, without waiting for the
+  /// SCTP buffer to drain (which may never happen if the network is gone).
+  void unblockBufferDrain() {
+    if (_bufferDrainCompleter != null && !_bufferDrainCompleter!.isCompleted) {
+      _bufferDrainCompleter!.completeError(Exception('Transfer stopped'));
+    }
     _bufferDrainCompleter = null;
   }
 

@@ -131,7 +131,6 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
   ///   timeout = clamp(chunkSize / speed × 4, 20 s, 120 s)
   /// At 10 KB/s → ~26 s. At 50 KB/s → ~20 s. Falls back to 90 s if unknown.
   Timer? _receiveWatchdog;
-  int _lastDataReceivedMs = 0;
 
   FileTransferRepositoryImpl(this._webrtcClient) {
     _webrtcClient.onDataMessage = _handleDataMessage;
@@ -177,6 +176,11 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
   }
 
   void _unblockSender() {
+    // Unblock the WebRTC-level buffer drain so the send loop exits immediately
+    // if it is stuck waiting for the SCTP send buffer to drain.
+    // Without this, haltTransfer/cancelTransfer leaves the send loop frozen
+    // in waitForBufferDrain() even after _isCancelled is set.
+    _webrtcClient.unblockBufferDrain();
     if (_drainCompleter != null && !_drainCompleter!.isCompleted) {
       _drainCompleter!.completeError(Exception('Transfer stopped'));
     }
@@ -409,7 +413,7 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
           try {
             await _webrtcClient.waitForBufferDrain();
           } catch (_) {
-            // Disposed or cancelled — exit immediately
+            // DataChannel disposed, cancelled, or unblocked by haltTransfer — exit immediately
             return;
           }
           if (_isCancelled) return;
@@ -552,9 +556,6 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
         // Instead: count the bytes and send the ack_window FIRST, then write.
         // The Service Worker buffers chunks internally if the download is paused.
 
-        // Record the time data was received. The periodic watchdog will check this.
-        _lastDataReceivedMs = DateTime.now().millisecondsSinceEpoch;
-
         _receivedBytes += message.binary.length;
         _windowBytesReceived += message.binary.length;
 
@@ -694,23 +695,14 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
               fileIndex: _receivingFileIndex,
               totalFiles: _receivingTotalFiles,
             );
-
-            // Start periodic watchdog for the transfer session
-            _lastDataReceivedMs = DateTime.now().millisecondsSinceEpoch;
-            _receiveWatchdog?.cancel();
-            _receiveWatchdog = Timer.periodic(const Duration(seconds: 5), (timer) {
-              if (_isCancelled || _receiveWatchdog == null) {
-                timer.cancel();
-                return;
-              }
-              final elapsed = DateTime.now().millisecondsSinceEpoch - _lastDataReceivedMs;
-              if (elapsed > 45000) {
-                timer.cancel();
-                debugPrint('⏰ [P2P-RX] Watchdog timeout — no data received for 45s (elapsed: ${elapsed}ms)');
-                _progressController.addError('Connection lost or sender stopped responding.');
-                cancelTransfer(myRole: 'receiver');
-              }
-            });
+            // NOTE: No receiver-side watchdog here.
+            // Rationale: 0 KB/s does NOT mean the transfer should cancel.
+            // If the network is slow/congested but still connected, we must wait.
+            // True disconnection is handled by WebRTC state machine:
+            //   DISCONNECTED → 60s grace → failed
+            //   FAILED       → 15s grace → failed
+            // Mid-transfer stall is handled by sender's ack_window timeout (120s).
+            // End-of-file stall is handled by sender's EOF ACK timeout (120s).
 
             debugPrint(
               '📥 [P2P-ACK] Receiving $_receivingFileName ($_receivingTotalSize bytes) '
