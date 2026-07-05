@@ -148,23 +148,22 @@ class WebFileSaver implements P2PFileSaver {
       }
       _swAckCompleter = null;
 
-      // Trigger the browser's download manager using a hidden IFrame.
-      // The IFrame makes a fetch request that the SW intercepts and streams.
-      // IMPORTANT: remove the IFrame after load to prevent DOM accumulation.
-      // After 30+ files, 30 hidden IFrames in the DOM overwhelm Chrome's
-      // browsing context limit and cause the SW to become unresponsive.
-      final iframe = html.IFrameElement()
-        ..id = 'pt-download-$_streamId'
-        ..style.display = 'none'
-        ..src = '/pt-download-stream/$_streamId';
-      html.document.body?.append(iframe);
-      // Auto-remove: once the iframe's request is served (download started),
-      // the iframe has no further purpose. Remove it after a short delay.
-      iframe.onLoad.first.then((_) {
-        Future.delayed(const Duration(seconds: 3), () {
-          try { iframe.remove(); } catch (_) {}
-        });
-      });
+      // Trigger the browser's download manager using the existing JS helper.
+      // IMPORTANT: do NOT use an IFrame for this.
+      // IFrame problem: Chrome fires iframe.onLoad as soon as the download
+      // STARTS (not when it finishes). Removing the IFrame even a few seconds
+      // later can abort the HTTP connection while the file is still streaming,
+      // causing the SW's ReadableStream cancel() to fire → cancelTransfer().
+      //
+      // triggerP2PDownload uses an <a> element with bubbles:false (to bypass
+      // Flutter's document-level router) and auto-removes itself after 1 second.
+      // The <a> element only TRIGGERS the download — the browser's download
+      // manager takes over immediately and the connection is independent of the
+      // anchor element's lifetime.
+      js.context.callMethod(
+        'triggerP2PDownload',
+        ['/pt-download-stream/$_streamId', _fileName],
+      );
     } else {
       // ── No SW available ───────────────────────────────────────────────────
       if (isIncognito) {
