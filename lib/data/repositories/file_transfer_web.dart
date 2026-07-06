@@ -18,6 +18,7 @@ class WebFileSaver implements P2PFileSaver {
   String? _streamId;
   html.MessageChannel? _channel;
   bool _useStream = false;
+  bool _streamClosed = false; // true after closeAndSave() — ignore late 'cancelled' events
   void Function()? _onCancel;
   void Function()? _onIncognitoDetected; // Called when SW is not working (e.g., incognito)
   Completer<void>? _swAckCompleter;  // Waits for 'started' ACK from SW
@@ -108,9 +109,21 @@ class WebFileSaver implements P2PFileSaver {
           } else {
              try {
                // We send JSON string from sw.js to avoid Dart JS interop object wrapping issues
-               if (data.contains('"type":"cancelled"') || data.contains('"type": "cancelled"')) {
-                 // User cancelled from Chrome's download bar → call onCancel → go home
-                 _onCancel?.call();
+                if (data.contains('"type":"cancelled"') || data.contains('"type": "cancelled"')) {
+                  // SW sends 'cancelled' when Chrome aborts the download stream.
+                  // This is meaningful ONLY while the stream is still open.
+                  //
+                  // CRITICAL: After closeAndSave(), the IFrame is removed from DOM.
+                  // This causes Chrome to fire cancel on that navigation fetch,
+                  // making the SW send 'cancelled'. We MUST ignore this — the file
+                  // is already saved. Without this guard, IFrame cleanup kills the
+                  // entire transfer (seen as file 28/337 failing for 337-file batches).
+                  if (!_streamClosed) {
+                    debugPrint('⚠️ [P2P-SW] Download cancelled by user — calling onCancel');
+                    _onCancel?.call();
+                  } else {
+                    debugPrint('ℹ️ [P2P-SW] Ignoring late cancelled from SW — IFrame cleanup, not user action.');
+                  }
                } else if (data.contains('"type":"pause"') || data.contains('"type": "pause"')) {
                  if (_pauseCompleter == null || _pauseCompleter!.isCompleted) {
                    _pauseCompleter = Completer<void>();
@@ -218,11 +231,11 @@ class WebFileSaver implements P2PFileSaver {
           'id': _streamId,
         });
       }
+      // Mark stream as closed so any late 'cancelled' from the SW
+      // (triggered by IFrame removal) are safely ignored.
+      _streamClosed = true;
       // Stream ended — schedule iframe cleanup.
-      // Wait 5 seconds so the browser download manager can finish consuming
-      // the stream before we remove the iframe from the DOM.
-      // By this point all bytes have been sent to the SW and the download
-      // manager is writing to disk; the iframe itself is no longer needed.
+      // Wait 5 seconds so the browser download manager has consumed all bytes.
       final iframeToRemove = _iframeElement;
       _iframeElement = null;
       Future.delayed(const Duration(seconds: 5), () {
