@@ -21,6 +21,7 @@ class WebFileSaver implements P2PFileSaver {
   void Function()? _onCancel;
   void Function()? _onIncognitoDetected; // Called when SW is not working (e.g., incognito)
   Completer<void>? _swAckCompleter;  // Waits for 'started' ACK from SW
+  html.IFrameElement? _iframeElement; // Hidden iframe that triggers the browser download
 
   // Pause/Resume state
   Completer<void>? _pauseCompleter;
@@ -148,22 +149,25 @@ class WebFileSaver implements P2PFileSaver {
       }
       _swAckCompleter = null;
 
-      // Trigger the browser's download manager using the existing JS helper.
-      // IMPORTANT: do NOT use an IFrame for this.
-      // IFrame problem: Chrome fires iframe.onLoad as soon as the download
-      // STARTS (not when it finishes). Removing the IFrame even a few seconds
-      // later can abort the HTTP connection while the file is still streaming,
-      // causing the SW's ReadableStream cancel() to fire → cancelTransfer().
+      // Trigger the browser's download manager using a hidden IFrame.
       //
-      // triggerP2PDownload uses an <a> element with bubbles:false (to bypass
-      // Flutter's document-level router) and auto-removes itself after 1 second.
-      // The <a> element only TRIGGERS the download — the browser's download
-      // manager takes over immediately and the connection is independent of the
-      // anchor element's lifetime.
-      js.context.callMethod(
-        'triggerP2PDownload',
-        ['/pt-download-stream/$_streamId', _fileName],
-      );
+      // WHY IFrame and not <a download>:
+      // An <a> click creates a subresource fetch that Flutter's own
+      // service worker (flutter_service_worker.js) intercepts and returns
+      // the cached index.html as a SPA fallback. This causes every file
+      // to be downloaded as "index.html" instead of the actual content.
+      //
+      // An IFrame src change creates a NAVIGATION-type fetch which Flutter's
+      // SW does not intercept, so our sw.js handles it and returns the stream.
+      //
+      // CLEANUP: We store the iframe reference and remove it in closeAndSave()
+      // (5 s after the stream ends, by which point the download manager has
+      // received all bytes) or immediately in discard() if cancelled.
+      _iframeElement = html.IFrameElement()
+        ..id = 'pt-download-$_streamId'
+        ..style.display = 'none'
+        ..src = '/pt-download-stream/$_streamId';
+      html.document.body?.append(_iframeElement!);
     } else {
       // ── No SW available ───────────────────────────────────────────────────
       if (isIncognito) {
@@ -214,7 +218,16 @@ class WebFileSaver implements P2PFileSaver {
           'id': _streamId,
         });
       }
-      // Anchor was already removed during init, nothing to clean up here
+      // Stream ended — schedule iframe cleanup.
+      // Wait 5 seconds so the browser download manager can finish consuming
+      // the stream before we remove the iframe from the DOM.
+      // By this point all bytes have been sent to the SW and the download
+      // manager is writing to disk; the iframe itself is no longer needed.
+      final iframeToRemove = _iframeElement;
+      _iframeElement = null;
+      Future.delayed(const Duration(seconds: 5), () {
+        try { iframeToRemove?.remove(); } catch (_) {}
+      });
       return 'streamed'; // Special token so UI knows it's already on disk
     } else {
       // Fallback: use memory blob
@@ -269,6 +282,10 @@ class WebFileSaver implements P2PFileSaver {
         });
       }
     }
+    // Remove the iframe immediately — transfer is being cancelled,
+    // so there's no reason to keep it in the DOM.
+    try { _iframeElement?.remove(); } catch (_) {}
+    _iframeElement = null;
     if (_blobUrl != null) {
       html.Url.revokeObjectUrl(_blobUrl!);
       _blobUrl = null;
