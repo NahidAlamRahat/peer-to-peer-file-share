@@ -5,6 +5,10 @@ import 'file_saver.dart';
 
 P2PFileSaver getFileSaver() => MobileFileSaver();
 
+/// No-op on mobile — session caches are web-only.
+void resetFileSaverSession() {}
+
+
 class MobileFileSaver implements P2PFileSaver {
   IOSink? _sink;
   File? _file; // nullable: init() may not have been called if transfer is cancelled early

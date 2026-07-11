@@ -9,6 +9,11 @@ import 'file_saver.dart';
 
 P2PFileSaver getFileSaver() => WebFileSaver();
 
+/// Resets session-level caches in [WebFileSaver] at the start of each transfer.
+/// Called from [FileTransferRepositoryImpl.sendFiles] before every new batch.
+void resetFileSaverSession() => WebFileSaver.resetSession();
+
+
 class WebFileSaver implements P2PFileSaver {
   final List<dynamic> _chunks = [];
   late String _fileName;
@@ -27,6 +32,19 @@ class WebFileSaver implements P2PFileSaver {
   // Pause/Resume state
   Completer<void>? _pauseCompleter;
 
+  // ── Session-level caches (static = shared across all WebFileSaver instances) ──
+  // Incognito check is expensive (async JS call). Do it once per session.
+  static bool? _incognitoResultCache;
+  // After the first SW ACK succeeds we know SW is alive — use a shorter
+  // timeout for subsequent files instead of the full 15 s safety net.
+  static bool _swPreviouslyConfirmed = false;
+
+  /// Call at the start of every new transfer session so stale state from a
+  /// previous session doesn't carry over (e.g. after reconnect in same tab).
+  static void resetSession() {
+    _incognitoResultCache = null;
+    _swPreviouslyConfirmed = false;
+  }
   String _getMimeType(String fileName) {
     final ext = fileName.split('.').last.toLowerCase();
     const mimeTypes = {
@@ -74,14 +92,21 @@ class WebFileSaver implements P2PFileSaver {
       }
     }
 
-    // Check if Incognito mode in Chrome using our JS helper
-    bool isIncognito = false;
-    final incognitoCompleter = Completer<bool>();
-    if (js.context.hasProperty('checkIncognito')) {
-      js.context.callMethod('checkIncognito', [
-        (bool result) { incognitoCompleter.complete(result); }
-      ]);
-      isIncognito = await incognitoCompleter.future;
+    // Check if Incognito mode in Chrome using our JS helper.
+    // Result is cached for the session — no need to call JS 300 times.
+    bool isIncognito;
+    if (_incognitoResultCache != null) {
+      isIncognito = _incognitoResultCache!;
+    } else {
+      isIncognito = false;
+      final incognitoCompleter = Completer<bool>();
+      if (js.context.hasProperty('checkIncognito')) {
+        js.context.callMethod('checkIncognito', [
+          (bool result) { incognitoCompleter.complete(result); }
+        ]);
+        isIncognito = await incognitoCompleter.future;
+      }
+      _incognitoResultCache = isIncognito; // Cache for remaining files
     }
 
     if (sw != null && !isIncognito) {
@@ -144,18 +169,22 @@ class WebFileSaver implements P2PFileSaver {
       sw.postMessage(msg, [_channel!.port2]);
 
       // Wait for SW to acknowledge.
-      // IMPORTANT: timeout was 2s which was far too short — when Chrome is juggling
-      // 20-30 concurrent download streams, the SW ACK can take 3-10 seconds.
-      // Hitting this timeout incorrectly called _onIncognitoDetected and CANCELLED
-      // the entire transfer at around file ~30. Fixed: 15s timeout, no false incognito.
+      // First file: use 15 s timeout (SW may still be activating).
+      // Subsequent files: SW is confirmed alive — use a shorter 3 s timeout
+      // so we fail-fast to blob mode instead of blocking the whole pipeline.
+      final swAckTimeout = _swPreviouslyConfirmed
+          ? const Duration(seconds: 3)
+          : const Duration(seconds: 15);
+
       _swAckCompleter = Completer<void>();
       try {
-        await _swAckCompleter!.future.timeout(const Duration(seconds: 15));
+        await _swAckCompleter!.future.timeout(swAckTimeout);
+        _swPreviouslyConfirmed = true; // SW is alive — trust it for future files
       } catch (_) {
         // SW is slow or unavailable — silently fall back to blob mode.
         // Do NOT call _onIncognitoDetected here: SW timeout ≠ Incognito.
         // Incognito is already detected correctly via the JS detectIncognito check above.
-        debugPrint('⚠️ [P2P-SW] Service Worker ACK timeout (15s) — SW may be busy. Falling back to blob mode.');
+        debugPrint('⚠️ [P2P-SW] Service Worker ACK timeout (${swAckTimeout.inSeconds}s) — SW may be busy. Falling back to blob mode.');
         _useStream = false;
         _swAckCompleter = null;
         return; // blob mode: addChunk will buffer in memory

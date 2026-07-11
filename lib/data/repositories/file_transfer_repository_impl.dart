@@ -169,8 +169,19 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
 
   @override
   void haltTransfer() {
+    if (_isCancelled) return; // idempotent
     _isCancelled = true;
+    // Best-effort: notify the peer so they don't get stuck.
+    // This fires when the DataChannel is still open (e.g. window ACK timeout,
+    // EOF ACK timeout). If the channel is already closed the send is a no-op.
+    try {
+      _webrtcClient.sendDataMessage(
+        RTCDataChannelMessage(jsonEncode({'type': 'cancel', 'who': 'sender'})),
+      );
+    } catch (_) {}
     _unblockSender();
+    _receiveWatchdog?.cancel();
+    _receiveWatchdog = null;
     _fileSaver?.discard();
     _fileSaver = null;
   }
@@ -236,6 +247,10 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
   Future<void> sendFiles(List<ShareFile> files) async {
     _isCancelled = false;
     _drainCompleter = null;
+
+    // Reset web-only session caches so a fresh transfer starts clean.
+    // No-op on mobile. See file_transfer_web.dart / file_transfer_mobile.dart.
+    resetFileSaverSession();
 
     // Wait for data channel to open (max 10 s)
     int waitCounter = 0;
@@ -507,12 +522,14 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
       }
       _ackCompleters.remove(fileId);
 
-      // ── Inter-file breathing room (Android only) ──────────────────────────
-      // After each file, yield for 50ms so the Android SCTP/WebRTC stack
-      // and Dart GC can process pending work. Without this, intensive
-      // back-to-back transfers of 60+ files can starve ICE keepalives,
-      // causing RTCPeerConnectionStateFailed at file ~66-68.
-      if (isMobile && !_isCancelled && i < files.length - 1) {
+      // ── Inter-file breathing room ─────────────────────────────────────────
+      // After each file, yield so the Dart GC, WebRTC stack, and (on web) the
+      // Service Worker event loop can process pending work.
+      // Mobile:  50 ms — Android SCTP/WebRTC needs extra time between files.
+      // Web:     50 ms — Service Worker message queue and browser GC need time
+      //          especially for 100+ file batches where SW streams pile up.
+      // Without this, 300-file batches can starve ICE keepalives or overwhelm SW.
+      if (!_isCancelled && i < files.length - 1) {
         await Future.delayed(const Duration(milliseconds: 50));
       }
     }
@@ -558,6 +575,26 @@ class FileTransferRepositoryImpl implements FileTransferRepository {
 
         _receivedBytes += message.binary.length;
         _windowBytesReceived += message.binary.length;
+
+        // ── Receiver-side stall watchdog ─────────────────────────────────────
+        // Restart on every chunk. If no chunk arrives within the timeout the
+        // sender has silently died (e.g. DataChannel closed on their side without
+        // sending a cancel message). We cancel on our side so the UI doesn't
+        // stay frozen forever.
+        // Timeout: 90 s — generous enough for slow networks but finite.
+        _receiveWatchdog?.cancel();
+        _receiveWatchdog = Timer(const Duration(seconds: 90), () {
+          if (_isCancelled) return;
+          debugPrint(
+            '⏰ [P2P-RX] Stall watchdog fired — no data for 90 s. Cancelling.',
+          );
+          if (!_progressController.isClosed) {
+            _progressController.addError(
+              'Sender stopped responding. Transfer cancelled.',
+            );
+          }
+          cancelTransfer(myRole: 'receiver');
+        });
 
         // Send window ACK back to sender to unblock their Guard 2 FIRST
         if (_windowBytesReceived >= _remoteWindowSize) {
