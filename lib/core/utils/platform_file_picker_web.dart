@@ -11,12 +11,22 @@ import '../../domain/entities/share_file.dart';
 Future<List<ShareFile>?> pickFilesPlatform() async {
   final completer = Completer<List<ShareFile>?>();
 
-  // Create native HTML file input
+  // Create native HTML file input and attach to DOM (required for iOS Safari stability)
   final input = html.FileUploadInputElement();
   input.multiple = true;
+  input.style.display = 'none';
+  html.document.body?.children.add(input);
+
+  StreamSubscription? focusSub;
+
+  void cleanup() {
+    focusSub?.cancel();
+    input.remove();
+  }
 
   // Listen for file selection
   input.onChange.listen((e) {
+    cleanup();
     final files = input.files;
     if (files == null || files.isEmpty) {
       if (!completer.isCompleted) completer.complete(null);
@@ -81,6 +91,17 @@ Future<List<ShareFile>?> pickFilesPlatform() async {
     if (!completer.isCompleted) {
       completer.complete(shareFiles.isNotEmpty ? shareFiles : null);
     }
+  });
+
+  // Fallback for iOS Safari: when native file picker modal closes, window regains focus.
+  // If onChange didn't fire (e.g. user cancelled), resolve with null so UI unblocks.
+  focusSub = html.window.onFocus.listen((_) {
+    Future.delayed(const Duration(milliseconds: 500), () {
+      if (!completer.isCompleted) {
+        cleanup();
+        completer.complete(null);
+      }
+    });
   });
 
   // Trigger file dialog

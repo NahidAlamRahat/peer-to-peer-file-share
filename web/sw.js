@@ -9,6 +9,12 @@ self.addEventListener('activate', event => {
 });
 
 self.addEventListener('message', event => {
+  // Allow index.html to force-activate a waiting SW immediately
+  if (event.data && event.data.type === 'SKIP_WAITING') {
+    self.skipWaiting();
+    return;
+  }
+
   const data = event.data;
   if (!data || !data.id) return;
   

@@ -215,7 +215,7 @@
       }
     };
   </script>
-  <script src="detectIncognito.min.js"></script>
+  <script src="detectIncognito.min.js" onerror="window._detectIncognitoFailed=true;"></script>
   <script>
     window.isIncognitoMode = false;
     window.incognitoPromise = new Promise(function (resolve) {
@@ -230,16 +230,20 @@
     });
   </script>
   <script>
-    // Register SW in the background — does NOT block Flutter from booting.
-    // By the time the user scans QR and connects (~10-30 s), the SW will be
-    // active and ready. file_transfer_web.dart retries for up to 5 s if needed.
+    // Register SW eagerly — before window 'load' fires — so the SW has more
+    // time to activate before flutter_bootstrap.js calls prepareServiceWorker().
+    // The previous approach (registering inside window.addEventListener('load', ...)
+    // caused a race condition where flutter_bootstrap.js would time out (>4000ms)
+    // waiting for the SW that hadn't been registered yet.
     if ('serviceWorker' in navigator) {
-      window.addEventListener('load', function () {
-        navigator.serviceWorker.register('sw.js').then(function (reg) {
-          console.log('[SW] Registered:', reg.scope);
-        }, function (err) {
-          console.error('[SW] Registration failed:', err);
-        });
+      navigator.serviceWorker.register('sw.js').then(function (reg) {
+        console.log('[SW] Registered:', reg.scope);
+        // Force immediate activation so new SW takes control right away
+        if (reg.waiting) {
+          reg.waiting.postMessage({ type: 'SKIP_WAITING' });
+        }
+      }, function (err) {
+        console.error('[SW] Registration failed:', err);
       });
     }
   </script>
