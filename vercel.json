@@ -3,6 +3,12 @@
   "outputDirectory": "build/web",
   "installCommand": "git clone https://github.com/flutter/flutter.git --depth 1 -b stable && flutter/bin/flutter config --enable-web && flutter/bin/flutter pub get",
   "framework": null,
+  "functions": {
+    "api/relay.js": {
+      "memory": 128,
+      "maxDuration": 10
+    }
+  },
   "headers": [
     {
       "source": "/(.*)",
@@ -36,6 +42,7 @@
   ],
   "rewrites": [
     { "source": "/.well-known/:path*", "destination": "/.well-known/:path*" },
+    { "source": "/api/:path*",         "destination": "/api/:path*" },
     { "source": "/:path*",             "destination": "/index.html" }
   ]
 }

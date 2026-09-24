@@ -43,7 +43,7 @@ class _OfflineSendScreenState extends State<OfflineSendScreen> {
 
   final _answerController = TextEditingController();
   bool _showManualInput = false;
-  Timer? _ignore;
+  Timer? _pollTimer;            // polls relay for answer automatically
 
   @override
   void initState() {
@@ -68,7 +68,7 @@ class _OfflineSendScreenState extends State<OfflineSendScreen> {
   void dispose() {
     _offlineSvc.dispose();
     _answerController.dispose();
-    _ignore?.cancel();
+    _pollTimer?.cancel();
     super.dispose();
   }
 
@@ -95,12 +95,28 @@ class _OfflineSendScreenState extends State<OfflineSendScreen> {
 
   Future<void> _uploadToRelay(String offerCode) async {
     try {
-      final code = await SdpRelayService.upload(offerCode);
+      final code = await SdpRelayService.uploadOffer(offerCode);
       if (!mounted) return;
       setState(() => _sessionCode = code);
+      // Start auto-polling for the receiver's answer
+      _startPollingForAnswer(code);
     } catch (_) {
       // Relay unavailable — QR only mode, no session code shown
     }
+  }
+
+  void _startPollingForAnswer(String sessionCode) {
+    _pollTimer?.cancel();
+    _pollTimer = Timer.periodic(const Duration(seconds: 3), (_) async {
+      if (_step != _Step.showOffer) { _pollTimer?.cancel(); return; }
+      try {
+        final answer = await SdpRelayService.pollAnswer(sessionCode);
+        if (answer != null && mounted) {
+          _pollTimer?.cancel();
+          await _applyAnswer(answer);
+        }
+      } catch (_) { /* ignore poll errors */ }
+    });
   }
 
   Future<void> _applyAnswer(String code) async {

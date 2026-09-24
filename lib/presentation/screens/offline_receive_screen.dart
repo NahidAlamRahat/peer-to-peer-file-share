@@ -71,26 +71,39 @@ class _OfflineReceiveScreenState extends State<OfflineReceiveScreen> {
     }
   }
 
+  String _sessionCode = ''; // saved for answer upload
+
   Future<void> _processSessionCode(String code) async {
     if (code.trim().isEmpty) return;
-    setState(() { _step = _Step.generating; _errorMsg = ''; });
+    final sessionCode = code.trim().toUpperCase();
+    setState(() { _step = _Step.generating; _errorMsg = ''; _sessionCode = sessionCode; });
     try {
-      final offerCode = await SdpRelayService.download(code.trim());
-      await _processOfferSdp(offerCode);
+      final offerCode = await SdpRelayService.downloadOffer(sessionCode);
+      await _processOfferSdp(offerCode, sessionCode: sessionCode);
     } catch (e) {
       if (!mounted) return;
       setState(() { _errorMsg = e.toString().replaceFirst('Exception: ', ''); _step = _Step.scan; });
     }
   }
 
-  Future<void> _processOfferSdp(String offerCode) async {
+  Future<void> _processOfferSdp(String offerCode, {String? sessionCode}) async {
     try {
       final answer = await _offlineSvc.processOfferAndCreateAnswer(offerCode.trim());
       if (!mounted) return;
       setState(() { _answerCode = answer; _step = _Step.showAnswer; });
+      // Auto-upload answer to relay so sender connects without manual scan
+      if (sessionCode != null) _uploadAnswerToRelay(sessionCode, answer);
     } catch (e) {
       if (!mounted) return;
       setState(() { _errorMsg = 'Invalid code. Ask the sender to show their QR again.'; _step = _Step.scan; });
+    }
+  }
+
+  Future<void> _uploadAnswerToRelay(String sessionCode, String answerCode) async {
+    try {
+      await SdpRelayService.uploadAnswer(sessionCode, answerCode);
+    } catch (_) {
+      // Relay unavailable — sender scans QR manually as fallback
     }
   }
 
