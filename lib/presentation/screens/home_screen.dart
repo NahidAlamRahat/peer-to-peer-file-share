@@ -13,6 +13,9 @@ import '../../core/theme/spacing.dart';
 import '../../domain/entities/peer_session.dart';
 import '../../domain/repositories/file_transfer_repository.dart';
 import '../blocs/connection/connection_bloc.dart';
+import '../blocs/connection/connection_event.dart';
+import '../blocs/connection/connection_state.dart';
+import '../blocs/transfer/transfer_bloc.dart';
 import '../blocs/transfer/transfer_event.dart';
 import '../blocs/transfer/transfer_state.dart';
 import '../widgets/custom_buttons.dart';
@@ -32,25 +35,13 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  StreamSubscription<List<ConnectivityResult>>? _connectivitySubscription;
-
   @override
   void initState() {
     super.initState();
-    _connectivitySubscription = Connectivity().onConnectivityChanged.listen((List<ConnectivityResult> results) {
-      if (results.isNotEmpty && !results.contains(ConnectivityResult.none)) {
-        if (!mounted) return;
-        final state = context.read<ConnectionBloc>().state;
-        if (state is ConnectionServerError || state is ConnectionFailed || state is ConnectionOffline) {
-          context.read<ConnectionBloc>().add(ResetConnectionEvent());
-        }
-      }
-    });
   }
 
   @override
   void dispose() {
-    _connectivitySubscription?.cancel();
     super.dispose();
   }
 
@@ -138,7 +129,7 @@ class _HomeScreenState extends State<HomeScreen> {
           onPressed: () {
             Navigator.push(
               context,
-              MaterialPageRoute(builder: (_) => const ShareLinkScreen()),
+              MaterialPageRoute(builder: (_) => const OfflineSendScreen()),
             );
           },
         ),
@@ -150,25 +141,9 @@ class _HomeScreenState extends State<HomeScreen> {
           onPressed: () {
             Navigator.push(
               context,
-              MaterialPageRoute(builder: (_) => const ReceiveScreen()),
+              MaterialPageRoute(builder: (_) => const OfflineReceiveScreen()),
             );
           },
-        ),
-        AppSpacing.gapH12,
-        // ── Offline info — non-clickable, just informational ─────────────────
-        Padding(
-          padding: const EdgeInsets.symmetric(vertical: 4),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(Icons.wifi_off_rounded, size: 13, color: Colors.grey.shade500),
-              const SizedBox(width: 5),
-              Text(
-                'Works offline too — same Wi-Fi, no internet needed',
-                style: TextStyle(fontSize: 12, color: Colors.grey.shade500),
-              ),
-            ],
-          ),
         ),
       ],
     );
