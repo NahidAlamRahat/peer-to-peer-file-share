@@ -204,32 +204,25 @@ class _HomeScreenState extends State<HomeScreen> {
           },
         ),
         AppSpacing.gapH12,
-        // ── Offline mode — small, subtle, not distracting ────────────────────
-        GestureDetector(
-          onTap: () => _showOfflineModeSheet(context),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 4),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(Icons.wifi_off_rounded, size: 13, color: Colors.grey.shade500),
-                const SizedBox(width: 5),
-                Text(
-                  'Works offline too — same Wi-Fi, no internet needed',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: Colors.grey.shade500,
-                    decoration: TextDecoration.underline,
-                    decorationColor: Colors.grey.shade400,
-                  ),
-                ),
-              ],
-            ),
+        // ── Offline info — non-clickable, just informational ─────────────────
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 4),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.wifi_off_rounded, size: 13, color: Colors.grey.shade500),
+              const SizedBox(width: 5),
+              Text(
+                'Works offline too — same Wi-Fi, no internet needed',
+                style: TextStyle(fontSize: 12, color: Colors.grey.shade500),
+              ),
+            ],
           ),
         ),
       ],
     );
   }
+
 
   void _showOfflineModeSheet(BuildContext context) {
     showModalBottomSheet(
