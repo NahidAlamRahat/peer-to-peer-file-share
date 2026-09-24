@@ -152,16 +152,6 @@
                   setTimeout(() => loader.remove(), 500);
                 }
                 observer.disconnect();
-
-                // Inject Adsterra Social Bar Ads ONLY AFTER Flutter is loaded
-                setTimeout(function() {
-                  var adScript = document.createElement('script');
-                  adScript.type = 'text/javascript';
-                  adScript.async = true;
-                  adScript.src = 'https://onionclose.com/a1/06/ed/a106edc96e107a31cce7dce81eb16742.js';
-                  document.body.appendChild(adScript);
-                }, 1000); // 1-second delay so the Home Screen renders fully before ad loads
-
               }
             }
           }
