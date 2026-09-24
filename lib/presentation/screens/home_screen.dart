@@ -82,30 +82,48 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
 
-  Widget _buildHeroSection(BuildContext context, {bool isDesktop = false}) {
+  Widget _buildHeroSection(
+    BuildContext context, {
+    double? totalHeight,
+    bool isDesktop = false,
+  }) {
+    final effectiveHeight = totalHeight ?? 700.0;
+    final iconSize =
+        isDesktop ? 150.0 : (effectiveHeight * 0.11).clamp(44.0, 96.0);
+    final titleSize =
+        isDesktop ? 48.0 : (effectiveHeight * 0.035).clamp(18.0, 28.0);
+    final subtitleSize = isDesktop
+        ? AppSizes.textSubtitle
+        : (effectiveHeight * 0.018).clamp(11.0, 14.5);
+    final gapLarge =
+        isDesktop ? 32.0 : (effectiveHeight * 0.024).clamp(8.0, 22.0);
+    final gapSmall =
+        isDesktop ? 16.0 : (effectiveHeight * 0.014).clamp(6.0, 14.0);
+
     return Column(
       mainAxisAlignment: MainAxisAlignment.center,
+      mainAxisSize: MainAxisSize.min,
       children: [
         Icon(
           Icons.wifi_rounded,
-          size: isDesktop ? 150 : 100,
+          size: iconSize,
           color: Theme.of(context).colorScheme.primary,
         ),
-        AppSpacing.gapH32,
+        SizedBox(height: gapLarge),
         Text(
           'Share files seamlessly\nwith PeerTransfer',
           style: TextStyle(
-            fontSize: isDesktop ? 48 : 28,
+            fontSize: titleSize,
             fontWeight: FontWeight.bold,
             height: 1.2,
           ),
           textAlign: TextAlign.center,
         ),
-        AppSpacing.gapH16,
+        SizedBox(height: gapSmall),
         Text(
           'No file size limit. No internet needed. Fully encrypted.',
           style: TextStyle(
-            fontSize: isDesktop ? AppSizes.textSubtitle : AppSizes.textBody,
+            fontSize: subtitleSize,
             color: Colors.grey,
           ),
           textAlign: TextAlign.center,
@@ -114,14 +132,24 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildActionPanel(BuildContext context) {
+  Widget _buildActionPanel(BuildContext context, {double? totalHeight}) {
+    final effectiveHeight = totalHeight ?? 700.0;
+    final btnHeight = (effectiveHeight * 0.065).clamp(44.0, 56.0);
+    final btnFontSize = (effectiveHeight * 0.021).clamp(14.0, 17.0);
+    final btnIconSize = (effectiveHeight * 0.028).clamp(18.0, 24.0);
+    final btnGap = (effectiveHeight * 0.016).clamp(8.0, 16.0);
+
     return Column(
       mainAxisAlignment: MainAxisAlignment.center,
+      mainAxisSize: MainAxisSize.min,
       children: [
         CustomButton(
           text: 'Send Files',
           icon: Icons.send_rounded,
           isPrimary: true,
+          height: btnHeight,
+          fontSize: btnFontSize,
+          iconSize: btnIconSize,
           onPressed: () {
             Navigator.push(
               context,
@@ -129,11 +157,14 @@ class _HomeScreenState extends State<HomeScreen> {
             );
           },
         ),
-        AppSpacing.gapH16,
+        SizedBox(height: btnGap),
         CustomButton(
           text: 'Receive Files',
           icon: Icons.download_rounded,
           isPrimary: false,
+          height: btnHeight,
+          fontSize: btnFontSize,
+          iconSize: btnIconSize,
           onPressed: () {
             Navigator.push(
               context,
@@ -150,46 +181,64 @@ class _HomeScreenState extends State<HomeScreen> {
       builder: (context, transferState) {
         return LayoutBuilder(
           builder: (context, constraints) {
-            return SingleChildScrollView(
-              child: ConstrainedBox(
-                constraints: BoxConstraints(
-                  minHeight: constraints.maxHeight,
-                ),
-                child: IntrinsicHeight(
-                  child: Padding(
-                    padding: EdgeInsets.symmetric(
-                      horizontal: AppSizes.p24,
-                      vertical: AppSizes.p16,
+            final h = constraints.maxHeight;
+            final w = constraints.maxWidth;
+            final isSmall = h < 620;
+            final isVerySmall = h < 520;
+
+            final padH = (w * 0.06).clamp(16.0, 28.0);
+            final padV = (h * 0.015).clamp(8.0, 16.0);
+
+            return Padding(
+              padding: EdgeInsets.symmetric(horizontal: padH, vertical: padV),
+              child: Column(
+                children: [
+                  _buildServerStatus(),
+
+                  // ── Hero Section (Proportional via Expanded & FittedBox) ───
+                  Expanded(
+                    flex: 6,
+                    child: Center(
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: _buildHeroSection(
+                          context,
+                          totalHeight: h,
+                          isDesktop: false,
+                        ),
+                      ),
                     ),
-                    child: Column(
-            children: [
-              _buildServerStatus(),
-              const Spacer(flex: 2),
-              _buildHeroSection(context, isDesktop: false),
-              const Spacer(flex: 2),
-              if ((transferState is TransferInProgress ||
-                  transferState is TransferSuccess) && !sl<FileTransferRepository>().isCancelled) ...[
-                _buildActiveTransferBanner(context, transferState),
-                AppSpacing.gapH24,
-              ],
-              _buildActionPanel(context),
-              const Spacer(
-                flex: 1,
-              ), // Pushes action panel up and pins ad banner to the bottom
-              if (kIsWeb) ...[
-                _buildSpeedTip(context),
-                AppSpacing.gapH12,
-                _buildAppDownloadBanner(context),
-              ] else ...[
-                _buildSpeedTip(context),
-              ],
-              AppSpacing.gapH12,
-              // ── Banner Ad ────────────────────────────────────────────────────
-              const AdBannerWidget(),
-            ],
-          ),
-        ),
-                ),
+                  ),
+
+                  // ── Active Transfer Banner (if active) ─────────────────────
+                  if ((transferState is TransferInProgress ||
+                          transferState is TransferSuccess) &&
+                      !sl<FileTransferRepository>().isCancelled) ...[
+                    _buildActiveTransferBanner(context, transferState),
+                    SizedBox(height: (h * 0.015).clamp(8.0, 16.0)),
+                  ],
+
+                  // ── Action Buttons (Send / Receive) ────────────────────────
+                  _buildActionPanel(context, totalHeight: h),
+
+                  // ── Flexible Spacer ────────────────────────────────────────
+                  const Spacer(flex: 1),
+
+                  // ── Bottom Section: Tip, Download (Web), Ad ────────────────
+                  if (kIsWeb) ...[
+                    if (!isVerySmall) ...[
+                      _buildSpeedTip(context, isCompact: true),
+                      SizedBox(height: (h * 0.01).clamp(6.0, 10.0)),
+                    ],
+                    _buildAppDownloadBanner(context, isCompact: true),
+                  ] else ...[
+                    _buildSpeedTip(context, isCompact: isSmall),
+                  ],
+                  SizedBox(height: (h * 0.01).clamp(6.0, 10.0)),
+
+                  // ── Banner Ad ─────────────────────────────────────────────
+                  const AdBannerWidget(),
+                ],
               ),
             );
           },
@@ -400,7 +449,41 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildSpeedTip(BuildContext context) {
+  Widget _buildSpeedTip(BuildContext context, {bool isCompact = false}) {
+    if (isCompact) {
+      return Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          color: Colors.blue.withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(AppSizes.radiusMedium),
+          border: Border.all(color: Colors.blue.withValues(alpha: 0.2)),
+        ),
+        child: Row(
+          children: [
+            const Icon(
+              Icons.tips_and_updates_rounded,
+              color: Colors.blue,
+              size: 15,
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                '💡 Tip: Connect both to same Wi-Fi for maximum speed',
+                style: TextStyle(
+                  color: Colors.blue.shade700,
+                  fontSize: 11.5,
+                  fontWeight: FontWeight.w500,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
     return Container(
       width: double.infinity,
       padding: EdgeInsets.all(AppSizes.p16),
@@ -460,7 +543,102 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildAppDownloadBanner(BuildContext context) {
+  Widget _buildAppDownloadBanner(
+    BuildContext context, {
+    bool isCompact = false,
+  }) {
+    if (isCompact) {
+      return Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: [
+              Theme.of(context)
+                  .colorScheme
+                  .primaryContainer
+                  .withValues(alpha: 0.6),
+              Theme.of(context)
+                  .colorScheme
+                  .secondaryContainer
+                  .withValues(alpha: 0.4),
+            ],
+          ),
+          borderRadius: BorderRadius.circular(AppSizes.radiusMedium),
+          border: Border.all(
+            color: Theme.of(context)
+                .colorScheme
+                .primary
+                .withValues(alpha: 0.2),
+          ),
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(6),
+              decoration: BoxDecoration(
+                color: Theme.of(context)
+                    .colorScheme
+                    .primary
+                    .withValues(alpha: 0.15),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                Icons.android_rounded,
+                color: Theme.of(context).colorScheme.primary,
+                size: 18,
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    'Get Android App',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 12.5,
+                      color: Theme.of(context).colorScheme.onPrimaryContainer,
+                    ),
+                  ),
+                  Text(
+                    'Background transfer & screen-off support',
+                    style: TextStyle(
+                      fontSize: 10.5,
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            FilledButton(
+              onPressed: () {
+                launchUrlString(
+                  '/apk/PeerTransfer.apk',
+                  mode: LaunchMode.externalApplication,
+                );
+              },
+              style: FilledButton.styleFrom(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                minimumSize: const Size(0, 32),
+                visualDensity: VisualDensity.compact,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(AppSizes.radiusSmall),
+                ),
+              ),
+              child: const Text('Download', style: TextStyle(fontSize: 11.5)),
+            ),
+          ],
+        ),
+      );
+    }
+
     return Container(
       width: double.infinity,
       padding: EdgeInsets.all(AppSizes.p20),

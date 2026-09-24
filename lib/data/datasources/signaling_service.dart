@@ -104,17 +104,6 @@ class SignalingService {
     }
   }
 
-  String _friendlyError(dynamic error) {
-    final msg = error.toString().toLowerCase();
-    if (msg.contains('404')) {
-      return 'Signaling server not found (404). Server may be starting up — retrying...';
-    } else if (msg.contains('connection refused') || msg.contains('errno = 111')) {
-      return 'Cannot reach signaling server. Check your internet connection.';
-    } else if (msg.contains('timeout')) {
-      return 'Connection timed out. Retrying...';
-    }
-    return 'Unable to connect to server. Retrying...';
-  }
 
   void _scheduleReconnect() {
     if (_disposed) return;
