@@ -32,7 +32,7 @@ class _OfflineReceiveScreenState extends State<OfflineReceiveScreen> {
   String _errorMsg = '';
 
   final _offerController = TextEditingController();
-  bool _showManualInput = false;
+  bool _showManualInput = kIsWeb; // on web, show paste input directly
 
   @override
   void initState() {
@@ -178,27 +178,31 @@ class _OfflineReceiveScreenState extends State<OfflineReceiveScreen> {
                     ? Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
                         TextField(
                           controller: _offerController,
-                          decoration: const InputDecoration(
+                          autofocus: kIsWeb,
+                          decoration: InputDecoration(
                             labelText: "Paste the sender's code",
                             hintText: 'Code from the sender',
-                            border: OutlineInputBorder(),
-                            prefixIcon: Icon(Icons.paste_rounded),
+                            border: const OutlineInputBorder(),
+                            prefixIcon: const Icon(Icons.paste_rounded),
+                            helperText: kIsWeb ? 'Copy the code from the sender and paste it here' : null,
                           ),
                           maxLines: 4,
                         ),
-                        const SizedBox(height: 10),
-                        FilledButton(
+                        const SizedBox(height: 12),
+                        FilledButton.icon(
                           onPressed: () => _processOffer(_offerController.text),
-                          child: const Padding(
-                            padding: EdgeInsets.symmetric(vertical: 4),
-                            child: Text('Continue'),
+                          icon: const Icon(Icons.arrow_forward_rounded, size: 18),
+                          label: const Text('Continue'),
+                          style: FilledButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 32),
+                            textStyle: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
                           ),
                         ),
                       ])
                     : OutlinedButton.icon(
                         onPressed: () => setState(() => _showManualInput = true),
                         icon: const Icon(Icons.paste_rounded, size: 16),
-                        label: Text(kIsWeb ? "Paste sender's code" : "Can't scan? Paste code instead"),
+                        label: const Text("Can't scan? Paste code instead"),
                         style: OutlinedButton.styleFrom(
                           padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 24),
                         ),
