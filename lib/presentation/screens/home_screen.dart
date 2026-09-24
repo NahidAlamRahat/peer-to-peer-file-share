@@ -1,6 +1,3 @@
-import 'dart:async';
-
-import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -13,7 +10,6 @@ import '../../core/theme/spacing.dart';
 import '../../domain/entities/peer_session.dart';
 import '../../domain/repositories/file_transfer_repository.dart';
 import '../blocs/connection/connection_bloc.dart';
-import '../blocs/connection/connection_event.dart';
 import '../blocs/connection/connection_state.dart';
 import '../blocs/transfer/transfer_bloc.dart';
 import '../blocs/transfer/transfer_event.dart';
