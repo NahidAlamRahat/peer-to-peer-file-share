@@ -234,7 +234,6 @@ class _OfflineSendScreenState extends State<OfflineSendScreen> {
 
   // ── Step 2: Show QR + scan answer ──────────────────────────────────────────
   Widget _buildShowOffer(ThemeData theme) {
-    final isDark = theme.brightness == Brightness.dark;
     return SingleChildScrollView(
       key: const ValueKey('offer'),
       padding: const EdgeInsets.all(24),
