@@ -372,80 +372,114 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildDesktopLayout(BuildContext context) {
-    return Row(
-      children: [
-        // Left side: Hero Section
-        Expanded(
-          flex: 5,
-          child: Container(
-            color: Theme.of(
-              context,
-            ).colorScheme.surfaceContainerHighest.withValues(alpha: 0.1),
-            child: Center(
-              child: SingleChildScrollView(
-                padding: EdgeInsets.all(AppSizes.p64),
-                child: _buildHeroSection(context, isDesktop: true),
-              ),
-            ),
-          ),
-        ),
-        // Right side: Action Panel
-        Expanded(
-          flex: 4,
-          child: Center(
-            child: SingleChildScrollView(
-              padding: EdgeInsets.all(AppSizes.p64),
-              child: Container(
-                padding: EdgeInsets.all(AppSizes.p48),
-                constraints: const BoxConstraints(maxWidth: 500),
-                decoration: BoxDecoration(
-                  color: Theme.of(context).colorScheme.surface,
-                  borderRadius: BorderRadius.circular(AppSizes.radiusLarge),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.3),
-                      blurRadius: 40,
-                      offset: const Offset(0, 10),
-                    ),
-                  ],
-                ),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    _buildServerStatus(),
-                    AppSpacing.gapH32,
-                    const Text(
-                      'Get Started',
-                      style: TextStyle(
-                        fontSize: 32,
-                        fontWeight: FontWeight.bold,
+    return BlocBuilder<TransferBloc, TransferState>(
+      builder: (context, transferState) {
+        return LayoutBuilder(
+          builder: (context, constraints) {
+            final h = constraints.maxHeight;
+            final padOuter = (h * 0.04).clamp(16.0, 48.0);
+            final padCard = (h * 0.035).clamp(16.0, 36.0);
+            final gapLarge = (h * 0.025).clamp(10.0, 24.0);
+            final gapSmall = (h * 0.012).clamp(4.0, 12.0);
+
+            return Row(
+              children: [
+                // Left side: Hero Section
+                Expanded(
+                  flex: 5,
+                  child: Container(
+                    color: Theme.of(
+                      context,
+                    ).colorScheme.surfaceContainerHighest.withValues(alpha: 0.1),
+                    padding: EdgeInsets.all(padOuter),
+                    child: Center(
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: _buildHeroSection(
+                          context,
+                          totalHeight: h,
+                          isDesktop: true,
+                        ),
                       ),
                     ),
-                    AppSpacing.gapH8,
-                    const Text(
-                      'Choose an action to proceed.',
-                      style: TextStyle(color: Colors.grey),
-                    ),
-                    AppSpacing.gapH48,
-                    _buildActionPanel(context),
-                    AppSpacing.gapH16,
-                    if (kIsWeb) ...[
-                      _buildSpeedTip(context),
-                      AppSpacing.gapH12,
-                      _buildAppDownloadBanner(context),
-                    ] else ...[
-                      _buildSpeedTip(context),
-                    ],
-                    AppSpacing.gapH16,
-                    // ── Banner Ad ─────────────────────────────────────────
-                    const AdBannerWidget(),
-                  ],
+                  ),
                 ),
-              ),
-            ),
-          ),
-        ),
-      ],
+                // Right side: Action Panel
+                Expanded(
+                  flex: 4,
+                  child: Container(
+                    padding: EdgeInsets.all(padOuter),
+                    child: Center(
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Container(
+                          width: 460,
+                          padding: EdgeInsets.all(padCard),
+                          decoration: BoxDecoration(
+                            color: Theme.of(context).colorScheme.surface,
+                            borderRadius:
+                                BorderRadius.circular(AppSizes.radiusLarge),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withValues(alpha: 0.25),
+                                blurRadius: 32,
+                                offset: const Offset(0, 8),
+                              ),
+                            ],
+                          ),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              _buildServerStatus(),
+                              const Text(
+                                'Get Started',
+                                style: TextStyle(
+                                  fontSize: 28,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                              SizedBox(height: gapSmall),
+                              const Text(
+                                'Choose an action to proceed.',
+                                style: TextStyle(color: Colors.grey),
+                              ),
+                              SizedBox(height: gapLarge),
+                              if ((transferState is TransferInProgress ||
+                                      transferState is TransferSuccess) &&
+                                  !sl<FileTransferRepository>().isCancelled) ...[
+                                _buildActiveTransferBanner(
+                                  context,
+                                  transferState,
+                                ),
+                                SizedBox(height: gapSmall),
+                              ],
+                              _buildActionPanel(context, totalHeight: h),
+                              SizedBox(height: gapLarge),
+                              if (kIsWeb) ...[
+                                _buildSpeedTip(context, isCompact: true),
+                                SizedBox(height: gapSmall),
+                                _buildAppDownloadBanner(
+                                  context,
+                                  isCompact: true,
+                                ),
+                              ] else ...[
+                                _buildSpeedTip(context, isCompact: h < 750),
+                              ],
+                              SizedBox(height: gapSmall),
+                              // ── Banner Ad ─────────────────────────────────────────
+                              const AdBannerWidget(),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            );
+          },
+        );
+      },
     );
   }
 
