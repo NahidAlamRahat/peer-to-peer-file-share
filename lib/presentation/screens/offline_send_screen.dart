@@ -1,4 +1,4 @@
-﻿import 'dart:async';
+import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -135,50 +135,85 @@ class _OfflineSendScreenState extends State<OfflineSendScreen> {
 
   // ── Step 1: Pick files ──────────────────────────────────────────────────────
   Widget _buildPickFiles(ThemeData theme) {
-    return SingleChildScrollView(
+    return Center(
       key: const ValueKey('pick'),
-      padding: const EdgeInsets.all(24),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // How it works
-          Text('How it works', style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
-          const SizedBox(height: 12),
-          _buildStep(theme, '1', 'Select the files you want to send', Icons.folder_open_rounded),
-          _buildStep(theme, '2', 'Show the QR code to the other device', Icons.qr_code_rounded),
-          _buildStep(theme, '3', 'Scan the code they show you back', Icons.qr_code_scanner_rounded),
-          _buildStep(theme, '4', 'Files transfer instantly!', Icons.check_circle_rounded, isLast: true),
-          const SizedBox(height: 8),
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: Colors.blue.withValues(alpha: 0.08),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: Colors.blue.withValues(alpha: 0.2)),
-            ),
-            child: Row(children: [
-              Icon(Icons.wifi_rounded, color: Colors.blue.shade400, size: 18),
-              const SizedBox(width: 10),
-              const Expanded(child: Text('Both devices must be on the same Wi-Fi or hotspot', style: TextStyle(fontSize: 13))),
-            ]),
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 32),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 440),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              // Icon
+              Container(
+                width: 72, height: 72,
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.primary.withValues(alpha: 0.12),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(Icons.send_rounded, size: 34, color: theme.colorScheme.primary),
+              ),
+              const SizedBox(height: 16),
+              Text('Send Files', style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold)),
+              const SizedBox(height: 6),
+              Text('No internet needed', style: TextStyle(fontSize: 13, color: theme.colorScheme.primary.withValues(alpha: 0.8), fontWeight: FontWeight.w500)),
+              const SizedBox(height: 28),
+              // How it works card
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(18),
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.4),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: theme.colorScheme.outline.withValues(alpha: 0.15)),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('How it works', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: theme.colorScheme.onSurface.withValues(alpha: 0.6), letterSpacing: 0.5)),
+                    const SizedBox(height: 14),
+                    _buildStep(theme, '1', 'Select the files you want to send', Icons.folder_open_rounded),
+                    _buildStep(theme, '2', 'Show the QR code to the other device', Icons.qr_code_rounded),
+                    _buildStep(theme, '3', 'Scan the code they show back', Icons.qr_code_scanner_rounded),
+                    _buildStep(theme, '4', 'Files transfer instantly!', Icons.check_circle_rounded, isLast: true),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 14),
+              // WiFi note
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                decoration: BoxDecoration(
+                  color: Colors.blue.withValues(alpha: 0.08),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: Colors.blue.withValues(alpha: 0.18)),
+                ),
+                child: Row(children: [
+                  Icon(Icons.wifi_rounded, color: Colors.blue.shade400, size: 16),
+                  const SizedBox(width: 8),
+                  const Expanded(child: Text('Both devices must be on the same Wi-Fi or hotspot', style: TextStyle(fontSize: 12))),
+                ]),
+              ),
+              const SizedBox(height: 28),
+              // Button — not full width
+              FilledButton.icon(
+                onPressed: _isLoading ? null : _pickFiles,
+                icon: _isLoading
+                    ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                    : const Icon(Icons.folder_open_rounded, size: 18),
+                label: Text(_isLoading ? 'Preparing...' : 'Select Files'),
+                style: FilledButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 32),
+                  textStyle: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+                ),
+              ),
+              if (_errorMsg.isNotEmpty) ...[
+                const SizedBox(height: 14),
+                _buildError(_errorMsg),
+              ],
+            ],
           ),
-          const SizedBox(height: 28),
-          SizedBox(
-            width: double.infinity,
-            child: FilledButton.icon(
-              onPressed: _isLoading ? null : _pickFiles,
-              icon: _isLoading
-                  ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                  : const Icon(Icons.folder_open_rounded),
-              label: Text(_isLoading ? 'Preparing...' : 'Select Files'),
-              style: FilledButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 16)),
-            ),
-          ),
-          if (_errorMsg.isNotEmpty) ...[
-            const SizedBox(height: 12),
-            _buildError(_errorMsg),
-          ],
-        ],
+        ),
       ),
     );
   }
