@@ -26,6 +26,8 @@ import 'about_screen.dart';
 import 'settings_screen.dart';
 import 'share_link_screen.dart';
 import 'transfer_screen.dart';
+import 'offline_send_screen.dart';
+import 'offline_receive_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -201,6 +203,45 @@ class _HomeScreenState extends State<HomeScreen> {
             );
           },
         ),
+        AppSpacing.gapH12,
+        // ── Offline Transfer divider ─────────────────────────────────────────
+        Row(children: [
+          const Expanded(child: Divider()),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 10),
+            child: Text('or use without internet', style: TextStyle(fontSize: 11, color: Colors.grey.shade500)),
+          ),
+          const Expanded(child: Divider()),
+        ]),
+        AppSpacing.gapH12,
+        // ── Offline Transfer buttons ─────────────────────────────────────────
+        Row(children: [
+          Expanded(
+            child: OutlinedButton.icon(
+              onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const OfflineSendScreen())),
+              icon: const Icon(Icons.wifi_off_rounded, size: 16),
+              label: const Text('Send Offline'),
+              style: OutlinedButton.styleFrom(
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                side: BorderSide(color: Colors.green.shade400, width: 1.5),
+                foregroundColor: Colors.green.shade600,
+              ),
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: OutlinedButton.icon(
+              onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const OfflineReceiveScreen())),
+              icon: const Icon(Icons.wifi_off_rounded, size: 16),
+              label: const Text('Receive Offline'),
+              style: OutlinedButton.styleFrom(
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                side: BorderSide(color: Colors.green.shade400, width: 1.5),
+                foregroundColor: Colors.green.shade600,
+              ),
+            ),
+          ),
+        ]),
       ],
     );
   }

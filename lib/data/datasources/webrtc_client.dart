@@ -53,6 +53,7 @@ class WebRTCClient {
   Function(RTCDataChannelMessage message)? onDataMessage;
   Function(RTCPeerConnectionState state)? onConnectionState;
   Function(int amount)? onBufferedAmountLow;
+  Function(RTCIceGatheringState state)? onIceGatheringStateChange;
 
   // Buffer drain completer — resolves when bufferedAmount drops below threshold
   Completer<void>? _bufferDrainCompleter;
@@ -66,6 +67,23 @@ class WebRTCClient {
 
   Future<void> initialize() async {
     if (_initialized && _peerConnection != null) return; // Already ready
+    await _initWithConfig(_configuration);
+  }
+
+  /// Like [initialize] but with a custom ICE config — used for offline mode
+  /// where we want host-only candidates (no STUN/TURN servers).
+  Future<void> initializeOffline(Map<String, dynamic> offlineConfig) async {
+    // Always re-initialize for offline mode (may switch from online config)
+    _dataChannel?.close();
+    await _peerConnection?.close();
+    _dataChannel = null;
+    _peerConnection = null;
+    _initialized = false;
+    await _initWithConfig(offlineConfig);
+  }
+
+  Future<void> _initWithConfig(Map<String, dynamic> config) async {
+    if (_initialized && _peerConnection != null) return;
 
     // Close previous connection if it exists (safe re-initialization)
     _dataChannel?.close();
@@ -73,11 +91,17 @@ class WebRTCClient {
     _dataChannel = null;
     _peerConnection = null;
 
-    _peerConnection = await createPeerConnection(_configuration, {});
+    _peerConnection = await createPeerConnection(config, {});
 
     _peerConnection!.onIceCandidate = (RTCIceCandidate candidate) {
       if (onIceCandidate != null) {
         onIceCandidate!(candidate);
+      }
+    };
+
+    _peerConnection!.onIceGatheringState = (RTCIceGatheringState state) {
+      if (onIceGatheringStateChange != null) {
+        onIceGatheringStateChange!(state);
       }
     };
 
@@ -94,6 +118,12 @@ class WebRTCClient {
     };
 
     _initialized = true;
+  }
+
+  /// Returns the final local SDP string after ICE gathering is complete.
+  Future<String?> getLocalDescriptionSdp() async {
+    final desc = await _peerConnection?.getLocalDescription();
+    return desc?.sdp;
   }
 
   Future<void> createDataChannel() async {

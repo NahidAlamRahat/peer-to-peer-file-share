@@ -1,11 +1,41 @@
+﻿// ── Cache name — bump version to force update on all clients ─────────────────
+const CACHE_NAME = 'peertransfer-v1';
+
+// Flutter assets to cache for offline PWA support
+const FLUTTER_ASSETS = [
+  '/',
+  '/index.html',
+  '/flutter_bootstrap.js',
+  '/flutter.js',
+  '/manifest.json',
+  '/favicon.png',
+];
+
 const map = new Map();
 
-self.addEventListener('install', () => {
+self.addEventListener('install', (event) => {
   self.skipWaiting();
+  // Pre-cache core shell assets
+  event.waitUntil(
+    caches.open(CACHE_NAME).then((cache) => {
+      return cache.addAll(FLUTTER_ASSETS).catch(() => {
+        // Ignore individual asset failures — they will be cached on first fetch
+      });
+    })
+  );
 });
 
 self.addEventListener('activate', event => {
-  event.waitUntil(self.clients.claim());
+  // Remove old caches from previous versions
+  event.waitUntil(
+    caches.keys().then((keys) =>
+      Promise.all(
+        keys
+          .filter((key) => key !== CACHE_NAME)
+          .map((key) => caches.delete(key))
+      )
+    ).then(() => self.clients.claim())
+  );
 });
 
 self.addEventListener('message', event => {
@@ -73,12 +103,9 @@ self.addEventListener('message', event => {
       meta.controller.enqueue(new Uint8Array(data.data));
       
       // If the buffer is full, it means the browser MAY have paused.
-      // We use a 1000ms debounce to avoid false positives — 256KB WiFi chunks
-      // arrive in bursts and the browser may briefly lag reading them.
       if (meta.controller.desiredSize <= 0 && !meta.isPaused && !meta.pauseTimer) {
         meta.pauseTimer = setTimeout(() => {
           meta.pauseTimer = null;
-          // Re-check: is it still full after 1000ms? Then it's a real pause.
           if (meta.controller.desiredSize <= 0 && !meta.isPaused) {
             meta.isPaused = true;
             if (meta.clientPort) meta.clientPort.postMessage(JSON.stringify({ type: 'pause', id: data.id }));
@@ -103,17 +130,16 @@ self.addEventListener('message', event => {
 
 self.addEventListener('fetch', event => {
   const url = new URL(event.request.url);
-  // Match path containing /pt-download-stream/
+
+  // ── P2P download stream ───────────────────────────────────────────────────
   if (url.pathname.includes('/pt-download-stream/')) {
     const id = url.pathname.split('/').pop();
     const meta = map.get(id);
     if (meta) {
       const headers = new Headers({
         'Content-Type': meta.mimeType,
-        // The attachment flag forces the browser's download manager to open
         'Content-Disposition': 'attachment; filename="'+ encodeURIComponent(meta.filename) +'"'
       });
-      // Send Content-Length if known so the browser shows % progress in the download bar
       if (meta.fileSize > 0) {
         headers.set('Content-Length', String(meta.fileSize));
       }
@@ -121,5 +147,36 @@ self.addEventListener('fetch', event => {
     } else {
       event.respondWith(new Response("Stream not found or expired", { status: 404 }));
     }
+    return;
   }
+
+  // ── PWA offline caching (network-first with cache fallback) ──────────────
+  // Skip cross-origin requests (ads, analytics, CDN fonts, etc.)
+  if (!url.origin.startsWith(self.location.origin)) return;
+
+  // Skip API / WebSocket requests
+  if (url.pathname.startsWith('/pt-download-stream/')) return;
+
+  event.respondWith(
+    fetch(event.request)
+      .then((response) => {
+        // Cache successful GET responses for Flutter assets
+        if (event.request.method === 'GET' && response.status === 200) {
+          const clone = response.clone();
+          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
+        }
+        return response;
+      })
+      .catch(() => {
+        // Network failed — serve from cache (offline mode)
+        return caches.match(event.request).then((cached) => {
+          if (cached) return cached;
+          // For navigation requests, return cached index.html
+          if (event.request.mode === 'navigate') {
+            return caches.match('/index.html');
+          }
+          return new Response('Offline', { status: 503 });
+        });
+      })
+  );
 });

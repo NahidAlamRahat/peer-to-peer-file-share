@@ -26,6 +26,7 @@ class ConnectionBloc extends Bloc<ConnectionEvent, ConnectionStateBloc> {
     on<MessageReceivedEvent>(_onMessageReceived);
     on<ServerErrorEvent>(_onServerError);
     on<StatusUpdateEvent>(_onStatusUpdate);
+    on<OfflineConnectedEvent>(_onOfflineConnected);
 
     // Provide the initialize call to get things ready
     peerRepository.initialize();
@@ -153,6 +154,16 @@ class ConnectionBloc extends Bloc<ConnectionEvent, ConnectionStateBloc> {
     emit(ConnectionInitial());
     // Reinitialize for next usage
     await peerRepository.initialize();
+  }
+
+  void _onOfflineConnected(
+    OfflineConnectedEvent event,
+    Emitter<ConnectionStateBloc> emit,
+  ) {
+    // Offline connections are always direct (host candidates, same local network)
+    currentRole = event.role;
+    currentConnectionType = 'direct';
+    emit(ConnectionConnected(event.role, connectionType: 'direct'));
   }
 
   @override

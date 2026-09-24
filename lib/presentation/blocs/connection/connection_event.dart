@@ -1,4 +1,5 @@
 import 'package:equatable/equatable.dart';
+import '../../../../domain/entities/peer_session.dart';
 
 abstract class ConnectionEvent extends Equatable {
   const ConnectionEvent();
@@ -57,4 +58,14 @@ class StatusUpdateEvent extends ConnectionEvent {
 
   @override
   List<Object?> get props => [message];
+}
+
+/// Fired by offline screens when a local P2P connection is established
+/// without using the internet signaling server.
+class OfflineConnectedEvent extends ConnectionEvent {
+  final SessionRole role;
+  const OfflineConnectedEvent(this.role);
+
+  @override
+  List<Object?> get props => [role];
 }
