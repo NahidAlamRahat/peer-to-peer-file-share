@@ -204,47 +204,96 @@ class _HomeScreenState extends State<HomeScreen> {
           },
         ),
         AppSpacing.gapH12,
-        // ── Offline Transfer divider ─────────────────────────────────────────
-        Row(children: [
-          const Expanded(child: Divider()),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 10),
-            child: Text('or use without internet', style: TextStyle(fontSize: 11, color: Colors.grey.shade500)),
-          ),
-          const Expanded(child: Divider()),
-        ]),
-        AppSpacing.gapH12,
-        // ── Offline Transfer buttons ─────────────────────────────────────────
-        Row(children: [
-          Expanded(
-            child: OutlinedButton.icon(
-              onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const OfflineSendScreen())),
-              icon: const Icon(Icons.wifi_off_rounded, size: 16),
-              label: const Text('Send Offline'),
-              style: OutlinedButton.styleFrom(
-                padding: const EdgeInsets.symmetric(vertical: 12),
-                side: BorderSide(color: Colors.green.shade400, width: 1.5),
-                foregroundColor: Colors.green.shade600,
-              ),
+        // ── Offline mode — small, subtle, not distracting ────────────────────
+        GestureDetector(
+          onTap: () => _showOfflineModeSheet(context),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 4),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.wifi_off_rounded, size: 13, color: Colors.grey.shade500),
+                const SizedBox(width: 5),
+                Text(
+                  'Works offline too — same Wi-Fi, no internet needed',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Colors.grey.shade500,
+                    decoration: TextDecoration.underline,
+                    decorationColor: Colors.grey.shade400,
+                  ),
+                ),
+              ],
             ),
           ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: OutlinedButton.icon(
-              onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const OfflineReceiveScreen())),
-              icon: const Icon(Icons.wifi_off_rounded, size: 16),
-              label: const Text('Receive Offline'),
-              style: OutlinedButton.styleFrom(
-                padding: const EdgeInsets.symmetric(vertical: 12),
-                side: BorderSide(color: Colors.green.shade400, width: 1.5),
-                foregroundColor: Colors.green.shade600,
-              ),
-            ),
-          ),
-        ]),
+        ),
       ],
     );
   }
+
+  void _showOfflineModeSheet(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (_) => Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(children: [
+              Icon(Icons.wifi_off_rounded, color: Colors.green.shade600, size: 20),
+              const SizedBox(width: 8),
+              Text('Offline Transfer', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.green.shade700)),
+            ]),
+            const SizedBox(height: 6),
+            Text(
+              'Transfer files directly over Wi-Fi or hotspot — no internet required. Both devices must be on the same network.',
+              style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
+            ),
+            const SizedBox(height: 20),
+            Row(children: [
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: () {
+                    Navigator.pop(context);
+                    Navigator.push(context, MaterialPageRoute(builder: (_) => const OfflineSendScreen()));
+                  },
+                  icon: const Icon(Icons.send_rounded, size: 16),
+                  label: const Text('Send Offline'),
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    side: BorderSide(color: Colors.green.shade400, width: 1.5),
+                    foregroundColor: Colors.green.shade700,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: () {
+                    Navigator.pop(context);
+                    Navigator.push(context, MaterialPageRoute(builder: (_) => const OfflineReceiveScreen()));
+                  },
+                  icon: const Icon(Icons.download_rounded, size: 16),
+                  label: const Text('Receive Offline'),
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    side: BorderSide(color: Colors.green.shade400, width: 1.5),
+                    foregroundColor: Colors.green.shade700,
+                  ),
+                ),
+              ),
+            ]),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+  }
+
 
   Widget _buildMobileLayout(BuildContext context) {
     return BlocBuilder<TransferBloc, TransferState>(
