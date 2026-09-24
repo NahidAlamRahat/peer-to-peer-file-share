@@ -71,12 +71,11 @@ class _OfflineReceiveScreenState extends State<OfflineReceiveScreen> {
     }
   }
 
-  String _sessionCode = ''; // saved for answer upload
 
   Future<void> _processSessionCode(String code) async {
     if (code.trim().isEmpty) return;
     final sessionCode = code.trim().toUpperCase();
-    setState(() { _step = _Step.generating; _errorMsg = ''; _sessionCode = sessionCode; });
+    setState(() { _step = _Step.generating; _errorMsg = ''; });
     try {
       final offerCode = await SdpRelayService.downloadOffer(sessionCode);
       await _processOfferSdp(offerCode, sessionCode: sessionCode);
