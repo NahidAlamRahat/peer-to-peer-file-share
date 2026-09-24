@@ -13,21 +13,16 @@ import '../../core/theme/spacing.dart';
 import '../../domain/entities/peer_session.dart';
 import '../../domain/repositories/file_transfer_repository.dart';
 import '../blocs/connection/connection_bloc.dart';
-import '../blocs/connection/connection_event.dart';
-import '../blocs/connection/connection_state.dart';
-import '../blocs/transfer/transfer_bloc.dart';
 import '../blocs/transfer/transfer_event.dart';
 import '../blocs/transfer/transfer_state.dart';
 import '../widgets/custom_buttons.dart';
 import '../widgets/responsive_layout.dart';
 import '../widgets/ad_banner_widget.dart';
-import 'receive_screen.dart';
 import 'about_screen.dart';
-import 'settings_screen.dart';
-import 'share_link_screen.dart';
-import 'transfer_screen.dart';
-import 'offline_send_screen.dart';
 import 'offline_receive_screen.dart';
+import 'offline_send_screen.dart';
+import 'settings_screen.dart';
+import 'transfer_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -95,61 +90,17 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildServerStatus() {
-    return BlocBuilder<ConnectionBloc, ConnectionStateBloc>(
-      builder: (context, state) {
-        if (state is ConnectionServerError || state is ConnectionFailed) {
-          final isServerError = state is ConnectionServerError;
-          final errorMessage = isServerError
-              ? 'Signaling Server Offline'
-              : (state as ConnectionFailed).message;
-
-          return Container(
-            padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
-            width: double.infinity,
-            decoration: BoxDecoration(
-              color: Colors.red.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(AppSizes.radiusMedium),
-            ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                const Icon(Icons.error_outline, size: 16, color: Colors.red),
-                AppSpacing.gapW8,
-                Expanded(
-                  child: Text(
-                    errorMessage,
-                    style: TextStyle(
-                      color: Colors.red,
-                      fontSize: AppSizes.textSmall,
-                      fontWeight: FontWeight.w500,
-                    ),
-                    textAlign: TextAlign.center,
-                  ),
-                ),
-                IconButton(
-                  icon: const Icon(Icons.refresh_rounded, size: 18, color: Colors.red),
-                  onPressed: () {
-                    context.read<ConnectionBloc>().add(ResetConnectionEvent());
-                  },
-                  padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(),
-                  tooltip: 'Retry Connection',
-                ),
-              ],
-            ),
-          );
-        }
-        return const SizedBox.shrink();
-      },
-    );
+    // Offline mode — no server status needed
+    return const SizedBox.shrink();
   }
+
 
   Widget _buildHeroSection(BuildContext context, {bool isDesktop = false}) {
     return Column(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
         Icon(
-          Icons.cloud_upload_outlined,
+          Icons.wifi_rounded,
           size: isDesktop ? 150 : 100,
           color: Theme.of(context).colorScheme.primary,
         ),
@@ -165,7 +116,7 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
         AppSpacing.gapH16,
         Text(
-          'No file size limit. Directly peer-to-peer. Fully encrypted.',
+          'No file size limit. No internet needed. Fully encrypted.',
           style: TextStyle(
             fontSize: isDesktop ? AppSizes.textSubtitle : AppSizes.textBody,
             color: Colors.grey,
@@ -222,71 +173,6 @@ class _HomeScreenState extends State<HomeScreen> {
       ],
     );
   }
-
-
-  void _showOfflineModeSheet(BuildContext context) {
-    showModalBottomSheet(
-      context: context,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (_) => Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(children: [
-              Icon(Icons.wifi_off_rounded, color: Colors.green.shade600, size: 20),
-              const SizedBox(width: 8),
-              Text('Offline Transfer', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.green.shade700)),
-            ]),
-            const SizedBox(height: 6),
-            Text(
-              'Transfer files directly over Wi-Fi or hotspot — no internet required. Both devices must be on the same network.',
-              style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
-            ),
-            const SizedBox(height: 20),
-            Row(children: [
-              Expanded(
-                child: OutlinedButton.icon(
-                  onPressed: () {
-                    Navigator.pop(context);
-                    Navigator.push(context, MaterialPageRoute(builder: (_) => const OfflineSendScreen()));
-                  },
-                  icon: const Icon(Icons.send_rounded, size: 16),
-                  label: const Text('Send Offline'),
-                  style: OutlinedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    side: BorderSide(color: Colors.green.shade400, width: 1.5),
-                    foregroundColor: Colors.green.shade700,
-                  ),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: OutlinedButton.icon(
-                  onPressed: () {
-                    Navigator.pop(context);
-                    Navigator.push(context, MaterialPageRoute(builder: (_) => const OfflineReceiveScreen()));
-                  },
-                  icon: const Icon(Icons.download_rounded, size: 16),
-                  label: const Text('Receive Offline'),
-                  style: OutlinedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    side: BorderSide(color: Colors.green.shade400, width: 1.5),
-                    foregroundColor: Colors.green.shade700,
-                  ),
-                ),
-              ),
-            ]),
-            const SizedBox(height: 8),
-          ],
-        ),
-      ),
-    );
-  }
-
 
   Widget _buildMobileLayout(BuildContext context) {
     return BlocBuilder<TransferBloc, TransferState>(
