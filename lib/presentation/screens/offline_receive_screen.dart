@@ -8,6 +8,7 @@ import 'package:qr_flutter/qr_flutter.dart';
 
 import '../../core/di/injection_container.dart';
 import '../../core/services/offline_signaling_service.dart';
+import '../../core/services/sdp_relay_service.dart';
 import '../../data/datasources/webrtc_client.dart';
 import '../../domain/entities/peer_session.dart';
 import '../blocs/connection/connection_bloc.dart';
@@ -32,7 +33,8 @@ class _OfflineReceiveScreenState extends State<OfflineReceiveScreen> {
   String _errorMsg = '';
 
   final _offerController = TextEditingController();
-  bool _showManualInput = kIsWeb; // on web, show paste input directly
+  final _sessionCodeController = TextEditingController();
+  bool _useSessionCode = true;   // default: session code tab
 
   @override
   void initState() {
@@ -54,11 +56,35 @@ class _OfflineReceiveScreenState extends State<OfflineReceiveScreen> {
   void dispose() {
     _offlineSvc.dispose();
     _offerController.dispose();
+    _sessionCodeController.dispose();
     super.dispose();
   }
 
   Future<void> _processOffer(String offerCode) async {
     setState(() { _step = _Step.generating; _errorMsg = ''; });
+    try {
+      final answer = await _offlineSvc.processOfferAndCreateAnswer(offerCode.trim());
+      if (!mounted) return;
+      setState(() { _answerCode = answer; _step = _Step.showAnswer; });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() { _errorMsg = 'Invalid code. Ask the sender to show their QR again.'; _step = _Step.scan; });
+    }
+  }
+
+  Future<void> _processSessionCode(String code) async {
+    if (code.trim().isEmpty) return;
+    setState(() { _step = _Step.generating; _errorMsg = ''; });
+    try {
+      final offerCode = await SdpRelayService.download(code.trim());
+      await _processOfferSdp(offerCode);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() { _errorMsg = e.toString().replaceFirst('Exception: ', ''); _step = _Step.scan; });
+    }
+  }
+
+  Future<void> _processOfferSdp(String offerCode) async {
     try {
       final answer = await _offlineSvc.processOfferAndCreateAnswer(offerCode.trim());
       if (!mounted) return;
@@ -158,56 +184,99 @@ class _OfflineReceiveScreenState extends State<OfflineReceiveScreen> {
                 ]),
               ),
               const SizedBox(height: 28),
-              // Primary action button
-              if (!kIsWeb) ...[
+              // ── Input: Session code OR paste full code ────────────────────
+              // Tab switcher
+              Container(
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Row(children: [
+                  Expanded(
+                    child: GestureDetector(
+                      onTap: () => setState(() => _useSessionCode = true),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(vertical: 10),
+                        decoration: BoxDecoration(
+                          color: _useSessionCode ? theme.colorScheme.primary : Colors.transparent,
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Text('Session Code', textAlign: TextAlign.center,
+                          style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600,
+                            color: _useSessionCode ? Colors.white : theme.colorScheme.onSurface.withValues(alpha: 0.6))),
+                      ),
+                    ),
+                  ),
+                  Expanded(
+                    child: GestureDetector(
+                      onTap: () => setState(() => _useSessionCode = false),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(vertical: 10),
+                        decoration: BoxDecoration(
+                          color: !_useSessionCode ? theme.colorScheme.primary : Colors.transparent,
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Text('Paste Full Code', textAlign: TextAlign.center,
+                          style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600,
+                            color: !_useSessionCode ? Colors.white : theme.colorScheme.onSurface.withValues(alpha: 0.6))),
+                      ),
+                    ),
+                  ),
+                ]),
+              ),
+              const SizedBox(height: 14),
+              // Input fields
+              if (_useSessionCode) ...[                
+                TextField(
+                  controller: _sessionCodeController,
+                  autofocus: kIsWeb,
+                  textCapitalization: TextCapitalization.characters,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, letterSpacing: 6, color: theme.colorScheme.primary),
+                  maxLength: 10,
+                  decoration: InputDecoration(
+                    labelText: 'Session Code',
+                    hintText: 'e.g. A7K9X2',
+                    border: const OutlineInputBorder(),
+                    counterText: '',
+                    helperText: 'Enter the code shown on the sender\'s screen',
+                  ),
+                  onSubmitted: (v) => _processSessionCode(v),
+                ),
+                const SizedBox(height: 12),
                 FilledButton.icon(
-                  onPressed: () => _openQrScanner(context),
-                  icon: const Icon(Icons.camera_alt_rounded, size: 18),
-                  label: const Text("Scan Sender's QR Code"),
+                  onPressed: () => _processSessionCode(_sessionCodeController.text),
+                  icon: const Icon(Icons.arrow_forward_rounded, size: 18),
+                  label: const Text('Connect'),
                   style: FilledButton.styleFrom(
                     padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 32),
                     textStyle: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
                   ),
                 ),
-                const SizedBox(height: 14),
+              ] else ...[                
+                TextField(
+                  controller: _offerController,
+                  autofocus: false,
+                  decoration: InputDecoration(
+                    labelText: "Paste the sender's code",
+                    hintText: 'Paste the full code here',
+                    border: const OutlineInputBorder(),
+                    prefixIcon: const Icon(Icons.paste_rounded),
+                    helperText: 'Copy the full code from the sender and paste it here',
+                  ),
+                  maxLines: 4,
+                ),
+                const SizedBox(height: 12),
+                FilledButton.icon(
+                  onPressed: () => _processOffer(_offerController.text),
+                  icon: const Icon(Icons.arrow_forward_rounded, size: 18),
+                  label: const Text('Continue'),
+                  style: FilledButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 32),
+                    textStyle: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+                  ),
+                ),
               ],
-              // Paste code option
-              AnimatedSize(
-                duration: const Duration(milliseconds: 200),
-                child: _showManualInput
-                    ? Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-                        TextField(
-                          controller: _offerController,
-                          autofocus: kIsWeb,
-                          decoration: InputDecoration(
-                            labelText: "Paste the sender's code",
-                            hintText: 'Code from the sender',
-                            border: const OutlineInputBorder(),
-                            prefixIcon: const Icon(Icons.paste_rounded),
-                            helperText: kIsWeb ? 'Copy the code from the sender and paste it here' : null,
-                          ),
-                          maxLines: 4,
-                        ),
-                        const SizedBox(height: 12),
-                        FilledButton.icon(
-                          onPressed: () => _processOffer(_offerController.text),
-                          icon: const Icon(Icons.arrow_forward_rounded, size: 18),
-                          label: const Text('Continue'),
-                          style: FilledButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 32),
-                            textStyle: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
-                          ),
-                        ),
-                      ])
-                    : OutlinedButton.icon(
-                        onPressed: () => setState(() => _showManualInput = true),
-                        icon: const Icon(Icons.paste_rounded, size: 16),
-                        label: const Text("Can't scan? Paste code instead"),
-                        style: OutlinedButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 24),
-                        ),
-                      ),
-              ),
               if (_errorMsg.isNotEmpty) ...[
                 const SizedBox(height: 14),
                 _buildError(_errorMsg),
@@ -337,15 +406,4 @@ class _OfflineReceiveScreenState extends State<OfflineReceiveScreen> {
     );
   }
 
-  void _openQrScanner(BuildContext context) {
-    bool scanned = false;
-    Navigator.push(context, MaterialPageRoute(builder: (_) => Scaffold(
-      appBar: AppBar(title: const Text("Scan Sender's QR Code"), centerTitle: true),
-      body: MobileScanner(onDetect: (capture) {
-        if (scanned) return;
-        final code = capture.barcodes.firstOrNull?.rawValue;
-        if (code != null) { scanned = true; Navigator.pop(context); _processOffer(code); }
-      }),
-    )));
-  }
 }

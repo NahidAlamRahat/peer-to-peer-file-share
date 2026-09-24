@@ -10,6 +10,7 @@ import 'package:qr_flutter/qr_flutter.dart';
 
 import '../../core/di/injection_container.dart';
 import '../../core/services/offline_signaling_service.dart';
+import '../../core/services/sdp_relay_service.dart';
 import '../../core/utils/platform_file_picker.dart';
 import '../../data/datasources/webrtc_client.dart';
 import '../../domain/entities/peer_session.dart';
@@ -36,6 +37,7 @@ class _OfflineSendScreenState extends State<OfflineSendScreen> {
   _Step _step = _Step.pickFiles;
   List<ShareFile> _files = [];
   String _offerCode = '';
+  String _sessionCode = '';   // short relay code shown below QR
   String _errorMsg = '';
   bool _isLoading = false;
 
@@ -78,14 +80,26 @@ class _OfflineSendScreenState extends State<OfflineSendScreen> {
   }
 
   Future<void> _generateOffer() async {
-    setState(() { _isLoading = true; _errorMsg = ''; });
+    setState(() { _isLoading = true; _errorMsg = ''; _sessionCode = ''; });
     try {
       final code = await _offlineSvc.createOfferCode();
       if (!mounted) return;
       setState(() { _offerCode = code; _step = _Step.showOffer; _isLoading = false; });
+      // Upload to relay in background to get session code
+      _uploadToRelay(code);
     } catch (e) {
       if (!mounted) return;
       setState(() { _errorMsg = 'Something went wrong. Please try again.'; _isLoading = false; });
+    }
+  }
+
+  Future<void> _uploadToRelay(String offerCode) async {
+    try {
+      final code = await SdpRelayService.upload(offerCode);
+      if (!mounted) return;
+      setState(() => _sessionCode = code);
+    } catch (_) {
+      // Relay unavailable — QR only mode, no session code shown
     }
   }
 
@@ -254,15 +268,52 @@ class _OfflineSendScreenState extends State<OfflineSendScreen> {
             ),
             child: QrImageView(data: _offerCode, version: QrVersions.auto, size: 200, backgroundColor: Colors.white, errorCorrectionLevel: QrErrorCorrectLevel.L),
           ),
-          const SizedBox(height: 12),
-          OutlinedButton.icon(
-            onPressed: () {
-              Clipboard.setData(ClipboardData(text: _offerCode));
-              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Code copied to clipboard')));
-            },
-            icon: const Icon(Icons.copy_rounded, size: 16),
-            label: const Text("Can't scan? Copy code instead"),
-          ),
+          const SizedBox(height: 16),
+          // Session code below QR
+          if (_sessionCode.isNotEmpty) ...[           
+            Text('or share this session code', style: TextStyle(fontSize: 12, color: theme.colorScheme.onSurface.withValues(alpha: 0.5))),
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+              decoration: BoxDecoration(
+                color: theme.colorScheme.primaryContainer.withValues(alpha: 0.4),
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: theme.colorScheme.primary.withValues(alpha: 0.3), width: 1.5),
+              ),
+              child: Row(mainAxisSize: MainAxisSize.min, children: [
+                Text(
+                  _sessionCode,
+                  style: TextStyle(
+                    fontSize: 26,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 6,
+                    color: theme.colorScheme.primary,
+                    fontFamily: 'monospace',
+                  ),
+                ),
+                const SizedBox(width: 10),
+                IconButton(
+                  onPressed: () {
+                    Clipboard.setData(ClipboardData(text: _sessionCode));
+                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Session code copied!')));
+                  },
+                  icon: const Icon(Icons.copy_rounded, size: 18),
+                  tooltip: 'Copy session code',
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(),
+                ),
+              ]),
+            ),
+            const SizedBox(height: 4),
+            Text('Receiver types this code — no QR scan needed', style: TextStyle(fontSize: 11, color: theme.colorScheme.onSurface.withValues(alpha: 0.4))),
+          ] else ...[          
+            SizedBox(
+              width: 20, height: 20,
+              child: CircularProgressIndicator(strokeWidth: 2, color: theme.colorScheme.primary.withValues(alpha: 0.4)),
+            ),
+            const SizedBox(height: 4),
+            Text('Generating session code...', style: TextStyle(fontSize: 11, color: theme.colorScheme.onSurface.withValues(alpha: 0.4))),
+          ],
           const SizedBox(height: 28),
           Divider(color: theme.dividerColor.withValues(alpha: 0.4)),
           const SizedBox(height: 20),
