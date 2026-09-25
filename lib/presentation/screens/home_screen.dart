@@ -132,13 +132,7 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildActionPanel(BuildContext context, {double? totalHeight}) {
-    final effectiveHeight = totalHeight ?? 700.0;
-    final btnHeight = (effectiveHeight * 0.065).clamp(44.0, 56.0);
-    final btnFontSize = (effectiveHeight * 0.021).clamp(14.0, 17.0);
-    final btnIconSize = (effectiveHeight * 0.028).clamp(18.0, 24.0);
-    final btnGap = (effectiveHeight * 0.016).clamp(8.0, 16.0);
-
+  Widget _buildActionPanel(BuildContext context) {
     return Column(
       mainAxisAlignment: MainAxisAlignment.center,
       mainAxisSize: MainAxisSize.min,
@@ -147,9 +141,6 @@ class _HomeScreenState extends State<HomeScreen> {
           text: 'Send Files',
           icon: Icons.send_rounded,
           isPrimary: true,
-          height: btnHeight,
-          fontSize: btnFontSize,
-          iconSize: btnIconSize,
           onPressed: () {
             Navigator.push(
               context,
@@ -157,14 +148,11 @@ class _HomeScreenState extends State<HomeScreen> {
             );
           },
         ),
-        SizedBox(height: btnGap),
+        AppSpacing.gapH16,
         CustomButton(
           text: 'Receive Files',
           icon: Icons.download_rounded,
           isPrimary: false,
-          height: btnHeight,
-          fontSize: btnFontSize,
-          iconSize: btnIconSize,
           onPressed: () {
             Navigator.push(
               context,
@@ -219,7 +207,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   ],
 
                   // ── Action Buttons (Send / Receive) ────────────────────────
-                  _buildActionPanel(context, totalHeight: h),
+                  _buildActionPanel(context),
 
                   // ── Flexible Spacer ────────────────────────────────────────
                   const Spacer(flex: 1),
@@ -465,7 +453,7 @@ class _HomeScreenState extends State<HomeScreen> {
                               ),
                               SizedBox(height: gapSmall),
                             ],
-                            _buildActionPanel(context, totalHeight: h),
+                            _buildActionPanel(context),
                             SizedBox(height: gapMedium),
                             _buildSpeedTip(context, isCompact: false),
                             if (kIsWeb) ...[
