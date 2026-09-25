@@ -377,99 +377,108 @@ class _HomeScreenState extends State<HomeScreen> {
         return LayoutBuilder(
           builder: (context, constraints) {
             final h = constraints.maxHeight;
-            final padOuter = (h * 0.04).clamp(16.0, 48.0);
-            final padCard = (h * 0.035).clamp(16.0, 36.0);
-            final gapLarge = (h * 0.025).clamp(10.0, 24.0);
-            final gapSmall = (h * 0.012).clamp(4.0, 12.0);
+            final w = constraints.maxWidth;
+            final padOuter = (w * 0.02).clamp(16.0, 36.0);
+            final padV = (h * 0.03).clamp(12.0, 28.0);
+            final padCard = (h * 0.025).clamp(16.0, 26.0);
+            final gapLarge = (h * 0.02).clamp(10.0, 18.0);
+            final gapMedium = (h * 0.015).clamp(8.0, 14.0);
+            final gapSmall = (h * 0.01).clamp(4.0, 8.0);
 
             return Row(
               children: [
-                // Left side: Hero Section
+                // Left side: Hero Section (Elevated towards the top)
                 Expanded(
                   flex: 5,
                   child: Container(
                     color: Theme.of(
                       context,
                     ).colorScheme.surfaceContainerHighest.withValues(alpha: 0.1),
-                    padding: EdgeInsets.all(padOuter),
-                    child: Center(
-                      child: FittedBox(
-                        fit: BoxFit.scaleDown,
-                        child: _buildHeroSection(
-                          context,
-                          totalHeight: h,
-                          isDesktop: true,
-                        ),
+                    padding: EdgeInsets.symmetric(
+                      horizontal: padOuter,
+                      vertical: padV,
+                    ),
+                    alignment: const Alignment(0, -0.4),
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: _buildHeroSection(
+                        context,
+                        totalHeight: h,
+                        isDesktop: true,
                       ),
                     ),
                   ),
                 ),
-                // Right side: Action Panel
+                // Right side: Action Panel (Elevated towards the top)
                 Expanded(
                   flex: 4,
                   child: Container(
-                    padding: EdgeInsets.all(padOuter),
-                    child: Center(
-                      child: FittedBox(
-                        fit: BoxFit.scaleDown,
-                        child: Container(
-                          width: 460,
-                          padding: EdgeInsets.all(padCard),
-                          decoration: BoxDecoration(
-                            color: Theme.of(context).colorScheme.surface,
-                            borderRadius:
-                                BorderRadius.circular(AppSizes.radiusLarge),
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.black.withValues(alpha: 0.25),
-                                blurRadius: 32,
-                                offset: const Offset(0, 8),
+                    padding: EdgeInsets.symmetric(
+                      horizontal: padOuter,
+                      vertical: padV,
+                    ),
+                    alignment: const Alignment(0, -0.4),
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Container(
+                        width: 480,
+                        padding: EdgeInsets.all(padCard),
+                        decoration: BoxDecoration(
+                          color: Theme.of(context).colorScheme.surface,
+                          borderRadius:
+                              BorderRadius.circular(AppSizes.radiusLarge),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withValues(alpha: 0.25),
+                              blurRadius: 32,
+                              offset: const Offset(0, 8),
+                            ),
+                          ],
+                        ),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            _buildServerStatus(),
+                            const Text(
+                              'Get Started',
+                              style: TextStyle(
+                                fontSize: 28,
+                                fontWeight: FontWeight.bold,
+                                letterSpacing: -0.5,
                               ),
-                            ],
-                          ),
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              _buildServerStatus(),
-                              const Text(
-                                'Get Started',
-                                style: TextStyle(
-                                  fontSize: 28,
-                                  fontWeight: FontWeight.bold,
-                                ),
+                            ),
+                            const SizedBox(height: 4),
+                            const Text(
+                              'Choose an action to proceed.',
+                              style: TextStyle(
+                                color: Colors.grey,
+                                fontSize: 13,
+                              ),
+                            ),
+                            SizedBox(height: gapLarge),
+                            if ((transferState is TransferInProgress ||
+                                    transferState is TransferSuccess) &&
+                                !sl<FileTransferRepository>().isCancelled) ...[
+                              _buildActiveTransferBanner(
+                                context,
+                                transferState,
                               ),
                               SizedBox(height: gapSmall),
-                              const Text(
-                                'Choose an action to proceed.',
-                                style: TextStyle(color: Colors.grey),
-                              ),
-                              SizedBox(height: gapLarge),
-                              if ((transferState is TransferInProgress ||
-                                      transferState is TransferSuccess) &&
-                                  !sl<FileTransferRepository>().isCancelled) ...[
-                                _buildActiveTransferBanner(
-                                  context,
-                                  transferState,
-                                ),
-                                SizedBox(height: gapSmall),
-                              ],
-                              _buildActionPanel(context, totalHeight: h),
-                              SizedBox(height: gapLarge),
-                              if (kIsWeb) ...[
-                                _buildSpeedTip(context, isCompact: true),
-                                SizedBox(height: gapSmall),
-                                _buildAppDownloadBanner(
-                                  context,
-                                  isCompact: true,
-                                ),
-                              ] else ...[
-                                _buildSpeedTip(context, isCompact: h < 750),
-                              ],
-                              SizedBox(height: gapSmall),
-                              // ── Banner Ad ─────────────────────────────────────────
-                              const AdBannerWidget(),
                             ],
-                          ),
+                            _buildActionPanel(context, totalHeight: h),
+                            SizedBox(height: gapMedium),
+                            _buildSpeedTip(context, isCompact: false),
+                            if (kIsWeb) ...[
+                              SizedBox(height: gapMedium),
+                              _buildAppDownloadBanner(
+                                context,
+                                isCompact: false,
+                              ),
+                            ],
+                            SizedBox(height: gapSmall),
+                            // ── Banner Ad ─────────────────────────────────────────
+                            const AdBannerWidget(),
+                          ],
                         ),
                       ),
                     ),
@@ -520,7 +529,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
     return Container(
       width: double.infinity,
-      padding: EdgeInsets.all(AppSizes.p16),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       decoration: BoxDecoration(
         gradient: LinearGradient(
           colors: [
@@ -535,7 +544,7 @@ class _HomeScreenState extends State<HomeScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Container(
-            padding: const EdgeInsets.all(6),
+            padding: const EdgeInsets.all(5),
             decoration: BoxDecoration(
               color: Colors.blue.withValues(alpha: 0.12),
               shape: BoxShape.circle,
@@ -543,7 +552,7 @@ class _HomeScreenState extends State<HomeScreen> {
             child: const Icon(
               Icons.tips_and_updates_rounded,
               color: Colors.blue,
-              size: 16,
+              size: 15,
             ),
           ),
           AppSpacing.gapW8,
@@ -556,17 +565,17 @@ class _HomeScreenState extends State<HomeScreen> {
                   style: TextStyle(
                     color: Colors.blue.shade700,
                     fontWeight: FontWeight.bold,
-                    fontSize: AppSizes.textSmall,
+                    fontSize: 12,
                     letterSpacing: 0.2,
                   ),
                 ),
-                const SizedBox(height: 3),
+                const SizedBox(height: 2),
                 Text(
                   'For the fastest transfer, connect both devices to the same Wi-Fi network. Mobile data works great too — speeds may vary based on your signal strength.',
                   style: TextStyle(
                     color: Colors.blue.shade600,
-                    fontSize: AppSizes.textSmall,
-                    height: 1.4,
+                    fontSize: 11.5,
+                    height: 1.35,
                   ),
                 ),
               ],
@@ -675,7 +684,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
     return Container(
       width: double.infinity,
-      padding: EdgeInsets.all(AppSizes.p20),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
         gradient: LinearGradient(
           colors: [
@@ -698,9 +707,9 @@ class _HomeScreenState extends State<HomeScreen> {
               Icon(
                 Icons.download_for_offline_rounded,
                 color: Theme.of(context).colorScheme.primary,
-                size: 28,
+                size: 24,
               ),
-              AppSpacing.gapW12,
+              const SizedBox(width: 10),
               Expanded(
                 child: Text(
                   'Get the App — More Power! 🚀',
@@ -713,27 +722,43 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             ],
           ),
-          AppSpacing.gapH12,
-          _BannerFeatureRow(
-            icon: Icons.wifi_off,
-            text: 'Transfer continues when screen turns off',
+          const SizedBox(height: 10),
+          Row(
+            children: const [
+              Expanded(
+                child: _BannerFeatureRow(
+                  icon: Icons.wifi_off,
+                  text: 'Screen off transfer',
+                ),
+              ),
+              SizedBox(width: 8),
+              Expanded(
+                child: _BannerFeatureRow(
+                  icon: Icons.play_circle_outline,
+                  text: 'Background transfer',
+                ),
+              ),
+            ],
           ),
-          AppSpacing.gapH8,
-          _BannerFeatureRow(
-            icon: Icons.play_circle_outline,
-            text: 'Run in background — leave the app freely',
+          const SizedBox(height: 6),
+          Row(
+            children: const [
+              Expanded(
+                child: _BannerFeatureRow(
+                  icon: Icons.notifications_active_outlined,
+                  text: 'Live progress alert',
+                ),
+              ),
+              SizedBox(width: 8),
+              Expanded(
+                child: _BannerFeatureRow(
+                  icon: Icons.lock_outline,
+                  text: 'No tab restrictions',
+                ),
+              ),
+            ],
           ),
-          AppSpacing.gapH8,
-          _BannerFeatureRow(
-            icon: Icons.notifications_active_outlined,
-            text: 'Live progress notification',
-          ),
-          AppSpacing.gapH8,
-          _BannerFeatureRow(
-            icon: Icons.lock_outline,
-            text: 'No browser tab restrictions',
-          ),
-          AppSpacing.gapH16,
+          const SizedBox(height: 12),
           SizedBox(
             width: double.infinity,
             child: FilledButton.icon(
@@ -743,11 +768,11 @@ class _HomeScreenState extends State<HomeScreen> {
                   mode: LaunchMode.externalApplication,
                 );
               },
-              icon: const Icon(Icons.android, size: 20),
+              icon: const Icon(Icons.android, size: 18),
               label: const Text('Download for Android'),
               style: FilledButton.styleFrom(
                 backgroundColor: Theme.of(context).colorScheme.primary,
-                padding: EdgeInsets.symmetric(vertical: AppSizes.p12),
+                padding: const EdgeInsets.symmetric(vertical: 10),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(AppSizes.radiusMedium),
                 ),
@@ -770,16 +795,19 @@ class _BannerFeatureRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Row(
+      mainAxisSize: MainAxisSize.min,
       children: [
-        Icon(icon, size: 18, color: Theme.of(context).colorScheme.primary),
-        AppSpacing.gapW8,
-        Expanded(
+        Icon(icon, size: 16, color: Theme.of(context).colorScheme.primary),
+        const SizedBox(width: 6),
+        Flexible(
           child: Text(
             text,
             style: TextStyle(
               fontSize: AppSizes.textSmall,
               fontWeight: FontWeight.w500,
             ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
           ),
         ),
       ],
